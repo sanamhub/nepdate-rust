@@ -24,6 +24,15 @@ port, named after the row's `id`, or a comment naming the deviation. Ports add m
 language allows: property tests, fuzzing, allocation tests, thread-safety tests, compile-time
 checks.
 
+The phase is the file's main subject, so a few rows need an API from a later phase: 39 phase-1 rows
+of `NepaliDateConstructionTests`, `NepaliDatePropertiesTests` and `OptimizationVerificationTests`
+build dates from strings (phase 3 parsing) or read `Today` (phase 4). Write those tests in phase 1
+anyway: a row that expects a date or a validation error builds it with the constructor and a marker
+naming the later task; a row that needs the missing API is skipped with that marker (for example
+`#[ignore = "L4-03: needs FromStr"]`, `t.Skip("pending G3-04")`). The later phase removes the
+marker. The phase's AC counts these rows as covered; the later phase's AC includes removing every
+marker that names it.
+
 ## Phase 1: core types and BS ↔ AD
 
 - Generated tables (ALGORITHM §2): month lengths, month-start serials, year-start serials.
