@@ -110,6 +110,7 @@ const STEPS: &[Step] = &[
         optional: true,
     },
     step("cargo", &["xtask", "catalog-check", "1"]),
+    step("cargo", &["xtask", "catalog-check", "2"]),
 ];
 
 fn ci() -> Result<()> {

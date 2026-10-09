@@ -1,7 +1,7 @@
 //! C# `NepDate`'s own test suite, one test per row of `shared/spec/vectors/csharp-tests/catalog.tsv`
 //! (L2-08). Names come from `cargo xtask catalog-check <phase> --list`; `cargo xtask
 //! catalog-check` fails when a row has neither a test nor a `// cs:<id> D-xx` comment.
-//! Phase 1 rows here; L3-06 and L4-06 add phases 2 and 3.
+//! Phase 1 rows (L2-08), then phase 2 (L3-06); L4-06 adds phase 3.
 // `non_snake_case`: the L2-08 name rule turns the `.` in a row id into `__`.
 // `nonminimal_bool` and `manual_assert_eq`: the `Operator_*` rows test each operator itself
 // (`!(a < b)` calls `<`, not `>=`), so the expressions stay as C# wrote them.
@@ -19,7 +19,10 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::hash::{BuildHasher, RandomState};
 
-use nepdate::{Error, GregorianDate, Month, NepaliDate, ParseErrorKind, Weekday};
+use nepdate::{
+    Error, FiscalYear, GregorianDate, Month, MonthOverflow, NepaliDate, NepaliDateRange,
+    ParseErrorKind, Quarter, Weekday,
+};
 
 fn bs(year: u16, month: u8, day: u8) -> NepaliDate {
     NepaliDate::new(year, month, day).unwrap()
@@ -796,3 +799,1100 @@ fn cs_optimization_verification_tests__day_of_week_matches_english_date_day_of_w
 
 // cs:OptimizationVerificationTests.IsDefault_DefaultStruct_ReturnsTrue D-01 no default NepaliDate exists (no Default impl), so there is nothing to call IsDefault on
 // cs:OptimizationVerificationTests.IsDefault_ValidDate_ReturnsFalse D-01 IsDefault exists only because of the C# default value, which the port can't construct
+
+// ======================================================================================
+// Phase 2 (L3-06): arithmetic, fiscal year, ranges.
+// ======================================================================================
+
+fn range(start: NepaliDate, end: NepaliDate) -> NepaliDateRange {
+    NepaliDateRange::new(start, end).unwrap()
+}
+
+/// The last day of a month, the C# `new NepaliDate(y, m, new NepaliDate(y, m, 1).MonthEndDay)`.
+fn month_end(year: u16, month: u8) -> NepaliDate {
+    bs(year, month, 1).last_day_of_month()
+}
+
+/// C# `FiscalYearQuarterStartDate(q, yearOffset)` and friends: the fiscal year containing `date`,
+/// moved by `offset` years, then one quarter of it (D-08).
+fn fy_quarter(date: NepaliDate, offset: i16, q: Quarter) -> NepaliDateRange {
+    let fy = date
+        .fiscal_year()
+        .start_year()
+        .checked_add_signed(offset)
+        .unwrap();
+    FiscalYear::new(fy).quarter_range(q).unwrap()
+}
+
+/// C# `FiscalYearStartDate(yearOffset)` and `FiscalYearEndDate(yearOffset)` as one range.
+fn fy_range(date: NepaliDate, offset: i16) -> NepaliDateRange {
+    let fy = date
+        .fiscal_year()
+        .start_year()
+        .checked_add_signed(offset)
+        .unwrap();
+    FiscalYear::new(fy).range().unwrap()
+}
+
+/// A lenient-parse row whose C# test expects a date. `parse_lenient` arrives in L4-04; until
+/// then this checks that the date the string names exists.
+fn assert_parses_lenient(input: &str, year: u16, month: u8, day: u8) {
+    // L4-04: assert_eq!(NepaliDate::parse_lenient(input).map(ymd), Ok((year, month, day)));
+    let date = NepaliDate::new(year, month, day).unwrap_or_else(|e| panic!("{input:?}: {e}"));
+    assert_eq!(ymd(date), (year, month, day), "{input:?}");
+}
+
+// ---------- Core/FiscalYearInstanceMethodTests.cs ----------
+
+// C# `FiscalYearStartDate()` maps to `date.fiscal_year().start()`, `FiscalYearQuarters.Current`
+// to `date.quarter()` (D-08).
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_start_date_date_in_shrawan_returns_sameyear_shrawan1()
+ {
+    assert_eq!(bs(2080, 4, 15).fiscal_year().start(), Ok(bs(2080, 4, 1)));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_start_date_date_in_chaitra_returns_same_year_shrawan1()
+ {
+    assert_eq!(bs(2080, 12, 15).fiscal_year().start(), Ok(bs(2080, 4, 1)));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_start_date_date_in_basikhakh_returns_previous_year_shrawan1()
+ {
+    assert_eq!(bs(2080, 1, 15).fiscal_year().start(), Ok(bs(2079, 4, 1)));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_start_date_date_in_ashadh_returns_previous_year_shrawan1()
+ {
+    assert_eq!(bs(2080, 3, 10).fiscal_year().start(), Ok(bs(2079, 4, 1)));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_start_date_with_positive_year_offset_shifts_forward()
+ {
+    assert_eq!(fy_range(bs(2080, 4, 1), 1).start(), bs(2081, 4, 1));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_start_date_with_negative_year_offset_shifts_backward()
+ {
+    assert_eq!(fy_range(bs(2080, 4, 1), -1).start(), bs(2079, 4, 1));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_end_date_date_in_shrawan_returns_next_year_ashad()
+ {
+    assert_eq!(bs(2080, 4, 15).fiscal_year().end(), Ok(month_end(2081, 3)));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_end_date_date_in_chaitra_returns_next_year_ashadh()
+ {
+    let end = bs(2080, 12, 15).fiscal_year().end().unwrap();
+    assert_eq!((end.year(), end.month_number()), (2081, 3));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_end_date_date_in_basikhakh_returns_same_year_ashadh()
+ {
+    assert_eq!(bs(2080, 1, 15).fiscal_year().end(), Ok(month_end(2080, 3)));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_end_date_with_positive_year_offset_shifts_forward()
+ {
+    let end = fy_range(bs(2080, 4, 1), 1).end();
+    assert_eq!((end.year(), end.month_number()), (2082, 3));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_start_and_end_date_date_in_q2_returns_both_boundaries()
+ {
+    let fy = bs(2080, 8, 15).fiscal_year().range().unwrap();
+    assert_eq!(fy.start(), bs(2080, 4, 1));
+    assert_eq!((fy.end().year(), fy.end().month_number()), (2081, 3));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_start_and_end_date_date_in_q4_returns_previous_fiscal_year_boundaries()
+ {
+    let fy = bs(2081, 2, 10).fiscal_year().range().unwrap();
+    assert_eq!(fy.start(), bs(2080, 4, 1));
+    assert_eq!((fy.end().year(), fy.end().month_number()), (2081, 3));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_start_date_explicit_first_returns_shrawan1()
+ {
+    assert_eq!(
+        fy_quarter(bs(2080, 5, 15), 0, Quarter::Q1).start(),
+        bs(2080, 4, 1)
+    );
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_start_date_explicit_second_returns_kartik1()
+ {
+    assert_eq!(
+        fy_quarter(bs(2080, 5, 15), 0, Quarter::Q2).start(),
+        bs(2080, 7, 1)
+    );
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_start_date_explicit_third_returns_magh1()
+ {
+    assert_eq!(
+        fy_quarter(bs(2080, 5, 15), 0, Quarter::Q3).start(),
+        bs(2080, 10, 1)
+    );
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_start_date_explicit_fourth_returns_next_year_basikhakh1()
+ {
+    assert_eq!(
+        fy_quarter(bs(2080, 5, 15), 0, Quarter::Q4).start(),
+        bs(2081, 1, 1)
+    );
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_end_date_explicit_first_returns_last_day_of_ashoj()
+ {
+    assert_eq!(
+        fy_quarter(bs(2080, 5, 15), 0, Quarter::Q1).end(),
+        month_end(2080, 6)
+    );
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_end_date_explicit_second_returns_last_day_of_poush()
+ {
+    assert_eq!(
+        fy_quarter(bs(2080, 5, 15), 0, Quarter::Q2).end(),
+        month_end(2080, 9)
+    );
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_end_date_explicit_third_returns_last_day_of_chaitra()
+ {
+    assert_eq!(
+        fy_quarter(bs(2080, 5, 15), 0, Quarter::Q3).end(),
+        month_end(2080, 12)
+    );
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_end_date_explicit_fourth_returns_next_year_last_day_of_ashadh()
+ {
+    assert_eq!(
+        fy_quarter(bs(2080, 5, 15), 0, Quarter::Q4).end(),
+        month_end(2081, 3)
+    );
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_start_and_end_date_explicit_second_returns_both_boundaries()
+ {
+    let q = fy_quarter(bs(2080, 5, 15), 0, Quarter::Q2);
+    assert_eq!(q.start(), bs(2080, 7, 1));
+    assert_eq!((q.end().year(), q.end().month_number()), (2080, 9));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_start_and_end_date_explicit_third_returns_both_boundaries()
+ {
+    let q = fy_quarter(bs(2080, 5, 15), 0, Quarter::Q3);
+    assert_eq!(q.start(), bs(2080, 10, 1));
+    assert_eq!(q.end().month_number(), 12);
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_start_date_current_date_in_q1_returns_shrawan1()
+ {
+    let date = bs(2080, 5, 15);
+    assert_eq!(fy_quarter(date, 0, date.quarter()).start(), bs(2080, 4, 1));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_end_date_current_date_in_q1_returns_last_day_of_ashoj()
+ {
+    let date = bs(2080, 5, 15);
+    let end = fy_quarter(date, 0, date.quarter()).end();
+    assert_eq!((end.year(), end.month_number()), (2080, 6));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_start_date_current_date_in_q2_returns_kartik1()
+ {
+    let date = bs(2080, 8, 15);
+    assert_eq!(fy_quarter(date, 0, date.quarter()).start(), bs(2080, 7, 1));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_start_date_current_date_in_q3_returns_magh1()
+ {
+    let date = bs(2080, 11, 15);
+    assert_eq!(fy_quarter(date, 0, date.quarter()).start(), bs(2080, 10, 1));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_end_date_current_date_in_q3_returns_last_day_of_chaitra()
+ {
+    let date = bs(2080, 11, 15);
+    let end = fy_quarter(date, 0, date.quarter()).end();
+    assert_eq!((end.year(), end.month_number()), (2080, 12));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_start_date_explicit_first_with_offset1_returns_next_year_shrawan1()
+ {
+    assert_eq!(
+        fy_quarter(bs(2080, 5, 15), 1, Quarter::Q1).start(),
+        bs(2081, 4, 1)
+    );
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_start_date_explicit_first_with_negative_offset_returns_previous_year_shrawan1()
+ {
+    assert_eq!(
+        fy_quarter(bs(2080, 5, 15), -1, Quarter::Q1).start(),
+        bs(2079, 4, 1)
+    );
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_start_date_all_fiscal_months_return2080_shrawan1_1()
+ {
+    assert_eq!(bs(2080, 4, 1).fiscal_year().start(), Ok(bs(2080, 4, 1)));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_start_date_all_fiscal_months_return2080_shrawan1_2()
+ {
+    assert_eq!(bs(2080, 6, 1).fiscal_year().start(), Ok(bs(2080, 4, 1)));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_start_date_all_fiscal_months_return2080_shrawan1_3()
+ {
+    assert_eq!(bs(2080, 7, 1).fiscal_year().start(), Ok(bs(2080, 4, 1)));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_start_date_all_fiscal_months_return2080_shrawan1_4()
+ {
+    assert_eq!(bs(2080, 12, 1).fiscal_year().start(), Ok(bs(2080, 4, 1)));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_start_date_q4_calendar_months_return_previous_year_shrawan1_1()
+ {
+    assert_eq!(bs(2080, 1, 1).fiscal_year().start(), Ok(bs(2079, 4, 1)));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_start_date_q4_calendar_months_return_previous_year_shrawan1_2()
+ {
+    assert_eq!(bs(2080, 2, 1).fiscal_year().start(), Ok(bs(2079, 4, 1)));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_start_date_q4_calendar_months_return_previous_year_shrawan1_3()
+ {
+    assert_eq!(bs(2080, 3, 1).fiscal_year().start(), Ok(bs(2079, 4, 1)));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_start_date_from_q4_date_explicit_first_returns_fy2080_q1_start()
+ {
+    assert_eq!(
+        fy_quarter(bs(2081, 2, 10), 0, Quarter::Q1).start(),
+        bs(2080, 4, 1)
+    );
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_start_date_from_q4_date_explicit_second_returns_fy2080_q2_start()
+ {
+    assert_eq!(
+        fy_quarter(bs(2081, 2, 10), 0, Quarter::Q2).start(),
+        bs(2080, 7, 1)
+    );
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_start_date_from_q4_date_explicit_third_returns_fy2080_q3_start()
+ {
+    assert_eq!(
+        fy_quarter(bs(2081, 2, 10), 0, Quarter::Q3).start(),
+        bs(2080, 10, 1)
+    );
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_start_date_from_q4_date_explicit_fourth_returns_fy2080_q4_start()
+ {
+    assert_eq!(
+        fy_quarter(bs(2081, 2, 10), 0, Quarter::Q4).start(),
+        bs(2081, 1, 1)
+    );
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_start_date_from_q4_date_current_returns_fy2080_q4_start()
+ {
+    let date = bs(2081, 2, 10);
+    assert_eq!(fy_quarter(date, 0, date.quarter()).start(), bs(2081, 1, 1));
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_end_date_from_q4_date_explicit_first_returns_fy2080_q1_end()
+ {
+    assert_eq!(
+        fy_quarter(bs(2081, 2, 10), 0, Quarter::Q1).end(),
+        month_end(2080, 6)
+    );
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_end_date_from_q4_date_explicit_third_returns_fy2080_q3_end()
+ {
+    assert_eq!(
+        fy_quarter(bs(2081, 2, 10), 0, Quarter::Q3).end(),
+        month_end(2080, 12)
+    );
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_end_date_from_q4_date_explicit_fourth_returns_fy2080_q4_end()
+ {
+    assert_eq!(
+        fy_quarter(bs(2081, 2, 10), 0, Quarter::Q4).end(),
+        month_end(2081, 3)
+    );
+}
+
+#[test]
+fn cs_fiscal_year_instance_method_tests__fiscal_year_quarter_end_date_from_q4_date_current_returns_fy2080_q4_end()
+ {
+    let date = bs(2081, 2, 10);
+    assert_eq!(
+        fy_quarter(date, 0, date.quarter()).end(),
+        month_end(2081, 3)
+    );
+}
+
+// ---------- Core/FiscalYearTests.cs ----------
+
+#[test]
+fn cs_fiscal_year_tests__get_fiscal_year_start_and_end_date_valid_year_returns_correct_dates() {
+    let fy = FiscalYear::new(2080).range().unwrap();
+    assert_eq!((fy.start(), fy.end()), (bs(2080, 4, 1), month_end(2081, 3)));
+}
+
+#[test]
+fn cs_fiscal_year_tests__get_fiscal_year_start_and_end_date_invalid_year_throws_exception_1() {
+    assert_eq!(FiscalYear::new(1843).range(), Err(Error::OutOfRange));
+}
+
+#[test]
+fn cs_fiscal_year_tests__get_fiscal_year_start_and_end_date_invalid_year_throws_exception_2() {
+    assert_eq!(FiscalYear::new(2200).range(), Err(Error::OutOfRange));
+}
+
+#[test]
+fn cs_fiscal_year_tests__get_fiscal_year_start_date_valid_year_returns_correct_date() {
+    assert_eq!(FiscalYear::new(2080).start(), Ok(bs(2080, 4, 1)));
+}
+
+#[test]
+fn cs_fiscal_year_tests__get_fiscal_year_end_date_valid_year_returns_correct_date() {
+    assert_eq!(FiscalYear::new(2080).end(), Ok(month_end(2081, 3)));
+}
+
+#[test]
+fn cs_fiscal_year_tests__fiscal_year_start_and_end_date_on_nepali_date_instance_returns_correct_dates()
+ {
+    let fy = bs(2080, 6, 15).fiscal_year().range().unwrap();
+    assert_eq!((fy.start(), fy.end()), (bs(2080, 4, 1), month_end(2081, 3)));
+}
+
+#[test]
+fn cs_fiscal_year_tests__fiscal_year_start_date_on_nepali_date_instance_returns_correct_date() {
+    assert_eq!(bs(2080, 6, 15).fiscal_year().start(), Ok(bs(2080, 4, 1)));
+}
+
+#[test]
+fn cs_fiscal_year_tests__fiscal_year_end_date_on_nepali_date_instance_returns_correct_date() {
+    assert_eq!(bs(2080, 6, 15).fiscal_year().end(), Ok(month_end(2081, 3)));
+}
+
+// C# `GetFiscalYearQuarter*(fy, month)` takes a month number; the quarter is that month's
+// quarter. Months 5, 8 and 11 are in Q1 to Q3, where C#'s calendar-year reading of `fy` and the
+// fiscal year agree (D-08 differs only for months 1 to 3).
+
+#[test]
+fn cs_fiscal_year_tests__get_fiscal_year_quarter_start_and_end_date_valid_year_and_month_returns_correct_dates()
+ {
+    let q = FiscalYear::new(2080)
+        .quarter_range(bs(2080, 5, 1).quarter())
+        .unwrap();
+    assert_eq!((q.start(), q.end()), (bs(2080, 4, 1), month_end(2080, 6)));
+}
+
+#[test]
+fn cs_fiscal_year_tests__get_fiscal_year_quarter_start_date_valid_year_and_month_returns_correct_date()
+ {
+    let q = FiscalYear::new(2080)
+        .quarter_range(bs(2080, 8, 1).quarter())
+        .unwrap();
+    assert_eq!(q.start(), bs(2080, 7, 1));
+}
+
+#[test]
+fn cs_fiscal_year_tests__get_fiscal_year_quarter_end_date_valid_year_and_month_returns_correct_date()
+ {
+    let q = FiscalYear::new(2080)
+        .quarter_range(bs(2080, 11, 1).quarter())
+        .unwrap();
+    assert_eq!(q.end(), month_end(2080, 12));
+}
+
+// ---------- Core/NepaliDateArithmeticEdgeCaseTests.cs ----------
+
+// C# `AddDays(double)` maps to `checked_add_days(i32)` (D-03), `AddMonths(n)` to
+// `checked_add_months(n, MonthOverflow::Clamp)` (D-02).
+
+#[test]
+fn cs_nepali_date_arithmetic_edge_case_tests__add_days_zero_returns_same_date() {
+    let date = bs(2080, 5, 15);
+    assert_eq!(date.checked_add_days(0), Ok(date));
+}
+
+#[test]
+fn cs_nepali_date_arithmetic_edge_case_tests__add_days_positive_across_month_boundary_is_correct() {
+    assert_eq!(
+        bs(2080, 5, 31).checked_add_days(1).map(ymd),
+        Ok((2080, 6, 1))
+    );
+}
+
+#[test]
+fn cs_nepali_date_arithmetic_edge_case_tests__add_days_negative_across_month_boundary_is_correct() {
+    assert_eq!(
+        bs(2080, 6, 1).checked_add_days(-1).map(ymd),
+        Ok((2080, 5, 31))
+    );
+}
+
+#[test]
+fn cs_nepali_date_arithmetic_edge_case_tests__add_days_positive_across_year_boundary_is_correct() {
+    assert_eq!(
+        month_end(2080, 12).checked_add_days(1).map(ymd),
+        Ok((2081, 1, 1))
+    );
+}
+
+#[test]
+fn cs_nepali_date_arithmetic_edge_case_tests__add_days_negative_across_year_boundary_is_correct() {
+    assert_eq!(bs(2081, 1, 1).checked_add_days(-1), Ok(month_end(2080, 12)));
+}
+
+#[test]
+fn cs_nepali_date_arithmetic_edge_case_tests__add_days_large_positive_value_is_correct() {
+    let start = bs(2080, 1, 1);
+    let result = start.checked_add_days(365).unwrap();
+    assert!(result.year() == 2081 || result.year() == 2080);
+    assert!(result >= start);
+}
+
+#[test]
+fn cs_nepali_date_arithmetic_edge_case_tests__add_months_positive_crosses_year_boundary_is_correct()
+{
+    let result = bs(2080, 11, 15).checked_add_months(5, MonthOverflow::Clamp);
+    assert_eq!(result.map(ymd), Ok((2081, 4, 15)));
+}
+
+#[test]
+fn cs_nepali_date_arithmetic_edge_case_tests__add_months_negative_crosses_year_boundary_is_correct()
+{
+    let result = bs(2080, 3, 15).checked_add_months(-5, MonthOverflow::Clamp);
+    assert_eq!(result.map(ymd), Ok((2079, 10, 15)));
+}
+
+#[test]
+fn cs_nepali_date_arithmetic_edge_case_tests__add_months_positive_more_than12_crosses_multiple_years()
+ {
+    let result = bs(2080, 5, 15).checked_add_months(14, MonthOverflow::Clamp);
+    assert_eq!(result.map(ymd), Ok((2081, 7, 15)));
+}
+
+#[test]
+fn cs_nepali_date_arithmetic_edge_case_tests__add_months_exactly12_same_month_next_year() {
+    let result = bs(2080, 6, 15).checked_add_months(12, MonthOverflow::Clamp);
+    assert_eq!(result.map(ymd), Ok((2081, 6, 15)));
+}
+
+#[test]
+fn cs_nepali_date_arithmetic_edge_case_tests__add_months_day_capped_at_month_end_when_result_month_is_shorter()
+ {
+    let result = bs(2081, 4, 32)
+        .checked_add_months(5, MonthOverflow::Clamp)
+        .unwrap();
+    assert_eq!((result.year(), result.month_number()), (2081, 9));
+    assert!(result.day() <= result.month_length());
+    assert!(result.day() > 0);
+}
+
+#[test]
+fn cs_nepali_date_arithmetic_edge_case_tests__add_months_negative_same_day_preserved_when_fits() {
+    let result = bs(2080, 8, 10).checked_add_months(-1, MonthOverflow::Clamp);
+    assert_eq!(result.map(ymd), Ok((2080, 7, 10)));
+}
+
+// cs:NepaliDateArithmeticEdgeCaseTests.AddMonths_HalfMonth_AddsApproximately15Days D-02 fractional months are not ported; add months takes an integer
+// cs:NepaliDateArithmeticEdgeCaseTests.AddMonths_NegativeHalfMonth_SubtractsApproximately15Days D-02 fractional months are not ported
+// cs:NepaliDateArithmeticEdgeCaseTests.AddMonths_OneAndHalfMonths_AddsApproximately46Days D-02 fractional months are not ported
+// cs:NepaliDateArithmeticEdgeCaseTests.AddMonths_FractionalValue_ReturnsDateFurtherThanZeroMonths D-02 fractional months are not ported
+
+// `new NepaliDate(DateTime)` maps to `from_gregorian`, which takes a date without a time of day,
+// so no time can change the result. Each row converts the AD date its C# test uses.
+
+#[test]
+fn cs_nepali_date_arithmetic_edge_case_tests__constructor_date_time_with_midnight_time_ignores_time()
+ {
+    assert_eq!(
+        NepaliDate::from_gregorian(2023, 9, 1).map(ymd),
+        Ok((2080, 5, 15))
+    );
+}
+
+#[test]
+fn cs_nepali_date_arithmetic_edge_case_tests__constructor_date_time_with_noon_time_ignores_time() {
+    assert_eq!(
+        NepaliDate::try_from(ad(2023, 9, 1)).map(ymd),
+        Ok((2080, 5, 15))
+    );
+}
+
+#[test]
+fn cs_nepali_date_arithmetic_edge_case_tests__constructor_date_time_with_end_of_day_time_ignores_time()
+ {
+    assert_eq!(
+        NepaliDate::from_gregorian(2023, 9, 1).map(ymd),
+        Ok((2080, 5, 15))
+    );
+}
+
+#[test]
+fn cs_nepali_date_arithmetic_edge_case_tests__constructor_two_date_times_on_same_english_date_different_times_produce_same_nepali_date()
+ {
+    let morning = NepaliDate::from_gregorian(2023, 1, 1);
+    let evening = NepaliDate::try_from(ad(2023, 1, 1));
+    assert!(morning.is_ok());
+    assert_eq!(morning, evening);
+}
+
+// C# `TryParse(s, autoAdjust: true, ...)` maps to `parse_lenient` (L4-04).
+
+#[test]
+fn cs_nepali_date_arithmetic_edge_case_tests__try_parse_auto_adjust_day_year_month_format_returns_correct_date()
+ {
+    // parse.tsv: lenient reads "15/05/2080" as D M Y.
+    assert_parses_lenient("15/05/2080", 2080, 5, 15);
+}
+
+// cs:NepaliDateArithmeticEdgeCaseTests.TryParse_AutoAdjust_MonthDayYearInvertedOrder_ReturnsCorrectDate D-06 "05/15/2080" as M D Y needs C#'s order guessing; lenient parse reads D M Y and rejects month 15
+// cs:NepaliDateArithmeticEdgeCaseTests.TryParse_AutoAdjust_TwoDigitYear_ExpandsToCurrentMillennium D-06 "15/05/80": 2-digit years are never expanded
+
+#[test]
+#[ignore = "L4-04: needs parse_lenient"]
+fn cs_nepali_date_arithmetic_edge_case_tests__try_parse_auto_adjust_invalid_date_after_adjustment_returns_false()
+ {
+    // L4-04: assert!(NepaliDate::parse_lenient("99/99/99").is_err());
+    panic!("parse_lenient lands in L4-04: \"99/99/99\" should be rejected");
+}
+
+#[test]
+fn cs_nepali_date_arithmetic_edge_case_tests__try_parse_auto_adjust_valid_standard_format_returns_correct_date()
+ {
+    assert_parses_lenient("2080/05/15", 2080, 5, 15);
+}
+
+// ---------- Core/NepaliDateManipulationTests.cs ----------
+
+#[test]
+fn cs_nepali_date_manipulation_tests__month_end_date_returns_correct_date() {
+    // `MonthEndDate()` maps to `last_day_of_month`.
+    assert_eq!(ymd(bs(2080, 5, 15).last_day_of_month()), (2080, 5, 31));
+}
+
+fn add_months_row(from: (u16, u8, u8), n: i32, overflow: MonthOverflow, to: (u16, u8, u8)) {
+    let result = bs(from.0, from.1, from.2).checked_add_months(n, overflow);
+    assert_eq!(result.map(ymd), Ok(to));
+}
+
+#[test]
+fn cs_nepali_date_manipulation_tests__add_months_returns_correct_date_1() {
+    add_months_row((2080, 5, 15), 1, MonthOverflow::Clamp, (2080, 6, 15));
+}
+
+#[test]
+fn cs_nepali_date_manipulation_tests__add_months_returns_correct_date_2() {
+    add_months_row((2080, 5, 15), -1, MonthOverflow::Clamp, (2080, 4, 15));
+}
+
+#[test]
+fn cs_nepali_date_manipulation_tests__add_months_returns_correct_date_3() {
+    add_months_row((2080, 5, 15), 12, MonthOverflow::Clamp, (2081, 5, 15));
+}
+
+#[test]
+fn cs_nepali_date_manipulation_tests__add_months_returns_correct_date_4() {
+    add_months_row((2081, 4, 32), 5, MonthOverflow::Clamp, (2081, 9, 29));
+}
+
+#[test]
+fn cs_nepali_date_manipulation_tests__add_months_returns_correct_date_5() {
+    // `awayFromMonthEnd: true` maps to `MonthOverflow::Overflow`.
+    add_months_row((2081, 4, 32), 5, MonthOverflow::Overflow, (2081, 10, 3));
+}
+
+fn add_days_row(from: (u16, u8, u8), n: i32, to: (u16, u8, u8)) {
+    let result = bs(from.0, from.1, from.2).checked_add_days(n);
+    assert_eq!(result.map(ymd), Ok(to));
+}
+
+#[test]
+fn cs_nepali_date_manipulation_tests__add_days_returns_correct_date_1() {
+    add_days_row((2080, 5, 15), 5, (2080, 5, 20));
+}
+
+#[test]
+fn cs_nepali_date_manipulation_tests__add_days_returns_correct_date_2() {
+    add_days_row((2080, 5, 15), -5, (2080, 5, 10));
+}
+
+#[test]
+fn cs_nepali_date_manipulation_tests__add_days_returns_correct_date_3() {
+    add_days_row((2080, 5, 31), 1, (2080, 6, 1));
+}
+
+#[test]
+fn cs_nepali_date_manipulation_tests__add_days_returns_correct_date_4() {
+    add_days_row((2080, 12, 30), 5, (2081, 1, 5));
+}
+
+// `a.Subtract(b)` (a `TimeSpan`) maps to `b.days_until(a)` (D-07).
+
+#[test]
+fn cs_nepali_date_manipulation_tests__subtract_two_dates_returns_correct_time_span() {
+    let (earlier, later) = (bs(2080, 5, 1), bs(2080, 5, 16));
+    assert_eq!(earlier.days_until(later), 15);
+    assert_eq!(later.days_until(earlier), -15);
+}
+
+#[test]
+fn cs_nepali_date_manipulation_tests__subtract_same_date_returns_zero() {
+    let date = bs(2080, 5, 15);
+    assert_eq!(date.days_until(date), 0);
+}
+
+// ---------- Core/NepaliDateRangeExtendedTests.cs ----------
+
+// C# can build an empty range (end before start); `NepaliDateRange::new` returns `None` instead
+// (D-09), so "empty range" rows use `Option<NepaliDateRange>`, as C# null maps to `None` in
+// phase 1.
+
+fn empty() -> Option<NepaliDateRange> {
+    NepaliDateRange::new(bs(2080, 5, 10), bs(2080, 5, 1))
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__for_calendar_year_starts_at_baishakh_one_ends_at_chaitra_end()
+ {
+    // `ForCalendarYear` maps to `NepaliDateRange::year`.
+    let r = NepaliDateRange::year(2080).unwrap();
+    assert_eq!(r.start(), bs(2080, 1, 1));
+    assert_eq!((r.end().year(), r.end().month_number()), (2080, 12));
+    assert_eq!(r.end().day(), r.end().month_length());
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__for_calendar_year_length_is_reasonable() {
+    let len = NepaliDateRange::year(2080).unwrap().len();
+    assert!((365..=366).contains(&len), "{len}");
+}
+
+// The `Current*` rows need today's date: `NepaliDate::today()` comes with the `jiff` feature in
+// L5 (ADR-0011). Each then becomes `NepaliDateRange::month` or `year`, or `fiscal_year().range()`,
+// of `today()`.
+
+#[test]
+#[ignore = "L5: NepaliDate::today() comes with the jiff feature (ADR-0011)"]
+fn cs_nepali_date_range_extended_tests__current_month_start_is_first_day_of_current_month() {
+    // L5: let t = NepaliDate::today().unwrap();
+    // L5: let r = NepaliDateRange::month(t.year(), t.month_number()).unwrap();
+    // L5: assert_eq!(r.start(), t.first_day_of_month());
+    panic!("NepaliDate::today() lands in L5");
+}
+
+#[test]
+#[ignore = "L5: NepaliDate::today() comes with the jiff feature (ADR-0011)"]
+fn cs_nepali_date_range_extended_tests__current_month_end_is_last_day_of_current_month() {
+    // L5: let t = NepaliDate::today().unwrap();
+    // L5: let r = NepaliDateRange::month(t.year(), t.month_number()).unwrap();
+    // L5: assert_eq!(r.end(), t.last_day_of_month());
+    panic!("NepaliDate::today() lands in L5");
+}
+
+#[test]
+#[ignore = "L5: NepaliDate::today() comes with the jiff feature (ADR-0011)"]
+fn cs_nepali_date_range_extended_tests__current_month_contains_today() {
+    // L5: let t = NepaliDate::today().unwrap();
+    // L5: assert!(NepaliDateRange::month(t.year(), t.month_number()).unwrap().contains(t));
+    panic!("NepaliDate::today() lands in L5");
+}
+
+#[test]
+#[ignore = "L5: NepaliDate::today() comes with the jiff feature (ADR-0011)"]
+fn cs_nepali_date_range_extended_tests__current_fiscal_year_contains_today() {
+    // L5: let t = NepaliDate::today().unwrap();
+    // L5: assert!(t.fiscal_year().range().unwrap().contains(t));
+    panic!("NepaliDate::today() lands in L5");
+}
+
+#[test]
+#[ignore = "L5: NepaliDate::today() comes with the jiff feature (ADR-0011)"]
+fn cs_nepali_date_range_extended_tests__current_fiscal_year_start_is_shrawan() {
+    // L5: let start = NepaliDate::today().unwrap().fiscal_year().start().unwrap();
+    // L5: assert_eq!((start.month_number(), start.day()), (4, 1));
+    panic!("NepaliDate::today() lands in L5");
+}
+
+#[test]
+#[ignore = "L5: NepaliDate::today() comes with the jiff feature (ADR-0011)"]
+fn cs_nepali_date_range_extended_tests__current_fiscal_year_end_is_ashadh() {
+    // L5: let end = NepaliDate::today().unwrap().fiscal_year().end().unwrap();
+    // L5: assert_eq!((end.month_number(), end.day()), (3, end.month_length()));
+    panic!("NepaliDate::today() lands in L5");
+}
+
+#[test]
+#[ignore = "L5: NepaliDate::today() comes with the jiff feature (ADR-0011)"]
+fn cs_nepali_date_range_extended_tests__current_calendar_year_contains_today() {
+    // L5: let t = NepaliDate::today().unwrap();
+    // L5: assert!(NepaliDateRange::year(t.year()).unwrap().contains(t));
+    panic!("NepaliDate::today() lands in L5");
+}
+
+#[test]
+#[ignore = "L5: NepaliDate::today() comes with the jiff feature (ADR-0011)"]
+fn cs_nepali_date_range_extended_tests__current_calendar_year_start_is_baishakh1() {
+    // L5: let t = NepaliDate::today().unwrap();
+    // L5: let start = NepaliDateRange::year(t.year()).unwrap().start();
+    // L5: assert_eq!((start.month_number(), start.day()), (1, 1));
+    panic!("NepaliDate::today() lands in L5");
+}
+
+// cs:NepaliDateRangeExtendedTests.SplitByFiscalQuarter_EmptyRange_ReturnsEmptyArray D-09 no splitting; FiscalYear::quarter_range gives each quarter
+// cs:NepaliDateRangeExtendedTests.SplitByFiscalQuarter_RangeWithinOneQuarter_ReturnsSingleRange D-09 no splitting
+// cs:NepaliDateRangeExtendedTests.SplitByFiscalQuarter_RangeSpanningTwoQuarters_ReturnsTwoRanges D-09 no splitting
+// cs:NepaliDateRangeExtendedTests.SplitByFiscalQuarter_FullFiscalYear_ReturnsFourRanges D-09 no splitting
+// cs:NepaliDateRangeExtendedTests.SplitByFiscalQuarter_RangeInQ4Months_SingleRange D-09 no splitting
+// cs:NepaliDateRangeExtendedTests.DatesWithInterval_Zero_ThrowsArgumentOutOfRangeException D-09 day iterator only; days().step_by(n) does this
+// cs:NepaliDateRangeExtendedTests.DatesWithInterval_NegativeInterval_ThrowsArgumentOutOfRangeException D-09 day iterator only
+// cs:NepaliDateRangeExtendedTests.DatesWithInterval_IntervalOfOne_YieldsEveryDay D-09 day iterator only
+// cs:NepaliDateRangeExtendedTests.DatesWithInterval_IntervalOfTwo_YieldsOddDays D-09 day iterator only
+// cs:NepaliDateRangeExtendedTests.DatesWithInterval_IntervalLargerThanRange_YieldsOnlyStartDate D-09 day iterator only
+// cs:NepaliDateRangeExtendedTests.DatesWithInterval_EmptyRange_YieldsNothing D-09 day iterator only
+// cs:NepaliDateRangeExtendedTests.WeekendDays_IncludeSundayTrue_ReturnsBothSaturdayAndSunday D-09 no working or weekend days; filter days() by weekday
+// cs:NepaliDateRangeExtendedTests.WeekendDays_IncludeSundayFalse_ReturnsOnlySaturday D-09 no working or weekend days
+// cs:NepaliDateRangeExtendedTests.WeekendDays_RangeWithNoWeekend_ReturnsEmpty D-09 no working or weekend days
+// cs:NepaliDateRangeExtendedTests.WeekendDays_EmptyRange_ReturnsEmpty D-09 no working or weekend days
+// cs:NepaliDateRangeExtendedTests.WorkingDays_ExcludeSundayFalse_ExcludesOnlySaturday D-09 no working or weekend days
+// cs:NepaliDateRangeExtendedTests.WorkingDays_ExcludeSundayTrue_ExcludesBothSatAndSun D-09 no working or weekend days
+// cs:NepaliDateRangeExtendedTests.WorkingDays_EmptyRange_ReturnsEmpty D-09 no working or weekend days
+
+// `FromDayCount(start, n)` maps to `new(start, start + (n - 1) days)`. Zero or fewer days give an
+// end before the start, so `None` where C# throws.
+
+#[test]
+fn cs_nepali_date_range_extended_tests__from_day_count_zero_days_throws_argument_out_of_range_exception()
+ {
+    let start = bs(2080, 5, 1);
+    let end = start.checked_add_days(-1).unwrap();
+    assert_eq!(NepaliDateRange::new(start, end), None);
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__from_day_count_negative_days_throws_argument_out_of_range_exception()
+ {
+    let start = bs(2080, 5, 1);
+    let end = start.checked_add_days(-6).unwrap();
+    assert_eq!(NepaliDateRange::new(start, end), None);
+}
+
+// cs:NepaliDateRangeExtendedTests.Intersect_NonOverlappingRanges_ReturnsEmptyRange D-09 no set operations
+// cs:NepaliDateRangeExtendedTests.Intersect_AdjacentRanges_ReturnsEmptyRange D-09 no set operations
+// cs:NepaliDateRangeExtendedTests.Intersect_OneRangeFullyInsideOther_ReturnsInnerRange D-09 no set operations
+// cs:NepaliDateRangeExtendedTests.Union_LeftRangeIsEmpty_ReturnsRightRange D-09 no set operations
+// cs:NepaliDateRangeExtendedTests.Union_RightRangeIsEmpty_ReturnsLeftRange D-09 no set operations
+// cs:NepaliDateRangeExtendedTests.Union_NonOverlappingRanges_SpansEntireGap D-09 no set operations
+
+#[test]
+fn cs_nepali_date_range_extended_tests__contains_exact_start_date_returns_true() {
+    assert!(range(bs(2080, 1, 5), bs(2080, 1, 20)).contains(bs(2080, 1, 5)));
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__contains_exact_end_date_returns_true() {
+    assert!(range(bs(2080, 1, 5), bs(2080, 1, 20)).contains(bs(2080, 1, 20)));
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__contains_one_day_before_start_returns_false() {
+    assert!(!range(bs(2080, 1, 5), bs(2080, 1, 20)).contains(bs(2080, 1, 4)));
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__contains_one_day_after_end_returns_false() {
+    assert!(!range(bs(2080, 1, 5), bs(2080, 1, 20)).contains(bs(2080, 1, 21)));
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__contains_empty_range_contains_nothing() {
+    assert!(!empty().is_some_and(|r| r.contains(bs(2080, 5, 5))));
+}
+
+// cs:NepaliDateRangeExtendedTests.IsAdjacentTo_GapBetweenRanges_ReturnsFalse D-09 no set operations
+// cs:NepaliDateRangeExtendedTests.IsAdjacentTo_OverlappingRanges_ReturnsFalse D-09 no set operations
+// cs:NepaliDateRangeExtendedTests.IsAdjacentTo_EmptyRange_ReturnsFalse D-09 no set operations
+// cs:NepaliDateRangeExtendedTests.Except_NonOverlappingExcludeRange_ReturnsOriginalRange D-09 no set operations
+// cs:NepaliDateRangeExtendedTests.Except_ExcludeRangeFullyContainsThis_ReturnsEmptyArray D-09 no set operations
+// cs:NepaliDateRangeExtendedTests.Except_ExcludeOverlapsStart_ReturnsRightPart D-09 no set operations
+// cs:NepaliDateRangeExtendedTests.Except_ExcludeOverlapsEnd_ReturnsLeftPart D-09 no set operations
+
+#[test]
+fn cs_nepali_date_range_extended_tests__get_enumerator_three_day_range_yields_exactly_three_dates()
+{
+    // C# `foreach` maps to `for` over `IntoIterator`.
+    let mut dates = Vec::new();
+    for d in range(bs(2080, 5, 13), bs(2080, 5, 15)) {
+        dates.push(d);
+    }
+    assert_eq!(dates, [bs(2080, 5, 13), bs(2080, 5, 14), bs(2080, 5, 15)]);
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__get_enumerator_empty_range_yields_no_dates() {
+    assert_eq!(empty().into_iter().flatten().count(), 0);
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__get_enumerator_single_day_range_yields_one_date() {
+    let date = bs(2080, 5, 15);
+    let dates: Vec<NepaliDate> = range(date, date).days().collect();
+    assert_eq!(dates, [date]);
+}
+
+// cs:NepaliDateRangeExtendedTests.ToString_DefaultFormat_IsStartDashEnd D-09 the range has no text form (Debug only); format start() and end()
+// cs:NepaliDateRangeExtendedTests.ToString_EmptyRange_ReturnsEmptyRangeString D-09 no empty range and no text form
+// cs:NepaliDateRangeExtendedTests.ToString_WithDateFormat_UsesSpecifiedFormat D-09 the range has no text form
+// cs:NepaliDateRangeExtendedTests.ToString_WithDateFormat_EmptyRange_ReturnsEmptyRangeString D-09 no empty range and no text form
+
+#[test]
+fn cs_nepali_date_range_extended_tests__equals_identical_ranges_returns_true() {
+    let a = range(bs(2080, 1, 1), bs(2080, 1, 15));
+    let b = range(bs(2080, 1, 1), bs(2080, 1, 15));
+    assert!(a.eq(&b));
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__equals_different_start_returns_false() {
+    let a = range(bs(2080, 1, 1), bs(2080, 1, 15));
+    let b = range(bs(2080, 1, 2), bs(2080, 1, 15));
+    assert!(!a.eq(&b));
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__equals_different_end_returns_false() {
+    let a = range(bs(2080, 1, 1), bs(2080, 1, 15));
+    let b = range(bs(2080, 1, 1), bs(2080, 1, 16));
+    assert!(!a.eq(&b));
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__equals_both_empty_returns_true() {
+    let other_empty = NepaliDateRange::new(bs(2079, 3, 10), bs(2079, 3, 1));
+    assert_eq!(empty(), other_empty);
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__equals_object_overload_same_range_returns_true() {
+    // Rust has only the typed `PartialEq`, so the C# object overload is the same call.
+    let a = range(bs(2080, 1, 1), bs(2080, 1, 15));
+    assert_eq!(a, range(bs(2080, 1, 1), bs(2080, 1, 15)));
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__equals_object_overload_wrong_type_returns_false() {
+    // `range == "not a range"` doesn't compile, so the C# case can't arise at run time.
+    let a = range(bs(2080, 1, 1), bs(2080, 1, 15));
+    assert_ne!(a, range(bs(2080, 1, 1), bs(2080, 1, 16)));
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__get_hash_code_equal_ranges_same_hash() {
+    let state = RandomState::new();
+    let a = range(bs(2080, 1, 1), bs(2080, 1, 15));
+    let b = range(bs(2080, 1, 1), bs(2080, 1, 15));
+    assert_eq!(state.hash_one(a), state.hash_one(b));
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__operator_equals_identical_ranges_returns_true() {
+    let a = range(bs(2080, 1, 1), bs(2080, 1, 15));
+    let b = range(bs(2080, 1, 1), bs(2080, 1, 15));
+    assert!(a == b);
+    assert!(!(a != b));
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__operator_not_equals_different_ranges_returns_true() {
+    let a = range(bs(2080, 1, 1), bs(2080, 1, 15));
+    let b = range(bs(2080, 1, 1), bs(2080, 1, 16));
+    assert!(a != b);
+    assert!(!(a == b));
+}
+
+// ---------- Core/NepaliDateRangeTests.cs ----------
+
+#[test]
+fn cs_nepali_date_range_tests__constructor_valid_dates_creates_range() {
+    let (start, end) = (bs(2080, 1, 1), bs(2080, 1, 15));
+    let r = NepaliDateRange::new(start, end).unwrap();
+    assert_eq!((r.start(), r.end(), r.len()), (start, end, 15));
+}
+
+#[test]
+fn cs_nepali_date_range_tests__constructor_end_before_start_creates_empty_range() {
+    // C# gives an empty range of length 0; the port gives no range (D-09).
+    assert_eq!(NepaliDateRange::new(bs(2080, 1, 15), bs(2080, 1, 1)), None);
+}
+
+#[test]
+fn cs_nepali_date_range_tests__single_day_creates_range_with_one_day() {
+    // `SingleDay(d)` maps to `new(d, d)`.
+    let date = bs(2080, 1, 1);
+    let r = NepaliDateRange::new(date, date).unwrap();
+    assert_eq!((r.start(), r.end(), r.len()), (date, date, 1));
+}
+
+#[test]
+fn cs_nepali_date_range_tests__from_day_count_creates_correct_range() {
+    let start = bs(2080, 1, 1);
+    let end = start.checked_add_days(10 - 1).unwrap();
+    let r = NepaliDateRange::new(start, end).unwrap();
+    assert_eq!((r.start(), r.end(), r.len()), (start, end, 10));
+}
+
+#[test]
+fn cs_nepali_date_range_tests__for_month_creates_correct_range() {
+    let r = NepaliDateRange::month(2080, 1).unwrap();
+    assert_eq!(r.start(), bs(2080, 1, 1));
+    assert_eq!(r.end(), month_end(2080, 1));
+}
+
+#[test]
+fn cs_nepali_date_range_tests__for_fiscal_year_creates_correct_range() {
+    // `ForFiscalYear(fy)` maps to `FiscalYear::new(fy).range()` (D-08).
+    let r = FiscalYear::new(2080).range().unwrap();
+    assert_eq!(r.start(), bs(2080, 4, 1));
+    assert_eq!(r.end(), month_end(2081, 3));
+}
+
+#[test]
+fn cs_nepali_date_range_tests__contains_date_in_range_returns_true() {
+    assert!(range(bs(2080, 1, 1), bs(2080, 1, 15)).contains(bs(2080, 1, 10)));
+}
+
+#[test]
+fn cs_nepali_date_range_tests__contains_date_outside_range_returns_false() {
+    assert!(!range(bs(2080, 1, 1), bs(2080, 1, 15)).contains(bs(2080, 1, 20)));
+}
+
+// cs:NepaliDateRangeTests.Contains_RangeFullyContained_ReturnsTrue D-09 contains takes a date only; no range set operations
+// cs:NepaliDateRangeTests.Overlaps_RangesOverlap_ReturnsTrue D-09 no set operations
+// cs:NepaliDateRangeTests.Overlaps_RangesDontOverlap_ReturnsFalse D-09 no set operations
+// cs:NepaliDateRangeTests.IsAdjacentTo_AdjacentRanges_ReturnsTrue D-09 no set operations
+// cs:NepaliDateRangeTests.Intersect_OverlappingRanges_ReturnsIntersection D-09 no set operations
+// cs:NepaliDateRangeTests.Union_OverlappingRanges_ReturnsUnion D-09 no set operations
+// cs:NepaliDateRangeTests.Except_RemovingRangeFromMiddle_ReturnsTwoRanges D-09 no set operations
+// cs:NepaliDateRangeTests.SplitByMonth_RangeAcrossMonths_SplitsCorrectly D-09 no splitting
+// cs:NepaliDateRangeTests.WorkingDays_ReturnsCorrectDays D-09 no working days; filter days() by weekday
+
+#[test]
+fn cs_nepali_date_range_tests__enumeration_enumerates_all_days_in_range() {
+    let days: Vec<NepaliDate> = range(bs(2080, 1, 1), bs(2080, 1, 10)).days().collect();
+    let expected: Vec<NepaliDate> = (1..=10).map(|d| bs(2080, 1, d)).collect();
+    assert_eq!(days, expected);
+}
+
+// cs:NepaliDateRangeTests.Demo_RangeOperations D-09 demo of SplitByFiscalQuarter, WeekendDays, WorkingDays, Overlaps and Except, none of which is ported
+
+// ---------- Core/OptimizationVerificationTests.cs (Subtraction_*) ----------
+
+// `a - b` (a `TimeSpan`) maps to `b.days_until(a)` (D-07).
+
+#[test]
+fn cs_optimization_verification_tests__subtraction_same_date_returns_zero_days() {
+    let date = bs(2080, 5, 15);
+    assert_eq!(date.days_until(date), 0);
+}
+
+#[test]
+fn cs_optimization_verification_tests__subtraction_adjacent_days_returns_one_day() {
+    let (a, b) = (bs(2080, 5, 15), bs(2080, 5, 16));
+    assert_eq!(a.days_until(b), 1);
+    assert_eq!(b.days_until(a), -1);
+}
+
+#[test]
+fn cs_optimization_verification_tests__subtraction_cross_month_correct_days() {
+    assert_eq!(bs(2080, 4, 32).days_until(bs(2080, 5, 1)), 1);
+}
+
+#[test]
+fn cs_optimization_verification_tests__subtraction_cross_year_correct_days() {
+    assert_eq!(month_end(2080, 12).days_until(bs(2081, 1, 1)), 1);
+}
+
+// ---------- Core/NepaliDateIsRelativeTests.cs ----------
+
+// Not ported (D-14): compare with `NepaliDate::today()` (L5) and `checked_add_days(±1)`.
+// cs:NepaliDateIsRelativeTests.IsToday_TodaysDate_ReturnsTrue D-14 is_today() comes with jiff in L5
+// cs:NepaliDateIsRelativeTests.IsToday_YesterdaysDate_ReturnsFalse D-14 is_today() comes with jiff in L5
+// cs:NepaliDateIsRelativeTests.IsToday_TomorrowsDate_ReturnsFalse D-14 is_today() comes with jiff in L5
+// cs:NepaliDateIsRelativeTests.IsToday_ArbitraryPastDate_ReturnsFalse D-14 is_today() comes with jiff in L5
+// cs:NepaliDateIsRelativeTests.IsYesterday_YesterdaysDate_ReturnsTrue D-14 no IsYesterday
+// cs:NepaliDateIsRelativeTests.IsYesterday_TodaysDate_ReturnsFalse D-14 no IsYesterday
+// cs:NepaliDateIsRelativeTests.IsYesterday_TomorrowsDate_ReturnsFalse D-14 no IsYesterday
+// cs:NepaliDateIsRelativeTests.IsYesterday_ArbitraryPastDate_ReturnsFalse D-14 no IsYesterday
+// cs:NepaliDateIsRelativeTests.IsTomorrow_TomorrowsDate_ReturnsTrue D-14 no IsTomorrow
+// cs:NepaliDateIsRelativeTests.IsTomorrow_TodaysDate_ReturnsFalse D-14 no IsTomorrow
+// cs:NepaliDateIsRelativeTests.IsTomorrow_YesterdaysDate_ReturnsFalse D-14 no IsTomorrow
+// cs:NepaliDateIsRelativeTests.IsTomorrow_ArbitraryPastDate_ReturnsFalse D-14 no IsTomorrow
+// cs:NepaliDateIsRelativeTests.Today_OnlyIsToday_IsTrue D-14 no IsYesterday or IsTomorrow
+// cs:NepaliDateIsRelativeTests.Yesterday_OnlyIsYesterday_IsTrue D-14 no IsYesterday or IsTomorrow
+// cs:NepaliDateIsRelativeTests.Tomorrow_OnlyIsTomorrow_IsTrue D-14 no IsYesterday or IsTomorrow
+// cs:NepaliDateIsRelativeTests.TwoDaysAhead_NoneAreTrue D-14 no IsYesterday or IsTomorrow
+// cs:NepaliDateIsRelativeTests.TwoDaysBehind_NoneAreTrue D-14 no IsYesterday or IsTomorrow

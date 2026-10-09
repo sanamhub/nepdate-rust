@@ -1,4 +1,5 @@
-//! Zero-allocation check for the benchmark operations (L2-09, BENCHMARK §2). Runs without the
+//! Zero-allocation check for the benchmark operations (L2-09 for B1 and B2, L3-06 for B3, B4 and
+//! the other phase 2 operations; BENCHMARK §2). Runs without the
 //! test harness, on one thread, so nothing else allocates while the counter is read.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 // A global allocator can only be written with `unsafe`; the libraries themselves forbid it.
@@ -8,7 +9,7 @@ use std::alloc::{GlobalAlloc, Layout, System};
 use std::hint::black_box;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use nepdate::NepaliDate;
+use nepdate::{MonthOverflow, NepaliDate, NepaliDateRange};
 
 /// Wraps the system allocator and adds up every requested size.
 struct Counting;
@@ -79,4 +80,36 @@ fn main() {
         std::process::exit(1);
     }
     println!("no_alloc: B1 and B2 allocated 0 bytes over 128,000 calls");
+
+    let before = ALLOCATED.load(Ordering::Relaxed);
+    let mut walked = 0usize;
+    for _ in 0..1_000 {
+        for &date in &dates {
+            let date = black_box(date);
+            // B3: add 1000 days.
+            let _ = black_box(date.checked_add_days(black_box(1_000)));
+            // B4: add 13 months, Clamp.
+            let _ = black_box(date.checked_add_months(black_box(13), MonthOverflow::Clamp));
+            let _ = black_box(date.diff(black_box(dates[63])));
+            let _ = black_box(date.fiscal_year().range());
+        }
+    }
+    for _ in 0..10 {
+        for day in NepaliDateRange::year(black_box(2081)).unwrap().days() {
+            black_box(day);
+            walked += 1;
+        }
+    }
+    let after = ALLOCATED.load(Ordering::Relaxed);
+    if after != before {
+        eprintln!(
+            "no_alloc: phase 2 operations allocated {} bytes",
+            after - before
+        );
+        std::process::exit(1);
+    }
+    assert_eq!(walked, 3_660);
+    println!(
+        "no_alloc: B3, B4, diff, fiscal_year and a NepaliDateRange::year(2081) walk allocated 0 bytes"
+    );
 }
