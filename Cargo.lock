@@ -46,6 +46,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "nepdate-patro"
+version = "0.0.0"
+dependencies = [
+ "nepdate",
+]
+
+[[package]]
 name = "num-traits"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"

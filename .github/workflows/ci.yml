@@ -48,3 +48,4 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@ccee93717622f2100ea90b0833cbd1575c4c56b2 # 1.85
       - run: cargo build -p nepdate --all-features
+      - run: cargo build -p nepdate-patro
