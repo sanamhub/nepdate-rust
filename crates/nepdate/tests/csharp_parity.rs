@@ -1,6 +1,9 @@
 //! Parity with C# `NepDate` 2.0.7 on `shared/spec/vectors/csharp-golden/dates.tsv` (L2-07).
-//! Conversion columns (L2-07), arithmetic files and fiscal columns (L3-05); L4 adds formatting.
-//! No arithmetic row is skipped: no PARITY deviation applies to integer arithmetic.
+//! Conversion columns (L2-07), arithmetic files and fiscal columns (L3-05), text columns,
+//! `format-pattern.tsv` and the strict column of the C# `parse.tsv` (L4-05).
+//! No arithmetic row is skipped: no PARITY deviation applies to integer arithmetic. The only
+//! skipped rows are D-04 (`MMM` for Ashad and Ashoj) and D-05 (Devanagari digits in strict
+//! parsing), each behind a commented filter.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -11,7 +14,9 @@
 
 mod common;
 
-use nepdate::{Error, Lang, MonthOverflow, NepaliDate, NepaliDateRange};
+use nepdate::{
+    DateOrder, Error, Lang, LongDate, MonthOverflow, NepaliDate, NepaliDateRange, Separator,
+};
 
 #[test]
 fn dates_conversion_columns() {
@@ -39,7 +44,6 @@ fn dates_conversion_columns() {
             row[0]
         );
         assert_eq!(date.to_string(), row[5], "to_string of {}", row[0]);
-        // L4: unicode, long_en, long_en_weekday, long_ne, long_ne_weekday, dmy_dash_nopad.
     }
 }
 
@@ -109,4 +113,83 @@ fn dates_fiscal_columns() {
             &format!("quarter_end of {}", row[0]),
         );
     }
+}
+
+#[test]
+fn dates_text_columns() {
+    let rows = common::rows("spec/vectors/csharp-golden/dates.tsv", '\t');
+    let weekday = LongDate {
+        weekday: true,
+        ..LongDate::default()
+    };
+    for row in &rows {
+        let d = common::bs(&row[0]);
+        let columns = [
+            (
+                d.short(DateOrder::Ymd, Separator::Slash, true, Lang::Ne)
+                    .to_string(),
+                "unicode",
+            ),
+            (d.long(LongDate::default(), Lang::En).to_string(), "long_en"),
+            (d.long(weekday, Lang::En).to_string(), "long_en_weekday"),
+            (d.long(LongDate::default(), Lang::Ne).to_string(), "long_ne"),
+            (d.long(weekday, Lang::Ne).to_string(), "long_ne_weekday"),
+            (
+                d.short(DateOrder::Dmy, Separator::Dash, false, Lang::En)
+                    .to_string(),
+                "dmy_dash_nopad",
+            ),
+        ];
+        for (i, (actual, name)) in columns.iter().enumerate() {
+            assert_eq!(actual, &row[6 + i], "{name} of {}", row[0]);
+        }
+    }
+}
+
+/// Whether `pattern` has a run of exactly three `M`s, the token D-04 changes.
+fn has_mmm(pattern: &str) -> bool {
+    pattern.split(|c| c != 'M').any(|run| run.len() == 3)
+}
+
+#[test]
+fn format_pattern_rows() {
+    let rows = common::rows("spec/vectors/csharp-golden/format-pattern.tsv", '\t');
+    assert_eq!(rows.len(), 451);
+    let mut skipped = 0;
+    for row in &rows {
+        let d = common::bs(&row[0]);
+        // D-04 (ADR-0009): MMM for Ashad/Ashoj differs on purpose
+        if has_mmm(&row[1]) && matches!(d.month_number(), 3 | 6) {
+            skipped += 1;
+            continue;
+        }
+        let actual = d.format_pattern(&row[1], Lang::En).to_string();
+        assert_eq!(actual, row[2], "{} with {:?}", row[0], row[1]);
+    }
+    assert!(skipped > 0 && skipped < 20, "{skipped} D-04 rows");
+}
+
+#[test]
+fn csharp_parse_strict_column() {
+    let text = common::read_shared("spec/vectors/csharp-golden/parse.tsv");
+    let mut checked = 0;
+    for line in text.lines().skip(1) {
+        let cols: Vec<&str> = line.split('\t').collect();
+        let (input, strict) = (cols[0], cols[1]);
+        // D-05 (ADR-0009): strict parsing accepts Devanagari digits, which C# rejects
+        if input
+            .chars()
+            .any(|c| ('\u{0966}'..='\u{096F}').contains(&c))
+        {
+            continue;
+        }
+        let actual = input.parse::<NepaliDate>();
+        if strict == "ERR" {
+            assert!(actual.is_err(), "{input:?}: {actual:?}");
+        } else {
+            assert_eq!(actual, Ok(common::bs(strict)), "{input:?}");
+        }
+        checked += 1;
+    }
+    assert_eq!(checked, 40);
 }
