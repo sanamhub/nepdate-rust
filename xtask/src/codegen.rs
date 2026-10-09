@@ -51,7 +51,7 @@ pub(crate) fn run(check: bool) -> Result<()> {
     Ok(())
 }
 
-fn workspace_root() -> PathBuf {
+pub(crate) fn workspace_root() -> PathBuf {
     let xtask = Path::new(env!("CARGO_MANIFEST_DIR"));
     xtask.parent().unwrap_or(xtask).to_path_buf()
 }

@@ -1,6 +1,8 @@
 //! Repository tasks: `cargo xtask ci` runs every quality gate, `cargo xtask codegen` writes the
-//! generated tables (ADR-0006). Arguments are read from `std::env::args()` to keep this tiny.
+//! generated tables (ADR-0006), `cargo xtask catalog-check <phase>` checks the C# test catalogue
+//! (L2-08). Arguments are read from `std::env::args()` to keep this tiny.
 
+mod catalog;
 mod codegen;
 
 use std::process::{Command, ExitCode};
@@ -14,8 +16,12 @@ fn main() -> ExitCode {
         ["ci"] => ci(),
         ["codegen"] => codegen::run(false),
         ["codegen", "--check"] => codegen::run(true),
+        ["catalog-check", phase] => catalog::run(phase, false),
+        ["catalog-check", phase, "--list"] => catalog::run(phase, true),
         _ => {
-            eprintln!("usage: cargo xtask <ci | codegen [--check]>");
+            eprintln!(
+                "usage: cargo xtask <ci | codegen [--check] | catalog-check <phase> [--list]>"
+            );
             return ExitCode::from(2);
         }
     };
@@ -103,6 +109,7 @@ const STEPS: &[Step] = &[
         env: &[],
         optional: true,
     },
+    step("cargo", &["xtask", "catalog-check", "1"]),
 ];
 
 fn ci() -> Result<()> {
