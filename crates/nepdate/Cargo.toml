@@ -19,3 +19,6 @@ harness = false
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+proptest = { version = "1", default-features = false, features = ["alloc", "no_std"] }
