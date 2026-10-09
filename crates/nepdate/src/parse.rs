@@ -89,6 +89,14 @@ impl FromStr for NepaliDate {
     /// Strict parsing (PARSING §1): year, month and day in that order, in ASCII or Devanagari
     /// digits (D-05), separated by any of `- / . _ \ space । |`.
     ///
+    /// # Errors
+    ///
+    /// [`Error::Parse`] with [`ParseErrorKind::InvalidCharacter`],
+    /// [`ParseErrorKind::WrongGroupCount`] or [`ParseErrorKind::NumberTooLong`], or the errors of
+    /// [`NepaliDate::new`] for a date that doesn't exist. A month or day of 256 to 9999 doesn't
+    /// fit in a `u8`, so it is checked as 255: [`Error::InvalidMonth`] and the `day` of
+    /// [`Error::InvalidDay`] then hold 255, not the number in the text.
+    ///
     /// ```
     /// use nepdate::{Error, NepaliDate, ParseErrorKind};
     ///
@@ -294,45 +302,30 @@ fn tokenize(s: &str) -> Tokens {
     tokens
 }
 
-/// One chunk between separators. All digits and dots: numbers split on the dots. Otherwise:
-/// alternating runs of digits and of other bytes, where a dot next to a digit separates.
+/// One chunk between separators (PARSING §2 step 2). Made only of digits and dots: numbers split
+/// on the dots. Anything else is one word, dots and digits included, so `Shr.15` and `2080.B.S.`
+/// are words that match no month and no era.
 fn split_chunk(s: &str, start: usize, end: usize, only_digits_and_dots: bool, t: &mut Tokens) {
+    if !only_digits_and_dots {
+        // `start` and `end` sit next to a separator or at the ends of `s`, so they are char
+        // boundaries; `get` keeps a mistake from panicking.
+        if let Some(word) = s.get(start..end) {
+            t.push_word(word);
+        }
+        return;
+    }
     let b = s.as_bytes();
     let mut i = start;
     while i < end {
-        if only_digits_and_dots && b.get(i) == Some(&b'.') {
+        if b.get(i) == Some(&b'.') {
             i += 1;
             continue;
         }
-        if digit_at(b, i).is_some() {
-            let run = i;
-            while i < end && digit_at(b, i).is_some() {
-                i += digit_at(b, i).map_or(1, |(_, len)| len);
-            }
-            t.push_number(b, run, i);
-            continue;
+        let run = i;
+        while i < end && b.get(i) != Some(&b'.') {
+            i += digit_at(b, i).map_or(1, |(_, len)| len);
         }
-        let mut run = i;
-        while i < end && digit_at(b, i).is_none() {
-            i += 1;
-        }
-        // A dot right after or right before a digit separates; dots inside the word stay.
-        let mut word_end = i;
-        if run > start {
-            while run < word_end && b.get(run) == Some(&b'.') {
-                run += 1;
-            }
-        }
-        if word_end < end {
-            while word_end > run && b.get(word_end - 1) == Some(&b'.') {
-                word_end -= 1;
-            }
-        }
-        // `run` and `word_end` sit next to an ASCII byte or a whole digit sequence, so they are
-        // char boundaries; `get` keeps a mistake from panicking.
-        if let Some(word) = s.get(run..word_end) {
-            t.push_word(word);
-        }
+        t.push_number(b, run, i);
     }
 }
 
@@ -381,7 +374,7 @@ impl NepaliDate {
     ///
     /// [`Error::Parse`] with [`ParseErrorKind::NumberTooLong`], [`ParseErrorKind::Ambiguous`] or
     /// [`ParseErrorKind::Unrecognized`], or the errors of [`NepaliDate::new`] for a date that
-    /// doesn't exist.
+    /// doesn't exist. As in strict parsing, a month or day above 255 is reported as 255.
     ///
     /// ```
     /// use nepdate::{Error, NepaliDate, ParseErrorKind};
@@ -478,10 +471,8 @@ mod tests {
             "2080 Shrawan 15",
             "15.04.2080",
             "2080.04.15 B.S.",
-            "2080.B.S. 04 15",
             "15 साउन, 2080 गते",
             "१५ श्रावण २०८०",
-            "Shr.15.2080",
             "15 SHRAWAN 2080",
         ] {
             assert_eq!(NepaliDate::parse_lenient(s), d, "{s:?}");
@@ -522,10 +513,15 @@ mod tests {
             NepaliDate::parse_lenient("1 2 3 4 123456"),
             kind(ParseErrorKind::NumberTooLong)
         );
-        assert_eq!(
-            NepaliDate::parse_lenient("15th Shrawan 2080"),
-            kind(ParseErrorKind::Unrecognized)
-        );
+        for s in [
+            "15th Shrawan 2080",
+            "Shr.15 2080",
+            "15.Shrawan.2080",
+            "2080.B.S. Shrawan 15",
+        ] {
+            let parsed = NepaliDate::parse_lenient(s);
+            assert_eq!(parsed, kind(ParseErrorKind::Unrecognized), "{s:?}");
+        }
         assert_eq!(
             NepaliDate::parse_lenient("15/13/2080"),
             Err(Error::InvalidMonth(13))
