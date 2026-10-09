@@ -1,0 +1,19 @@
+name: Feature request
+description: Suggest a change to the libraries or the widget.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the problem you want solved, not a solution. The widget's scope is fixed by
+        ADR-0008 (`docs/adr/0008-widget-scope.md`); a request outside that list needs a new ADR.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Who has this problem, and how often
