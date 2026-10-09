@@ -123,7 +123,7 @@ impl Default for LongDate {
 ///
 /// ```
 /// let mut out = String::new();
-/// nepdate::Lang::Ne.digits(5, 2).write_to(&mut out)?;
+/// assert_eq!(nepdate::Lang::Ne.digits(5, 2).write_to(&mut out), Ok(()));
 /// assert_eq!(out, "०५");
 /// # Ok::<(), core::fmt::Error>(())
 /// ```
@@ -151,7 +151,7 @@ impl Digits {
     ///
     /// ```
     /// let mut out = String::new();
-    /// nepdate::Lang::En.digits(42, 4).write_to(&mut out)?;
+    /// assert_eq!(nepdate::Lang::En.digits(42, 4).write_to(&mut out), Ok(()));
     /// assert_eq!(out, "0042");
     /// # Ok::<(), core::fmt::Error>(())
     /// ```
@@ -227,9 +227,9 @@ fn day<W: fmt::Write + ?Sized>(
 ///
 /// let d = NepaliDate::new(2080, 5, 15)?;
 /// let mut out = String::new();
-/// d.short(DateOrder::Ymd, Separator::Slash, true, Lang::Ne).write_to(&mut out)?;
+/// assert_eq!(d.short(DateOrder::Ymd, Separator::Slash, true, Lang::Ne).write_to(&mut out), Ok(()));
 /// assert_eq!(out, "२०८०/०५/१५");
-/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// # Ok::<(), nepdate::Error>(())
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct ShortFormat {
@@ -252,9 +252,9 @@ impl ShortFormat {
     ///
     /// let mut out = String::new();
     /// let d = NepaliDate::new(2080, 5, 15)?;
-    /// d.short(DateOrder::Mdy, Separator::Dot, false, Lang::En).write_to(&mut out)?;
+    /// assert_eq!(d.short(DateOrder::Mdy, Separator::Dot, false, Lang::En).write_to(&mut out), Ok(()));
     /// assert_eq!(out, "5.15.2080");
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// # Ok::<(), nepdate::Error>(())
     /// ```
     pub fn write_to<W: fmt::Write + ?Sized>(&self, out: &mut W) -> fmt::Result {
         let (y, md) = if self.pad { (4, 2) } else { (1, 1) };
@@ -322,9 +322,9 @@ impl LongFormat {
     ///
     /// let mut out = String::new();
     /// let opts = LongDate { weekday: true, ..LongDate::default() };
-    /// NepaliDate::new(2081, 4, 15)?.long(opts, Lang::En).write_to(&mut out)?;
+    /// assert_eq!(NepaliDate::new(2081, 4, 15)?.long(opts, Lang::En).write_to(&mut out), Ok(()));
     /// assert_eq!(out, "Tuesday, Shrawan 15, 2081");
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// # Ok::<(), nepdate::Error>(())
     /// ```
     pub fn write_to<W: fmt::Write + ?Sized>(&self, out: &mut W) -> fmt::Result {
         let (d, lang) = (self.date, self.lang);
@@ -379,9 +379,9 @@ impl PatternFormat<'_> {
     /// use nepdate::{Lang, NepaliDate};
     ///
     /// let mut out = String::new();
-    /// NepaliDate::new(2081, 4, 15)?.format_pattern("yyyy'BS'", Lang::En).write_to(&mut out)?;
+    /// assert_eq!(NepaliDate::new(2081, 4, 15)?.format_pattern("yyyy'BS'", Lang::En).write_to(&mut out), Ok(()));
     /// assert_eq!(out, "2081BS");
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// # Ok::<(), nepdate::Error>(())
     /// ```
     pub fn write_to<W: fmt::Write + ?Sized>(&self, out: &mut W) -> fmt::Result {
         let (d, lang) = (self.date, self.lang);
