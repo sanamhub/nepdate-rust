@@ -17,9 +17,11 @@ mod date;
 mod error;
 mod gregorian;
 mod names;
+mod range;
 
 pub use crate::arith::{DateDiff, MonthOverflow};
 pub use crate::date::NepaliDate;
 pub use crate::error::{Error, ParseErrorKind};
 pub use crate::gregorian::GregorianDate;
 pub use crate::names::{Lang, Month, Weekday};
+pub use crate::range::{Days, NepaliDateRange};

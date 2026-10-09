@@ -113,8 +113,10 @@ impl NepaliDate {
     /// ```
     /// use nepdate::{MonthOverflow, NepaliDate};
     ///
+    /// // Shrawan 2082 has 31 days, so day 32 clamps to 31 or overflows into Bhadra.
     /// let d = NepaliDate::new(2081, 4, 32)?;
-    /// assert_eq!(d.checked_add_years(1, MonthOverflow::Clamp)?.to_string(), "2082/04/32");
+    /// assert_eq!(d.checked_add_years(1, MonthOverflow::Clamp)?.to_string(), "2082/04/31");
+    /// assert_eq!(d.checked_add_years(1, MonthOverflow::Overflow)?.to_string(), "2082/05/01");
     /// # Ok::<(), nepdate::Error>(())
     /// ```
     #[must_use = "the result may be out of range"]
