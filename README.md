@@ -12,7 +12,7 @@ repositories.
 | `nepdate-widget` | `apps/nepdate-widget` | tray / menu-bar app (Windows, macOS, Linux): today's BS date, month calendar, converter, clock with time zone |
 | Shared data and spec | `shared/` | read-only copy of the hub's `data/` and `spec/`, updated by a weekly PR. Read only at dev time |
 
-**Status:** L0 to L2 done (workspace, core types, BS↔AD conversion); L3 (arithmetic, fiscal year, ranges) ready for review; next: phase L4.
+**Status:** L0 to L3 done (workspace, core types, BS↔AD conversion, arithmetic, fiscal year, ranges); L4 (formatting and parsing) ready for review; next: phase L5.
 
 Supported range: **BS 1901-01-01 to 2199-12-30** (AD 1844-04-11 to 2143-04-15).
 Patro data (`nepdate-patro`): BS 2077-01-01 to 2084-08-20; tithi 2078-01-02 to 2083-12-30,
