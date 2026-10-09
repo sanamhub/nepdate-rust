@@ -433,7 +433,9 @@ fn write_custom<W: fmt::Write + ?Sized>(
     let mut i = 0;
     while let Some(b) = at(i) {
         match b {
-            b'\\' if i + 1 < len => {
+            // A `\` at the very end of the pattern writes nothing (FORMATTING §5).
+            b'\\' if i + 1 == len => i += 1,
+            b'\\' => {
                 // The escaped character may be several bytes long: copy it whole.
                 let mut end = i + 2;
                 while !pattern.is_char_boundary(end) {
@@ -728,7 +730,7 @@ mod tests {
             ("yyyyy", "2081"),
             ("MMMMM", "Shrawan"),
             ("'unterminated", "unterminated"),
-            ("yyyy\\", "2081\\"),
+            ("yyyy\\", "2081"),
             ("\\साउन", "साउन"),
             ("Gd", "G15"),
             ("साल yyyy", "साल 2081"),
