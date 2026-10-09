@@ -190,6 +190,7 @@ impl IntoIterator for NepaliDateRange {
 /// assert_eq!(days.len(), 364);
 /// # Ok::<(), nepdate::Error>(())
 /// ```
+#[derive(Clone, Debug)]
 pub struct Days {
     front: u32,
     back: u32,

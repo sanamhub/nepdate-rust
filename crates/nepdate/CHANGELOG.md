@@ -6,6 +6,8 @@ All notable changes to the `nepdate` crate. Format: [Keep a Changelog](https://k
 
 ### Added
 
+- `NepaliDate` (4 bytes, `const fn new`, `MIN`, `MAX`, getters, month length, first and last day of month), `Month`, `Weekday`, `Lang`, `Error` and `ParseErrorKind`.
+- BS and AD conversion without loops or searches: `to_gregorian`, `from_gregorian`, `TryFrom<GregorianDate>`, plus `GregorianDate`, `weekday`, `day_of_year`, `succ`, `pred` and `days_until`, checked against all 109,212 supported days.
 - `NepaliDate::checked_add_days`, `checked_add_months` and `checked_add_years` with `MonthOverflow::{Clamp, Overflow}` (ALGORITHM §8).
 - `NepaliDate::diff` returning `DateDiff` (ALGORITHM §8a).
 - `NepaliDateRange` (`new`, `month`, `year`, `start`, `end`, `len`, `contains`, `days`) and the `Days` iterator, which is double-ended, exact-size and fused (D-09).

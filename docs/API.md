@@ -188,7 +188,7 @@ impl NepaliDateRange {
 }
 // Deliberately not in v0.1 (YAGNI): overlaps, intersection, union, split by month.
 impl IntoIterator for NepaliDateRange { type Item = NepaliDate; type IntoIter = Days; }
-pub struct Days { /* serial cursor */ }
+#[derive(Clone, Debug)] pub struct Days { /* serial cursor */ }
 impl Iterator for Days { type Item = NepaliDate; }            // + DoubleEndedIterator + ExactSizeIterator + FusedIterator
 ```
 
