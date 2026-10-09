@@ -111,6 +111,7 @@ const STEPS: &[Step] = &[
     },
     step("cargo", &["xtask", "catalog-check", "1"]),
     step("cargo", &["xtask", "catalog-check", "2"]),
+    step("cargo", &["xtask", "catalog-check", "3"]),
 ];
 
 fn ci() -> Result<()> {

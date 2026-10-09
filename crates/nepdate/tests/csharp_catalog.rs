@@ -1,7 +1,7 @@
 //! C# `NepDate`'s own test suite, one test per row of `shared/spec/vectors/csharp-tests/catalog.tsv`
 //! (L2-08). Names come from `cargo xtask catalog-check <phase> --list`; `cargo xtask
 //! catalog-check` fails when a row has neither a test nor a `// cs:<id> D-xx` comment.
-//! Phase 1 rows (L2-08), then phase 2 (L3-06); L4-06 adds phase 3.
+//! Phase 1 rows (L2-08), phase 2 (L3-06) and phase 3 (L4-06).
 // `non_snake_case`: the L2-08 name rule turns the `.` in a row id into `__`.
 // `nonminimal_bool` and `manual_assert_eq`: the `Operator_*` rows test each operator itself
 // (`!(a < b)` calls `<`, not `>=`), so the expressions stay as C# wrote them.
@@ -18,10 +18,11 @@
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::hash::{BuildHasher, RandomState};
+use std::str::FromStr;
 
 use nepdate::{
-    Error, FiscalYear, GregorianDate, Month, MonthOverflow, NepaliDate, NepaliDateRange,
-    ParseErrorKind, Quarter, Weekday,
+    DateOrder, Error, FiscalYear, GregorianDate, Lang, LongDate, Month, MonthOverflow, NepaliDate,
+    NepaliDateRange, ParseErrorKind, Quarter, Separator, Weekday,
 };
 
 fn bs(year: u16, month: u8, day: u8) -> NepaliDate {
@@ -53,19 +54,23 @@ fn first_days_of_months() -> impl Iterator<Item = NepaliDate> {
     (1901..=2199).flat_map(|y| (1..=12).map(move |m| bs(y, m, 1)))
 }
 
-/// A string row whose C# test expects a date. `FromStr` arrives in L4-03; until then this checks
-/// that the date the string names exists.
+/// A string row whose C# test expects a date: strict parsing (`FromStr`) gives it.
 fn assert_parses(input: &str, year: u16, month: u8, day: u8) {
-    // L4-03: assert_eq!(input.parse::<NepaliDate>().map(ymd), Ok((year, month, day)));
-    let date = NepaliDate::new(year, month, day).unwrap_or_else(|e| panic!("{input:?}: {e}"));
-    assert_eq!(ymd(date), (year, month, day), "{input:?}");
+    assert_eq!(
+        input.parse::<NepaliDate>().map(ymd),
+        Ok((year, month, day)),
+        "{input:?}"
+    );
 }
 
-/// A string row whose C# test expects a syntax error. Nothing in phase 1 can check it, so these
-/// tests are `#[ignore]` until L4-03 replaces this body with the assertion below.
+/// A string row whose C# test expects a syntax error. C# only asks for an exception; the kind
+/// comes from `shared/spec/vectors/parse.tsv`.
 fn assert_parse_rejects(input: &str, expected: ParseErrorKind) {
-    // L4-03: assert_eq!(input.parse::<NepaliDate>(), Err(Error::Parse(expected)));
-    panic!("FromStr lands in L4-03: {input:?} should give {expected:?}");
+    assert_eq!(
+        input.parse::<NepaliDate>(),
+        Err(Error::Parse(expected)),
+        "{input:?}"
+    );
 }
 
 // ---------- Abilities/NepaliDateComparableTests.cs ----------
@@ -342,9 +347,9 @@ fn cs_nepali_date_construction_tests__constructor_valid_string_formats_creates_i
 
 #[test]
 fn cs_nepali_date_construction_tests__constructor_auto_adjusted_formats_creates_instance_1() {
-    // C# `autoAdjust: true` maps to `parse_lenient` (L4-04), which reads a trailing 4-digit
-    // year as D M Y, the same answer here.
-    assert_parses("15/05/2080", 2080, 5, 15);
+    // C# `autoAdjust: true` maps to `parse_lenient`, which reads a trailing 4-digit year as
+    // D M Y, the same answer here.
+    assert_parses_lenient("15/05/2080", 2080, 5, 15);
 }
 
 // cs:NepaliDateConstructionTests.Constructor_AutoAdjustedFormats_CreatesInstance#2 D-06 "05/15/2080" as M D Y needs C#'s order guessing; lenient parse reads D M Y and rejects month 15
@@ -360,28 +365,25 @@ fn cs_nepali_date_construction_tests__constructor_auto_adjusted_formats_creates_
 // cs:NepaliDateConstructionTests.TryParse_AutoAdjust_MonthOverflowWithBoundaryDay_SwapsAsDocumented D-06 "2080/13/12": no month and day swapping, month 13 is InvalidMonth
 
 #[test]
-#[ignore = "L4-03: needs FromStr"]
 fn cs_nepali_date_construction_tests__constructor_invalid_string_formats_throws_exception_1() {
     assert_parse_rejects("", ParseErrorKind::WrongGroupCount);
 }
 
 #[test]
-#[ignore = "L4-03: needs FromStr"]
 fn cs_nepali_date_construction_tests__constructor_invalid_string_formats_throws_exception_2() {
     assert_parse_rejects("invalid", ParseErrorKind::InvalidCharacter);
 }
 
 #[test]
-#[ignore = "L4-03: needs FromStr"]
 fn cs_nepali_date_construction_tests__constructor_invalid_string_formats_throws_exception_3() {
     assert_parse_rejects("2080/5", ParseErrorKind::WrongGroupCount);
 }
 
 #[test]
 fn cs_nepali_date_construction_tests__constructor_valid_format_invalid_date_throws_exception_1() {
-    // L4-03: parse "2080/5/40" instead; strict parse validates with `new` (PARSING §1 step 4).
+    // Strict parsing validates with `new` (PARSING §1 step 4).
     assert!(matches!(
-        NepaliDate::new(2080, 5, 40),
+        "2080/5/40".parse::<NepaliDate>(),
         Err(Error::InvalidDay { day: 40, .. })
     ));
 }
@@ -402,19 +404,16 @@ fn cs_nepali_date_construction_tests__try_parse_valid_string_returns_true_with_c
 }
 
 #[test]
-#[ignore = "L4-03: needs FromStr"]
 fn cs_nepali_date_construction_tests__try_parse_invalid_string_returns_false_with_default_1() {
     assert_parse_rejects("", ParseErrorKind::WrongGroupCount);
 }
 
 #[test]
-#[ignore = "L4-03: needs FromStr"]
 fn cs_nepali_date_construction_tests__try_parse_invalid_string_returns_false_with_default_2() {
     assert_parse_rejects("invalid", ParseErrorKind::InvalidCharacter);
 }
 
 #[test]
-#[ignore = "L4-03: needs FromStr"]
 fn cs_nepali_date_construction_tests__try_parse_invalid_string_returns_false_with_default_3() {
     assert_parse_rejects("2080/5", ParseErrorKind::WrongGroupCount);
 }
@@ -524,43 +523,36 @@ fn cs_optimization_verification_tests__constructor_all_separators_parse_correctl
 // C# only asks for "any exception"; the kinds come from `shared/spec/vectors/parse.tsv`.
 
 #[test]
-#[ignore = "L4-03: needs FromStr"]
 fn cs_optimization_verification_tests__constructor_invalid_strings_throws_exception_1() {
     assert_parse_rejects("", ParseErrorKind::WrongGroupCount);
 }
 
 #[test]
-#[ignore = "L4-03: needs FromStr"]
 fn cs_optimization_verification_tests__constructor_invalid_strings_throws_exception_2() {
     assert_parse_rejects("invalid", ParseErrorKind::InvalidCharacter);
 }
 
 #[test]
-#[ignore = "L4-03: needs FromStr"]
 fn cs_optimization_verification_tests__constructor_invalid_strings_throws_exception_3() {
     assert_parse_rejects("2080/05", ParseErrorKind::WrongGroupCount);
 }
 
 #[test]
-#[ignore = "L4-03: needs FromStr"]
 fn cs_optimization_verification_tests__constructor_invalid_strings_throws_exception_4() {
     assert_parse_rejects("2080", ParseErrorKind::WrongGroupCount);
 }
 
 #[test]
-#[ignore = "L4-03: needs FromStr"]
 fn cs_optimization_verification_tests__constructor_invalid_strings_throws_exception_5() {
     assert_parse_rejects("2080/05/15/99", ParseErrorKind::WrongGroupCount);
 }
 
 #[test]
-#[ignore = "L4-03: needs FromStr"]
 fn cs_optimization_verification_tests__constructor_invalid_strings_throws_exception_6() {
     assert_parse_rejects("abc/def/ghi", ParseErrorKind::InvalidCharacter);
 }
 
 #[test]
-#[ignore = "L4-03: needs FromStr"]
 fn cs_optimization_verification_tests__constructor_null_string_throws_exception() {
     // A `&str` can't be null; the nearest input is the empty string.
     assert_parse_rejects("", ParseErrorKind::WrongGroupCount);
@@ -834,12 +826,10 @@ fn fy_range(date: NepaliDate, offset: i16) -> NepaliDateRange {
     FiscalYear::new(fy).range().unwrap()
 }
 
-/// A lenient-parse row whose C# test expects a date. `parse_lenient` arrives in L4-04; until
-/// then this checks that the date the string names exists.
+/// A lenient-parse row whose C# test expects a date.
 fn assert_parses_lenient(input: &str, year: u16, month: u8, day: u8) {
-    // L4-04: assert_eq!(NepaliDate::parse_lenient(input).map(ymd), Ok((year, month, day)));
-    let date = NepaliDate::new(year, month, day).unwrap_or_else(|e| panic!("{input:?}: {e}"));
-    assert_eq!(ymd(date), (year, month, day), "{input:?}");
+    let parsed = NepaliDate::parse_lenient(input).map(ymd);
+    assert_eq!(parsed, Ok((year, month, day)), "{input:?}");
 }
 
 // ---------- Core/FiscalYearInstanceMethodTests.cs ----------
@@ -1401,7 +1391,7 @@ fn cs_nepali_date_arithmetic_edge_case_tests__constructor_two_date_times_on_same
     assert_eq!(morning, evening);
 }
 
-// C# `TryParse(s, autoAdjust: true, ...)` maps to `parse_lenient` (L4-04).
+// C# `TryParse(s, autoAdjust: true, ...)` maps to `parse_lenient`.
 
 #[test]
 fn cs_nepali_date_arithmetic_edge_case_tests__try_parse_auto_adjust_day_year_month_format_returns_correct_date()
@@ -1414,11 +1404,13 @@ fn cs_nepali_date_arithmetic_edge_case_tests__try_parse_auto_adjust_day_year_mon
 // cs:NepaliDateArithmeticEdgeCaseTests.TryParse_AutoAdjust_TwoDigitYear_ExpandsToCurrentMillennium D-06 "15/05/80": 2-digit years are never expanded
 
 #[test]
-#[ignore = "L4-04: needs parse_lenient"]
 fn cs_nepali_date_arithmetic_edge_case_tests__try_parse_auto_adjust_invalid_date_after_adjustment_returns_false()
  {
-    // L4-04: assert!(NepaliDate::parse_lenient("99/99/99").is_err());
-    panic!("parse_lenient lands in L4-04: \"99/99/99\" should be rejected");
+    // No group has 4 digits, so the order can't be told (PARSING §2 step 4).
+    assert_eq!(
+        NepaliDate::parse_lenient("99/99/99"),
+        Err(Error::Parse(ParseErrorKind::Ambiguous))
+    );
 }
 
 #[test]
@@ -1896,3 +1888,990 @@ fn cs_optimization_verification_tests__subtraction_cross_year_correct_days() {
 // cs:NepaliDateIsRelativeTests.Tomorrow_OnlyIsTomorrow_IsTrue D-14 no IsYesterday or IsTomorrow
 // cs:NepaliDateIsRelativeTests.TwoDaysAhead_NoneAreTrue D-14 no IsYesterday or IsTomorrow
 // cs:NepaliDateIsRelativeTests.TwoDaysBehind_NoneAreTrue D-14 no IsYesterday or IsTomorrow
+
+// ======================================================================================
+// Phase 3 (L4-06): formatting and parsing.
+// ======================================================================================
+
+/// C# `ToString(format, null)` maps to `format_pattern(format, Lang::En)` (FORMATTING §5).
+fn pattern(date: NepaliDate, format: &str) -> String {
+    date.format_pattern(format, Lang::En).to_string()
+}
+
+/// C# `ToString(DateFormats, Separators, leadingZeros)` maps to `short(.., Lang::En)`.
+fn short_en(date: NepaliDate, order: DateOrder, sep: Separator, pad: bool) -> String {
+    date.short(order, sep, pad, Lang::En).to_string()
+}
+
+/// C# `ToUnicodeString(format, separator)` maps to `short(.., true, Lang::Ne)` (D-15).
+fn unicode(date: NepaliDate, sep: Separator) -> String {
+    date.short(DateOrder::Ymd, sep, true, Lang::Ne).to_string()
+}
+
+/// C# `SmartDateParser.Parse(s)` (and `s.ToNepaliDate()`) maps to `parse_lenient` (D-06).
+fn smart(input: &str) -> Result<(u16, u8, u8), Error> {
+    NepaliDate::parse_lenient(input).map(ymd)
+}
+
+// ---------- Abilities/NepaliDateFormattableTests.cs ----------
+
+fn formattable_date() -> NepaliDate {
+    bs(2081, 4, 15)
+}
+
+#[test]
+fn cs_nepali_date_formattable_tests__to_string_null_format_returns_default() {
+    // A `&str` can't be null; the empty pattern is the default (FORMATTING §5).
+    assert_eq!(pattern(formattable_date(), ""), "2081/04/15");
+}
+
+// The ids `ToString_G_SameAsDefault` and `ToString_g_SameAsDefault` differ only in case, so the
+// L2-08 name rule gives both rows this one name; the test checks both patterns.
+#[test]
+fn cs_nepali_date_formattable_tests__to_string_g_same_as_default() {
+    let d = formattable_date();
+    assert_eq!(pattern(d, "G"), d.to_string());
+    assert_eq!(pattern(d, "g"), d.to_string());
+}
+
+#[test]
+fn cs_nepali_date_formattable_tests__to_string_d_same_as_default() {
+    assert_eq!(pattern(formattable_date(), "d"), "2081/04/15");
+}
+
+#[test]
+fn cs_nepali_date_formattable_tests__to_string_d_returns_long_date_string() {
+    let result = pattern(formattable_date(), "D");
+    assert!(result.contains("2081"), "{result}");
+    assert!(result.contains("Shrawan"), "{result}");
+}
+
+#[test]
+fn cs_nepali_date_formattable_tests__to_string_s_returns_sortable_iso_format() {
+    assert_eq!(pattern(formattable_date(), "s"), "2081-04-15");
+}
+
+#[test]
+fn cs_nepali_date_formattable_tests__custom_format_yyyy_mm_dd_with_dash() {
+    assert_eq!(pattern(formattable_date(), "yyyy-MM-dd"), "2081-04-15");
+}
+
+#[test]
+fn cs_nepali_date_formattable_tests__custom_format_dd_mm_yyyy_with_dot() {
+    assert_eq!(pattern(formattable_date(), "dd.MM.yyyy"), "15.04.2081");
+}
+
+#[test]
+fn cs_nepali_date_formattable_tests__custom_format_mm_slash_dd_slash_yyyy() {
+    assert_eq!(pattern(formattable_date(), "MM/dd/yyyy"), "04/15/2081");
+}
+
+#[test]
+fn cs_nepali_date_formattable_tests__custom_format_mm_mxxx_returns_three_char_month_abbreviation() {
+    let result = pattern(formattable_date(), "MMM yyyy");
+    assert!(result.starts_with("Shr"), "{result}");
+    assert!(result.ends_with("2081"), "{result}");
+}
+
+#[test]
+fn cs_nepali_date_formattable_tests__custom_format_mmmm_returns_full_month_name() {
+    let result = pattern(formattable_date(), "MMMM dd, yyyy");
+    assert!(result.starts_with("Shrawan"), "{result}");
+}
+
+#[test]
+fn cs_nepali_date_formattable_tests__custom_format_yy_returns_two_digit_year() {
+    let result = pattern(formattable_date(), "yy/MM/dd");
+    assert!(result.starts_with("81/"), "{result}");
+}
+
+#[test]
+fn cs_nepali_date_formattable_tests__custom_format_m_without_leading_zero_returns_unpadded() {
+    assert_eq!(pattern(formattable_date(), "M/d/yyyy"), "4/15/2081");
+}
+
+#[test]
+fn cs_nepali_date_formattable_tests__custom_format_single_digit_month_without_leading_zero() {
+    assert_eq!(pattern(bs(2081, 1, 5), "M/d/yyyy"), "1/5/2081");
+}
+
+#[test]
+fn cs_nepali_date_formattable_tests__custom_format_literal_in_single_quotes() {
+    assert_eq!(pattern(formattable_date(), "yyyy'BS'"), "2081BS");
+}
+
+#[test]
+fn cs_nepali_date_formattable_tests__custom_format_backslash_escaped_tokens_produce_literals() {
+    assert_eq!(pattern(formattable_date(), r"yyyy\M\M-\d\d"), "2081MM-dd");
+}
+
+#[test]
+fn cs_nepali_date_formattable_tests__custom_format_backslash_before_literal_char_is_passed_through()
+{
+    assert_eq!(pattern(formattable_date(), r"yyyy\-MM\-dd"), "2081-04-15");
+}
+
+#[test]
+fn cs_nepali_date_formattable_tests__string_interpolation_with_format_specifier_uses_i_formattable()
+{
+    // `format!("{d:s}")` has no custom specifiers in Rust; the formatter value goes in `{}`.
+    let d = formattable_date();
+    assert_eq!(format!("{}", d.format_pattern("s", Lang::En)), "2081-04-15");
+}
+
+#[test]
+fn cs_nepali_date_formattable_tests__string_format_method_with_specifier() {
+    let d = formattable_date();
+    let result = format!("{}", d.format_pattern("yyyy-MM-dd", Lang::En));
+    assert_eq!(result, "2081-04-15");
+}
+
+#[test]
+fn cs_nepali_date_formattable_tests__sortable_format_lexicographic_order_equals_chronological_order()
+ {
+    let s1 = pattern(bs(2080, 12, 30), "s");
+    let s2 = pattern(bs(2081, 1, 1), "s");
+    assert!(s1 < s2, "{s1} {s2}");
+}
+
+// ---------- Abilities/NepaliDateParsableTests.cs ----------
+
+// C# `IParsable<T>` and `ISpanParsable<T>` map to `FromStr`; a `ReadOnlySpan<char>` is a `&str`
+// slice.
+
+fn parse_with_generic<T: FromStr>(s: &str) -> Result<T, T::Err> {
+    s.parse()
+}
+
+#[test]
+fn cs_nepali_date_parsable_tests__parse_via_generic_constraint_returns_correct_date() {
+    assert_eq!(
+        parse_with_generic::<NepaliDate>("2081-04-15"),
+        Ok(bs(2081, 4, 15))
+    );
+}
+
+#[test]
+fn cs_nepali_date_parsable_tests__try_parse_via_generic_constraint_valid_date_returns_true() {
+    assert_eq!(
+        parse_with_generic::<NepaliDate>("2081/04/15"),
+        Ok(bs(2081, 4, 15))
+    );
+}
+
+#[test]
+fn cs_nepali_date_parsable_tests__try_parse_via_generic_constraint_invalid_date_returns_false() {
+    assert!(parse_with_generic::<NepaliDate>("garbage").is_err());
+}
+
+#[test]
+fn cs_nepali_date_parsable_tests__span_parse_via_generic_constraint_returns_correct_date() {
+    let text = "[2081-04-15]";
+    let span = &text[1..text.len() - 1];
+    assert_eq!(parse_with_generic::<NepaliDate>(span), Ok(bs(2081, 4, 15)));
+}
+
+#[test]
+fn cs_nepali_date_parsable_tests__span_try_parse_via_generic_constraint_valid_date_returns_true() {
+    let text = "date: 2081/04/15";
+    assert_eq!(
+        parse_with_generic::<NepaliDate>(&text[6..]),
+        Ok(bs(2081, 4, 15))
+    );
+}
+
+// ---------- Core/NepaliDateMonthNameTests.cs ----------
+
+// C# `MonthName` (enum `NepaliMonths`) maps to `month()` (enum `Month`).
+
+fn month_name_row(month: u8, expected: Month) {
+    assert_eq!(bs(2080, month, 1).month(), expected);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__month_name_all_months_return_correct_enum_1() {
+    month_name_row(1, Month::Baishakh);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__month_name_all_months_return_correct_enum_2() {
+    month_name_row(2, Month::Jestha);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__month_name_all_months_return_correct_enum_3() {
+    month_name_row(3, Month::Ashad);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__month_name_all_months_return_correct_enum_4() {
+    month_name_row(4, Month::Shrawan);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__month_name_all_months_return_correct_enum_5() {
+    month_name_row(5, Month::Bhadra);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__month_name_all_months_return_correct_enum_6() {
+    month_name_row(6, Month::Ashoj);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__month_name_all_months_return_correct_enum_7() {
+    month_name_row(7, Month::Kartik);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__month_name_all_months_return_correct_enum_8() {
+    month_name_row(8, Month::Mangsir);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__month_name_all_months_return_correct_enum_9() {
+    month_name_row(9, Month::Poush);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__month_name_all_months_return_correct_enum_10() {
+    month_name_row(10, Month::Magh);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__month_name_all_months_return_correct_enum_11() {
+    month_name_row(11, Month::Falgun);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__month_name_all_months_return_correct_enum_12() {
+    month_name_row(12, Month::Chaitra);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__month_name_same_month_different_days_all_return_same_enum() {
+    let day1 = bs(2080, 4, 1);
+    for d in [day1, bs(2080, 4, 15), day1.last_day_of_month()] {
+        assert_eq!(d.month(), Month::Shrawan);
+    }
+}
+
+fn poush_row(year: u16) {
+    assert_eq!(bs(year, 9, 1).month(), Month::Poush);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__month_name_same_month_different_years_all_return_same_enum_1() {
+    poush_row(2070);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__month_name_same_month_different_years_all_return_same_enum_2() {
+    poush_row(2080);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__month_name_same_month_different_years_all_return_same_enum_3() {
+    poush_row(2090);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__month_name_same_month_different_years_all_return_same_enum_4() {
+    poush_row(2100);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__month_name_adding_one_month_advances_enum() {
+    let falgun = bs(2080, 11, 1);
+    let chaitra = falgun.checked_add_months(1, MonthOverflow::Clamp).unwrap();
+    assert_eq!(falgun.month(), Month::Falgun);
+    assert_eq!(chaitra.month(), Month::Chaitra);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__month_name_year_boundary_wraps_from_chaitra_to_basikhakh() {
+    assert_eq!(bs(2080, 12, 1).month(), Month::Chaitra);
+    assert_eq!(bs(2081, 1, 1).month(), Month::Baishakh);
+}
+
+fn month_number_row(month: Month, expected: u8) {
+    assert_eq!(month.number(), expected);
+    assert_eq!(month as u8, expected);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__nepali_months_enum_integer_value_matches_month_number_1() {
+    month_number_row(Month::Baishakh, 1);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__nepali_months_enum_integer_value_matches_month_number_2() {
+    month_number_row(Month::Jestha, 2);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__nepali_months_enum_integer_value_matches_month_number_3() {
+    month_number_row(Month::Ashad, 3);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__nepali_months_enum_integer_value_matches_month_number_4() {
+    month_number_row(Month::Shrawan, 4);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__nepali_months_enum_integer_value_matches_month_number_5() {
+    month_number_row(Month::Bhadra, 5);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__nepali_months_enum_integer_value_matches_month_number_6() {
+    month_number_row(Month::Ashoj, 6);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__nepali_months_enum_integer_value_matches_month_number_7() {
+    month_number_row(Month::Kartik, 7);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__nepali_months_enum_integer_value_matches_month_number_8() {
+    month_number_row(Month::Mangsir, 8);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__nepali_months_enum_integer_value_matches_month_number_9() {
+    month_number_row(Month::Poush, 9);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__nepali_months_enum_integer_value_matches_month_number_10() {
+    month_number_row(Month::Magh, 10);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__nepali_months_enum_integer_value_matches_month_number_11() {
+    month_number_row(Month::Falgun, 11);
+}
+
+#[test]
+fn cs_nepali_date_month_name_tests__nepali_months_enum_integer_value_matches_month_number_12() {
+    month_number_row(Month::Chaitra, 12);
+}
+
+// ---------- Core/OptimizationVerificationTests.cs (ToString, Unicode, SmartDateParser) ----------
+
+fn to_string_row(year: u16, month: u8, day: u8, expected: &str) {
+    assert_eq!(bs(year, month, day).to_string(), expected);
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_produces_exact_format_1() {
+    to_string_row(2080, 5, 15, "2080/05/15");
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_produces_exact_format_2() {
+    to_string_row(2080, 1, 1, "2080/01/01");
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_produces_exact_format_3() {
+    to_string_row(2080, 12, 30, "2080/12/30");
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_produces_exact_format_4() {
+    to_string_row(1901, 1, 1, "1901/01/01");
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_produces_exact_format_5() {
+    to_string_row(2199, 12, 30, "2199/12/30");
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_produces_exact_format_6() {
+    to_string_row(2000, 6, 9, "2000/06/09");
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_produces_exact_format_7() {
+    to_string_row(2100, 10, 29, "2100/10/29");
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_output_is_exactly10_characters() {
+    let s = bs(2080, 5, 15).to_string();
+    assert_eq!(s.len(), 10);
+    assert_eq!((&s[4..5], &s[7..8]), ("/", "/"));
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_all_months_zero_padded() {
+    for month in 1..=12 {
+        let s = bs(2080, month, 1).to_string();
+        assert_eq!(&s[5..7], format!("{month:02}"));
+    }
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_all_days_zero_padded() {
+    let end = bs(2080, 1, 1).month_length();
+    for day in 1..=end {
+        let s = bs(2080, 1, day).to_string();
+        assert_eq!(&s[8..10], format!("{day:02}"));
+    }
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_roundtrips_with_constructor() {
+    // `new NepaliDate(string)` maps to `str::parse`.
+    for year in (1901..=2199).step_by(50) {
+        for month in 1..=12 {
+            let date = bs(year, month, 1);
+            assert_eq!(date.to_string().parse::<NepaliDate>(), Ok(date));
+        }
+    }
+}
+
+fn short_row(order: DateOrder, sep: Separator, pad: bool, expected: &str) {
+    assert_eq!(short_en(bs(2080, 5, 15), order, sep, pad), expected);
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_with_format_and_separator_produces_correct_output_1()
+ {
+    short_row(DateOrder::Ymd, Separator::Slash, true, "2080/05/15");
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_with_format_and_separator_produces_correct_output_2()
+ {
+    short_row(DateOrder::Ymd, Separator::Dash, true, "2080-05-15");
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_with_format_and_separator_produces_correct_output_3()
+ {
+    short_row(DateOrder::Ymd, Separator::Dot, true, "2080.05.15");
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_with_format_and_separator_produces_correct_output_4()
+ {
+    short_row(DateOrder::Ymd, Separator::Underscore, true, "2080_05_15");
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_with_format_and_separator_produces_correct_output_5()
+ {
+    short_row(DateOrder::Ymd, Separator::Space, true, "2080 05 15");
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_with_format_and_separator_produces_correct_output_6()
+ {
+    short_row(DateOrder::Ymd, Separator::Backslash, true, "2080\\05\\15");
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_with_format_and_separator_produces_correct_output_7()
+ {
+    short_row(DateOrder::Dmy, Separator::Slash, true, "15/05/2080");
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_with_format_and_separator_produces_correct_output_8()
+ {
+    short_row(DateOrder::Dmy, Separator::Dash, true, "15-05-2080");
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_with_format_and_separator_produces_correct_output_9()
+ {
+    short_row(DateOrder::Mdy, Separator::Slash, true, "05/15/2080");
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_with_format_and_separator_produces_correct_output_10()
+ {
+    short_row(DateOrder::Ydm, Separator::Slash, true, "2080/15/05");
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_with_format_and_separator_produces_correct_output_11()
+ {
+    short_row(DateOrder::Myd, Separator::Slash, true, "05/2080/15");
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_with_format_and_separator_produces_correct_output_12()
+ {
+    short_row(DateOrder::Dym, Separator::Slash, true, "15/2080/05");
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_without_leading_zeros_produces_correct_output_1() {
+    short_row(DateOrder::Ymd, Separator::Slash, false, "2080/5/15");
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_without_leading_zeros_produces_correct_output_2() {
+    short_row(DateOrder::Dmy, Separator::Dash, false, "15-5-2080");
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_without_leading_zeros_produces_correct_output_3() {
+    short_row(DateOrder::Mdy, Separator::Dot, false, "5.15.2080");
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_unicode_string_default_format_converts_all_digits() {
+    let expected = "\u{0968}\u{0966}\u{096E}\u{0966}/\u{0966}\u{096B}/\u{0967}\u{096B}";
+    assert_eq!(unicode(bs(2080, 5, 15), Separator::Slash), expected);
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_unicode_string_each_digit_converts_correctly() {
+    let text = unicode(bs(1902, 3, 4), Separator::Slash);
+    for c in [
+        '\u{0967}', '\u{096F}', '\u{0966}', '\u{0968}', '\u{0969}', '\u{096A}',
+    ] {
+        assert!(text.contains(c), "{text} lacks {c}");
+    }
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_unicode_string_separators_preserved() {
+    let text = unicode(bs(2080, 5, 15), Separator::Dash);
+    assert!(text.contains('-'));
+    assert!(!text.contains('/'));
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_unicode_string_same_length_as_to_string() {
+    // C# counts UTF-16 units; one Devanagari digit is one `char` in both languages.
+    for year in (1901..=2199).step_by(100) {
+        let d = bs(year, 6, 15);
+        let text = unicode(d, Separator::Slash);
+        assert_eq!(d.to_string().chars().count(), text.chars().count());
+    }
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_nepali_digits_parse_correctly_1() {
+    let input = "\u{0968}\u{0966}\u{096E}\u{0966}/\u{0966}\u{096B}/\u{0967}\u{096B}";
+    assert_eq!(smart(input), Ok((2080, 5, 15)));
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_nepali_digits_parse_correctly_2() {
+    let input = "\u{0968}\u{0966}\u{096E}\u{0966}-\u{0966}\u{096B}-\u{0967}\u{096B}";
+    assert_eq!(smart(input), Ok((2080, 5, 15)));
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_pure_english_digits_no_conversion_needed()
+{
+    assert_eq!(smart("2080/05/15"), Ok((2080, 5, 15)));
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_mixed_nepali_english_digits_parse_correctly()
+ {
+    assert_eq!(
+        smart("2\u{0966}\u{096E}0/0\u{096B}/\u{0967}5"),
+        Ok((2080, 5, 15))
+    );
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_with_indicators_removes_and_parses_correctly_1()
+ {
+    assert_eq!(smart("2080/05/15 B.S."), Ok((2080, 5, 15)));
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_with_indicators_removes_and_parses_correctly_2()
+ {
+    assert_eq!(smart("2080/05/15 BS"), Ok((2080, 5, 15)));
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_with_indicators_removes_and_parses_correctly_3()
+ {
+    assert_eq!(smart("2080/05/15 V.S."), Ok((2080, 5, 15)));
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_with_indicators_removes_and_parses_correctly_4()
+ {
+    assert_eq!(smart("2080/05/15 VS"), Ok((2080, 5, 15)));
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_with_indicators_removes_and_parses_correctly_5()
+ {
+    assert_eq!(smart("2080/05/15 bs"), Ok((2080, 5, 15)));
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_with_indicators_removes_and_parses_correctly_6()
+ {
+    assert_eq!(smart("2080/05/15 v.s."), Ok((2080, 5, 15)));
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_with_nepali_keywords_removes_and_parses() {
+    assert_eq!(
+        smart("15 Shrawan 2080 \u{0917}\u{0924}\u{0947}"),
+        Ok((2080, 4, 15))
+    );
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_with_extra_spaces_parses_correctly() {
+    assert_eq!(smart("  2080 / 05 / 15  "), Ok((2080, 5, 15)));
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_all_month_names_parse_correctly_1() {
+    assert_eq!(smart("15 Baisakh 2080"), Ok((2080, 1, 15)));
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_all_month_names_parse_correctly_2() {
+    assert_eq!(smart("15 Jestha 2080"), Ok((2080, 2, 15)));
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_all_month_names_parse_correctly_3() {
+    assert_eq!(smart("15 Asar 2080"), Ok((2080, 3, 15)));
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_all_month_names_parse_correctly_4() {
+    assert_eq!(smart("15 Shrawan 2080"), Ok((2080, 4, 15)));
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_all_month_names_parse_correctly_5() {
+    assert_eq!(smart("15 Bhadra 2080"), Ok((2080, 5, 15)));
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_all_month_names_parse_correctly_6() {
+    assert_eq!(smart("15 Ashwin 2080"), Ok((2080, 6, 15)));
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_all_month_names_parse_correctly_7() {
+    assert_eq!(smart("15 Kartik 2080"), Ok((2080, 7, 15)));
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_all_month_names_parse_correctly_8() {
+    assert_eq!(smart("15 Mangsir 2080"), Ok((2080, 8, 15)));
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_all_month_names_parse_correctly_9() {
+    assert_eq!(smart("15 Poush 2080"), Ok((2080, 9, 15)));
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_all_month_names_parse_correctly_10() {
+    assert_eq!(smart("15 Magh 2080"), Ok((2080, 10, 15)));
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_all_month_names_parse_correctly_11() {
+    assert_eq!(smart("15 Falgun 2080"), Ok((2080, 11, 15)));
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_all_month_names_parse_correctly_12() {
+    assert_eq!(smart("15 Chaitra 2080"), Ok((2080, 12, 15)));
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_month_name_different_positions_parses_correctly_1()
+ {
+    assert_eq!(smart("Baisakh 15, 2080"), Ok((2080, 1, 15)));
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_month_name_different_positions_parses_correctly_2()
+ {
+    assert_eq!(smart("2080 Baisakh 15"), Ok((2080, 1, 15)));
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_nepali_unicode_month_names_parse_correctly_1()
+ {
+    assert_eq!(
+        smart("15 \u{0935}\u{0948}\u{0936}\u{093E}\u{0916} 2080"),
+        Ok((2080, 1, 15))
+    );
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_nepali_unicode_month_names_parse_correctly_2()
+ {
+    assert_eq!(
+        smart("15 \u{091C}\u{0947}\u{0937}\u{094D}\u{0920} 2080"),
+        Ok((2080, 2, 15))
+    );
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_nepali_unicode_month_names_parse_correctly_3()
+ {
+    assert_eq!(
+        smart("15 \u{0905}\u{0938}\u{093E}\u{0930} 2080"),
+        Ok((2080, 3, 15))
+    );
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_nepali_unicode_month_names_parse_correctly_4()
+ {
+    let input = "15 \u{0936}\u{094D}\u{0930}\u{093E}\u{0935}\u{0923} 2080";
+    assert_eq!(smart(input), Ok((2080, 4, 15)));
+}
+
+// cs:OptimizationVerificationTests.SmartDateParser_TwoDigitYear_AdjustedTo2000s D-06 "80/05/15": 2-digit years are never expanded; lenient parse gives Ambiguous
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_invalid_input_throws_format_exception() {
+    assert_eq!(
+        NepaliDate::parse_lenient("not a date"),
+        Err(Error::Parse(ParseErrorKind::Unrecognized))
+    );
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_null_input_throws_exception() {
+    // A `&str` can't be null; the nearest input is the empty string.
+    assert!(NepaliDate::parse_lenient("").is_err());
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_empty_input_throws_exception() {
+    assert_eq!(
+        NepaliDate::parse_lenient(""),
+        Err(Error::Parse(ParseErrorKind::Unrecognized))
+    );
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_whitespace_input_throws_exception() {
+    assert_eq!(
+        NepaliDate::parse_lenient("   "),
+        Err(Error::Parse(ParseErrorKind::Unrecognized))
+    );
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_try_parse_valid_input_returns_true() {
+    assert_eq!(smart("2080/05/15").map(|(y, _, _)| y), Ok(2080));
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_try_parse_invalid_input_returns_false() {
+    assert!(NepaliDate::parse_lenient("garbage").is_err());
+}
+
+#[test]
+fn cs_optimization_verification_tests__smart_date_parser_try_parse_null_input_returns_false() {
+    // A `&str` can't be null; the nearest input is the empty string.
+    assert!(NepaliDate::parse_lenient("").is_err());
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_string_every_month_first_day_roundtrips_via_constructor()
+{
+    for year in 1901..=2199 {
+        for month in 1..=12 {
+            let original = bs(year, month, 1);
+            assert_eq!(original.to_string().parse::<NepaliDate>(), Ok(original));
+        }
+    }
+}
+
+#[test]
+fn cs_optimization_verification_tests__unicode_conversion_all_digits_roundtrip_correctly() {
+    for year in 2070..=2090 {
+        for month in 1..=12 {
+            let original = bs(year, month, 15);
+            let text = unicode(original, Separator::Slash);
+            assert_eq!(NepaliDate::parse_lenient(&text), Ok(original));
+        }
+    }
+}
+
+// C# `ToLongDateString(displayDayName, displayYear)` maps to `long(LongDate { .. }, Lang::En)`.
+
+#[test]
+fn cs_optimization_verification_tests__to_long_date_string_default_contains_month_name_and_day() {
+    let text = bs(2080, 5, 15)
+        .long(LongDate::default(), Lang::En)
+        .to_string();
+    for part in ["15", "2080", ","] {
+        assert!(text.contains(part), "{text} lacks {part}");
+    }
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_long_date_string_with_day_name_contains_day_of_week() {
+    let date = bs(2080, 5, 15);
+    let opts = LongDate {
+        weekday: true,
+        ..LongDate::default()
+    };
+    let text = date.long(opts, Lang::En).to_string();
+    assert!(text.contains(date.weekday().name(Lang::En)), "{text}");
+}
+
+#[test]
+fn cs_optimization_verification_tests__to_long_date_string_without_year_does_not_contain_year() {
+    let opts = LongDate {
+        year: false,
+        ..LongDate::default()
+    };
+    let text = bs(2080, 5, 15).long(opts, Lang::En).to_string();
+    assert!(!text.contains("2080"), "{text}");
+}
+
+// ---------- Core/SmartDateParserTests.cs ----------
+
+#[test]
+fn cs_smart_date_parser_tests__parse_standard_format_returns_correct_date() {
+    for s in ["2080/04/15", "2080-04-15", "2080.04.15"] {
+        assert_eq!(smart(s), Ok((2080, 4, 15)), "{s}");
+    }
+}
+
+#[test]
+fn cs_smart_date_parser_tests__parse_inverted_format_returns_correct_date() {
+    for s in ["15/04/2080", "15-04-2080", "15.04.2080"] {
+        assert_eq!(smart(s), Ok((2080, 4, 15)), "{s}");
+    }
+}
+
+// cs:SmartDateParserTests.Parse_MonthDayYearFormat_ReturnsCorrectDate D-06 "04/15/2080" as M D Y needs C#'s order guessing; lenient parse reads D M Y and rejects month 15
+
+#[test]
+fn cs_smart_date_parser_tests__parse_with_month_names_returns_correct_date() {
+    for s in [
+        "15 Shrawan 2080",
+        "15 Sawan 2080",
+        "15 Saun 2080",
+        "Shrawan 15, 2080",
+        "Shrawan 15 2080",
+    ] {
+        assert_eq!(smart(s), Ok((2080, 4, 15)), "{s}");
+    }
+}
+
+#[test]
+fn cs_smart_date_parser_tests__parse_with_nepali_unicode_returns_correct_date() {
+    for s in [
+        "२०८०/०४/१५",
+        "१५/०४/२०८०",
+        "१५ श्रावण २०८०",
+        "श्रावण १५, २०८०",
+    ] {
+        assert_eq!(smart(s), Ok((2080, 4, 15)), "{s}");
+    }
+}
+
+#[test]
+fn cs_smart_date_parser_tests__parse_mixed_formats_returns_correct_date() {
+    for s in ["15 साउन 2080", "साउन 15, २०८०", "15 Shrawan २०८०"] {
+        assert_eq!(smart(s), Ok((2080, 4, 15)), "{s}");
+    }
+}
+
+#[test]
+fn cs_smart_date_parser_tests__parse_with_suffixes_returns_correct_date() {
+    for s in [
+        "15 Shrawan 2080 B.S.",
+        "15 साउन 2080 BS",
+        "15 Shrawan 2080 V.S.",
+        "15 साउन, 2080 मिति",
+        "15 साउन, 2080 गते",
+    ] {
+        assert_eq!(smart(s), Ok((2080, 4, 15)), "{s}");
+    }
+}
+
+// cs:SmartDateParserTests.Parse_WithTypos_ReturnsCorrectDate D-06 "Shraawan" needs C#'s fuzzy month matching; the month list is closed (PARSING §3), though "Srawan" is in it
+// cs:SmartDateParserTests.Parse_ShorterYearFormats_ReturnsCorrectDate D-06 "15/04/80" and "15/04/080": 2- and 3-digit years are never expanded
+
+#[test]
+fn cs_smart_date_parser_tests__parse_invalid_format_throws_format_exception() {
+    assert!(NepaliDate::parse_lenient("not a date").is_err());
+    assert_eq!(
+        NepaliDate::parse_lenient("15/13/2080"),
+        Err(Error::InvalidMonth(13))
+    );
+    assert!(matches!(
+        NepaliDate::parse_lenient("32/03/2080"),
+        Err(Error::InvalidDay { day: 32, .. })
+    ));
+}
+
+#[test]
+fn cs_smart_date_parser_tests__try_parse_valid_format_returns_true() {
+    assert_eq!(smart("15 Shrawan 2080"), Ok((2080, 4, 15)));
+}
+
+#[test]
+fn cs_smart_date_parser_tests__try_parse_invalid_format_returns_false() {
+    assert!(NepaliDate::parse_lenient("not a date").is_err());
+}
+
+#[test]
+fn cs_smart_date_parser_tests__extension_method_to_nepali_date_parses_correctly() {
+    // `s.ToNepaliDate()` calls `SmartDateParser.Parse`, so it maps to `parse_lenient`.
+    for s in ["2080/04/15", "२०८०/०४/१५", "15 Shrawan 2080"] {
+        assert_eq!(smart(s), Ok((2080, 4, 15)), "{s}");
+    }
+}
+
+#[test]
+fn cs_smart_date_parser_tests__extension_method_try_to_nepali_date_parses_correctly() {
+    assert_eq!(smart("15 Shrawan 2080"), Ok((2080, 4, 15)));
+}
+
+// ---------- Extensions/StringExtensionsTests.cs ----------
+
+// `s.ToNepaliDate()` and `s.TryToNepaliDate(out _)` call `SmartDateParser`, so they map to
+// `parse_lenient`.
+
+#[test]
+fn cs_string_extensions_tests__to_nepali_date_valid_date_string_returns_nepali_date() {
+    assert_eq!(smart("2080/05/15"), Ok((2080, 5, 15)));
+}
+
+#[test]
+fn cs_string_extensions_tests__to_nepali_date_nepali_digits_returns_nepali_date() {
+    assert_eq!(smart("२०८०/०५/१५"), Ok((2080, 5, 15)));
+}
+
+#[test]
+fn cs_string_extensions_tests__to_nepali_date_invalid_date_string_throws_format_exception() {
+    assert!(NepaliDate::parse_lenient("not a date").is_err());
+}
+
+#[test]
+fn cs_string_extensions_tests__try_to_nepali_date_valid_date_string_returns_true() {
+    assert_eq!(smart("2080/05/15"), Ok((2080, 5, 15)));
+}
+
+#[test]
+fn cs_string_extensions_tests__try_to_nepali_date_invalid_date_string_returns_false() {
+    assert!(NepaliDate::parse_lenient("not a date").is_err());
+}
