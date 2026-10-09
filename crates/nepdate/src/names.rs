@@ -1,9 +1,8 @@
 //! Language, month and weekday names (FORMATTING §1). Names are exactly the C# strings; the short
 //! forms are new (D-04).
 
-use core::fmt;
-
 use crate::Error;
+use crate::format::Digits;
 
 /// Output language for names and digits.
 ///
@@ -35,79 +34,7 @@ impl Lang {
     /// ```
     #[must_use]
     pub const fn digits(self, n: u32, min_width: u8) -> Digits {
-        Digits {
-            n,
-            min_width,
-            lang: self,
-        }
-    }
-}
-
-/// A number written in a [`Lang`], from [`Lang::digits`].
-///
-/// ```
-/// let mut out = String::new();
-/// nepdate::Lang::Ne.digits(5, 2).write_to(&mut out)?;
-/// assert_eq!(out, "०५");
-/// # Ok::<(), core::fmt::Error>(())
-/// ```
-#[derive(Clone, Copy, Debug)]
-pub struct Digits {
-    n: u32,
-    min_width: u8,
-    lang: Lang,
-}
-
-const EN_DIGITS: [&str; 10] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
-// 3 bytes each in UTF-8. Written as whole `&str` pieces, so nothing is encoded at run time.
-static NE_DIGITS: [&str; 10] = ["०", "१", "२", "३", "४", "५", "६", "७", "८", "९"];
-
-impl Digits {
-    /// Writes the digits to `out`, one `&'static str` piece per digit.
-    ///
-    /// # Errors
-    ///
-    /// Whatever `out.write_str` returns.
-    ///
-    /// ```
-    /// let mut out = String::new();
-    /// nepdate::Lang::En.digits(42, 4).write_to(&mut out)?;
-    /// assert_eq!(out, "0042");
-    /// # Ok::<(), core::fmt::Error>(())
-    /// ```
-    // SAFETY-OF-INDEX: `count` stays at most 10 (u32::MAX has 10 digits), and every digit is
-    // `% 10`, so both index expressions are in bounds.
-    #[allow(clippy::indexing_slicing, clippy::cast_possible_truncation)]
-    pub fn write_to<W: fmt::Write + ?Sized>(&self, out: &mut W) -> fmt::Result {
-        let table = match self.lang {
-            Lang::En => &EN_DIGITS,
-            Lang::Ne => &NE_DIGITS,
-        };
-        // Least significant digit first.
-        let mut digits = [0u8; 10];
-        let mut count = 0;
-        let mut n = self.n;
-        loop {
-            digits[count] = (n % 10) as u8;
-            count += 1;
-            n /= 10;
-            if n == 0 {
-                break;
-            }
-        }
-        for _ in count..usize::from(self.min_width) {
-            out.write_str(table[0])?;
-        }
-        for &d in digits[..count].iter().rev() {
-            out.write_str(table[usize::from(d)])?;
-        }
-        Ok(())
-    }
-}
-
-impl fmt::Display for Digits {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.write_to(f)
+        Digits::new(n, min_width, self)
     }
 }
 
@@ -435,19 +362,6 @@ mod tests {
         }
         assert_eq!(Month::try_from(0), Err(Error::InvalidMonth(0)));
         assert_eq!(Month::try_from(13), Err(Error::InvalidMonth(13)));
-    }
-
-    #[test]
-    fn digits() {
-        extern crate std;
-        use std::string::ToString;
-        assert_eq!(Lang::En.digits(0, 0).to_string(), "0");
-        assert_eq!(Lang::En.digits(0, 3).to_string(), "000");
-        assert_eq!(Lang::En.digits(u32::MAX, 0).to_string(), "4294967295");
-        assert_eq!(Lang::En.digits(123, 2).to_string(), "123");
-        assert_eq!(Lang::Ne.digits(1_234_567_890, 0).to_string(), "१२३४५६७८९०");
-        assert_eq!(Lang::Ne.digits(83, 2).to_string(), "८३");
-        assert_eq!(Lang::Ne.digits(0, 2).to_string(), "००");
     }
 
     #[test]

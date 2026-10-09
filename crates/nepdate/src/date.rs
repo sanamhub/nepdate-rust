@@ -7,7 +7,7 @@ use crate::calendar::{
     month_length,
 };
 use crate::civil::greg_month_length;
-use crate::{Error, GregorianDate, Month, Weekday};
+use crate::{DateOrder, Error, GregorianDate, Lang, Month, Separator, Weekday};
 
 /// `round(2^22 / (109_212 / 3_588))`: multiplying a serial by this and shifting right by 22
 /// estimates its month index to within one (ADR-0004 §4, tested below).
@@ -377,13 +377,8 @@ impl From<NepaliDate> for GregorianDate {
 impl fmt::Display for NepaliDate {
     /// `YYYY/MM/DD`, zero padded, ASCII digits (FORMATTING §2).
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{:04}/{:02}/{:02}",
-            self.year,
-            self.month.number(),
-            self.day
-        )
+        self.short(DateOrder::Ymd, Separator::Slash, true, Lang::En)
+            .write_to(f)
     }
 }
 
