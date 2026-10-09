@@ -78,13 +78,13 @@ Standard single-letter patterns (whole pattern equals exactly one of these):
 |---|---|
 | `""`, `G`, `g`, `d` | default display (§2), digits per `lang` |
 | `D` | long format, default options (§4) |
-| `s` | `YYYY-MM-DD` |
+| `s` | `YYYY-MM-DD`, digits per `lang` |
 
 Custom pattern: scanned left to right, one pass.
 
 | Token | Meaning |
 |---|---|
-| `\x` | literal character `x` |
+| `\x` | literal character `x`; a `\` at the very end of the pattern writes nothing |
 | `'...'` | literal text; an unterminated quote runs to the end of the pattern |
 | run of `y`, length ≥ 4 | 4-digit year |
 | run of `y`, length 1–3 | `year % 100`, 2 digits |
