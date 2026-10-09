@@ -188,7 +188,7 @@ impl NepaliDate {
 
 impl NepaliDate {
     /// Index of this date's month in the calendar tables: `(y - 1901) * 12 + m - 1`.
-    const fn month_index(self) -> usize {
+    pub(crate) const fn month_index(self) -> usize {
         (self.year - MIN_YEAR) as usize * 12 + self.month.number() as usize - 1
     }
 
