@@ -1,10 +1,11 @@
 //! Every public type is `Send + Sync`, and conversion gives the same answers on many threads
-//! (L2-09, extended in L3-06; ADR-0014).
+//! (L2-09, extended in L3-06 and L4-07; ADR-0014).
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use nepdate::{
-    DateDiff, Days, Digits, Error, FiscalLabel, FiscalYear, GregorianDate, Lang, Month,
-    MonthOverflow, NepaliDate, NepaliDateRange, ParseErrorKind, Quarter, Weekday,
+    DateDiff, DateOrder, Days, Digits, Error, FiscalLabel, FiscalYear, GregorianDate, Lang,
+    LongDate, LongFormat, Month, MonthOverflow, NepaliDate, NepaliDateRange, ParseErrorKind,
+    PatternFormat, Quarter, Separator, ShortFormat, Weekday,
 };
 
 fn assert_send_sync<T: Send + Sync>() {}
@@ -26,6 +27,12 @@ fn public_types_are_send_and_sync() {
     assert_send_sync::<NepaliDateRange>();
     assert_send_sync::<Days>();
     assert_send_sync::<Digits>();
+    assert_send_sync::<DateOrder>();
+    assert_send_sync::<Separator>();
+    assert_send_sync::<LongDate>();
+    assert_send_sync::<ShortFormat>();
+    assert_send_sync::<LongFormat>();
+    assert_send_sync::<PatternFormat<'static>>();
 }
 
 fn all_days() -> Vec<(NepaliDate, GregorianDate)> {

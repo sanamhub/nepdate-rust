@@ -1,0 +1,35 @@
+# Fuzz targets for `nepdate` (L4-07). Not a workspace member: cargo-fuzz needs nightly Rust and
+# libFuzzer, so the scheduled workflow builds and runs these (L6-02b), not `cargo xtask ci`.
+[package]
+name = "nepdate-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+nepdate = { path = "../crates/nepdate" }
+
+[[bin]]
+name = "parse_strict"
+path = "fuzz_targets/parse_strict.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_lenient"
+path = "fuzz_targets/parse_lenient.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "format_pattern"
+path = "fuzz_targets/format_pattern.rs"
+test = false
+doc = false
+bench = false

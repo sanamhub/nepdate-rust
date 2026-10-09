@@ -1,5 +1,6 @@
-//! Zero-allocation check for the benchmark operations (L2-09 for B1 and B2, L3-06 for B3, B4 and
-//! the other phase 2 operations; BENCHMARK §2). Runs without the
+//! Zero-allocation check for the benchmark operations (BENCHMARK §2): L2-09 for B1 and B2, L3-06
+//! for B3, B4 and the other phase 2 operations, L4-07 for B5, B6 and the other formatters and
+//! parsers. Runs without the
 //! test harness, on one thread, so nothing else allocates while the counter is read.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 // A global allocator can only be written with `unsafe`; the libraries themselves forbid it.
@@ -9,7 +10,9 @@ use std::alloc::{GlobalAlloc, Layout, System};
 use std::hint::black_box;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use nepdate::{MonthOverflow, NepaliDate, NepaliDateRange};
+use std::fmt;
+
+use nepdate::{Lang, LongDate, MonthOverflow, NepaliDate, NepaliDateRange};
 
 /// Wraps the system allocator and adds up every requested size.
 struct Counting;
@@ -37,6 +40,22 @@ unsafe impl GlobalAlloc for Counting {
 
 #[global_allocator]
 static GLOBAL: Counting = Counting;
+
+/// A reused stack buffer for B5: 128 bytes hold the longest Nepali long date with weekday.
+struct StackBuf {
+    bytes: [u8; 128],
+    len: usize,
+}
+
+impl fmt::Write for StackBuf {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        let end = self.len + s.len();
+        let dest = self.bytes.get_mut(self.len..end).ok_or(fmt::Error)?;
+        dest.copy_from_slice(s.as_bytes());
+        self.len = end;
+        Ok(())
+    }
+}
 
 /// The 64 dates of BENCHMARK §2: serial 36161 (BS 2000-01-01) plus `i * 527`.
 fn benchmark_dates() -> [NepaliDate; 64] {
@@ -112,4 +131,47 @@ fn main() {
     println!(
         "no_alloc: B3, B4, diff, fiscal_year and a NepaliDateRange::year(2081) walk allocated 0 bytes"
     );
+
+    // Built before counting: B6 parses these strings, it doesn't create them.
+    let texts: Vec<String> = dates.iter().map(ToString::to_string).collect();
+    let lenient: Vec<String> = dates
+        .iter()
+        .map(|d| d.long(LongDate::default(), Lang::En).to_string())
+        .collect();
+    let weekday = LongDate {
+        weekday: true,
+        ..LongDate::default()
+    };
+    let mut buf = StackBuf {
+        bytes: [0; 128],
+        len: 0,
+    };
+    let before = ALLOCATED.load(Ordering::Relaxed);
+    for _ in 0..1_000 {
+        for &date in &dates {
+            // B5: long Nepali date with weekday into a reused stack buffer.
+            buf.len = 0;
+            date.long(weekday, Lang::Ne).write_to(&mut buf).unwrap();
+            black_box(&buf.bytes);
+            buf.len = 0;
+            date.format_pattern(black_box("dddd, MMMM d yyyy 'BS'"), Lang::Ne)
+                .write_to(&mut buf)
+                .unwrap();
+            black_box(&buf.bytes);
+        }
+        for (text, long) in texts.iter().zip(&lenient) {
+            // B6: strict parse.
+            let _ = black_box(black_box(text.as_str()).parse::<NepaliDate>());
+            let _ = black_box(NepaliDate::parse_lenient(black_box(long)));
+        }
+    }
+    let after = ALLOCATED.load(Ordering::Relaxed);
+    if after != before {
+        eprintln!(
+            "no_alloc: phase 3 operations allocated {} bytes",
+            after - before
+        );
+        std::process::exit(1);
+    }
+    println!("no_alloc: B5, B6, format_pattern and parse_lenient allocated 0 bytes");
 }

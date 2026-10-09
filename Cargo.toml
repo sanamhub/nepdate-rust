@@ -2,6 +2,7 @@
 resolver = "3"
 members = ["crates/nepdate", "xtask"]          # crates/nepdate-patro is added in L5-00, apps/nepdate-widget in W0
 default-members = ["crates/nepdate"]
+exclude = ["fuzz"]                             # cargo-fuzz crate, needs nightly (L4-07)
 
 [workspace.package]
 edition = "2024"
