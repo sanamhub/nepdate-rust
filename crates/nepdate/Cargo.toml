@@ -1,0 +1,17 @@
+[package]
+name = "nepdate"
+version = "0.0.0"
+description = "Bikram Sambat (Nepali) calendar: fast, no_std, zero-dependency BS↔AD conversion"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+categories = ["date-and-time", "no-std", "localization"]
+keywords = ["nepali", "bikram-sambat", "calendar", "date", "nepal"]
+
+[features]
+default = ["std"]
+std = []
+
+[lints]
+workspace = true

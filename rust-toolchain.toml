@@ -1,0 +1,4 @@
+[toolchain]
+channel = "1.98"            # dev toolchain; bump deliberately (see docs/runbooks/toolchain-bump.md)
+components = ["rustfmt", "clippy"]
+targets = ["wasm32-unknown-unknown"]
