@@ -32,10 +32,10 @@ For human input (e.g. the widget converter). Steps:
 2. **Normalise**, producing a token list:
    - Map Devanagari digits to ASCII.
    - Treat `,` as a separator, in addition to the strict separators.
-   - Split into tokens: maximal runs of digits, and maximal runs of letters (any
-     non-digit, non-separator character, including Devanagari letters, combining marks and
-     `.` when it is inside a letter run such as `B.S.`). *Implementation note:* split on
-     separators except `.`; then a token that is all digits and dots is re-split on dots.
+   - Split into tokens: split on the separators except `.`; then a token made only of digits
+     and dots is re-split on dots (`2080.05.15` gives three numbers). Any other token stays one
+     word, dots included: `B.S.` is a word, and so are `Shr.15` and `2080.B.S.`, which therefore
+     match no month and no era (vectors in `parse.tsv`).
    - Drop tokens that are (case-insensitive) era markers: `BS`, `B.S.`, `B.S`, `VS`,
      `V.S.`, `V.S`, `बि.सं.`, `वि.सं.`, `बि.सं`, `वि.सं`.
    - Drop tokens `गते`, `मिति`.
