@@ -10,7 +10,7 @@ repository = "https://github.com/sanamhub/nepdate-rust"   # ADR-0002
 rust-version = "1.85"                          # library MSRV (edition 2024 minimum)
 
 [workspace.lints.rust]
-unsafe_code = "forbid"
+unsafe_code = "deny"                           # the libraries forbid it in lib.rs; deny lets only the no_alloc test allocator opt out
 missing_docs = "warn"
 unreachable_pub = "warn"
 

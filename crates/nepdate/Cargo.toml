@@ -13,5 +13,9 @@ keywords = ["nepali", "bikram-sambat", "calendar", "date", "nepal"]
 default = ["std"]
 std = []
 
+[[test]]
+name = "no_alloc"
+harness = false
+
 [lints]
 workspace = true

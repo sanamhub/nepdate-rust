@@ -60,7 +60,7 @@ const STEPS: &[Step] = &[
             "warnings",
         ],
     ),
-    // `--no-tests=pass` because L0 has no tests yet (ADR-0014).
+    // `no_alloc` has no test harness, so nextest can't list it; it runs as its own step below.
     step(
         "cargo",
         &[
@@ -69,8 +69,11 @@ const STEPS: &[Step] = &[
             "--workspace",
             "--all-features",
             "--no-tests=pass",
+            "-E",
+            "not binary_id(nepdate::no_alloc)",
         ],
     ),
+    step("cargo", &["test", "-p", "nepdate", "--test", "no_alloc"]),
     step("cargo", &["test", "--doc", "--workspace", "--all-features"]),
     Step {
         program: "cargo",
