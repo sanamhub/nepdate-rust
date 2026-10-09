@@ -1,34 +1,21 @@
-"""Executable reference of spec/ALGORITHM.md (not a library).
+"""Executable reference of spec/ALGORITHM.md, FORMATTING.md and PARSING.md (not a library).
 
-Run from repo root: py spec/reference/verify_vectors.py
-Future ports can diff their behaviour against this file line by line.
+Run from any directory: py spec/reference/verify_vectors.py
+The calendar functions live in nepcal.py next to this file. Ports can diff their behaviour
+against these two files line by line.
 """
-import json, bisect, csv
-j=json.load(open('data/calendar/bs-calendar.json',encoding='utf-8'))
-MIN=1901; L=[j['month_lengths'][str(y)] for y in range(1901,2200)]
-PACKED=[sum((l-29)<<(2*k) for k,l in enumerate(ls)) for ls in L]
-YS=[0]
-for ls in L: YS.append(YS[-1]+sum(ls))
-ml=lambda y,m:29+((PACKED[y-MIN]>>(2*(m-1)))&3)
-def dfc(y,m,d):
-    if m<=2: y-=1
-    era=y//400; yoe=y-era*400; mp=(m+9)%12; doy=(153*mp+2)//5+d-1
-    doe=yoe*365+yoe//4-yoe//100+doy; return era*146097+doe-719468
-def cfd(z):
-    z+=719468; era=z//146097; doe=z-era*146097
-    yoe=(doe-doe//1460+doe//36524-doe//146096)//365; y=yoe+era*400
-    doy=doe-(365*yoe+yoe//4-yoe//100); mp=(5*doy+2)//153; d=doy-(153*mp+2)//5+1
-    m=mp+3 if mp<10 else mp-9
-    return (y+(m<=2),m,d)
-def ts(y,m,d): return YS[y-MIN]+sum(ml(y,k) for k in range(1,m))+d-1
-def fs(s):
-    i=bisect.bisect_right(YS[:299],s)-1; y=MIN+i; r=s-YS[i]; m=1
-    while r>=ml(y,m): r-=ml(y,m); m+=1
-    return (y,m,r+1)
+import csv, sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import nepcal
+from nepcal import MIN, dfc, cfd
+ROOT=nepcal.ROOT
+CAL=nepcal.load(ROOT)
+YS=CAL.year_start; ml=CAL.ml; ts=CAL.ts; fs=CAL.fs
 E=dfc(1844,4,11); assert E==-45920, E; assert YS[-1]==109212
-W=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+W=nepcal.WEEKDAYS
 n=0
-for row in csv.DictReader(open('spec/vectors/month-boundaries.csv')):
+for row in csv.DictReader(open(ROOT/'spec/vectors/month-boundaries.csv',encoding='utf-8')):
     y,m,d=map(int,row['bs'].split('-')); a=tuple(map(int,row['ad'].split('-')))
     s=ts(y,m,d); assert cfd(s+E)==a,(row); assert fs(dfc(*a)-E)==(y,m,d); assert W[(s+4)%7]==row['weekday']; assert ml(y,m)==int(row['month_length']); n+=1
 for s in range(0,109212): assert ts(*fs(s))==s
@@ -54,8 +41,8 @@ def safe(t): return fmt(t) if valid(*t) else 'ERR'
 def last(y,m): return (y,m,ml(y,m)) if MIN<=y<=2199 else (y,m,99)
 QSTART={1:(0,4),2:(0,7),3:(0,10),4:(1,1)}
 def q_of(t): return {4:1,5:1,6:1,7:2,8:2,9:2,10:3,11:3,12:3}.get(t[1],4)
-G='spec/vectors/csharp-golden/'
-rd=lambda f: csv.DictReader(open(G+f,encoding='utf-8'),delimiter='\t')
+G=ROOT/'spec/vectors/csharp-golden'
+rd=lambda f: csv.DictReader(open(G/f,encoding='utf-8'),delimiter='\t')
 n=0
 for r in rd('dates.tsv'):
     t=parse(r['bs']); fy=fy_of(t); q=q_of(t); dy,qm=QSTART[q]
@@ -182,9 +169,8 @@ def lenient(s):
         return 'ERR:Ambiguous'
     return 'ERR:Unrecognized'
 
-PARSE_FILE = 'spec/vectors/parse.tsv'
+PARSE_FILE = ROOT/'spec/vectors/parse.tsv'
 TAB, NL = '\t', '\n'
-import sys
 if '--write-parse-vectors' in sys.argv:
     inputs = [r['input'] for r in rd('parse.tsv')] + [
         '15.04.2080', '15-04-080', '2080/04/15/', '2080 Shrawan 15', 'Shrawan Bhadra 2080', '15 Foo 2080',
