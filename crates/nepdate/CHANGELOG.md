@@ -14,3 +14,4 @@ All notable changes to the `nepdate` crate. Format: [Keep a Changelog](https://k
 - `FiscalYear`, `Quarter` and `FiscalLabel`, plus `NepaliDate::fiscal_year` and `quarter` (ALGORITHM §8b, D-08).
 - `Lang::digits` returning `Digits`, ASCII or Devanagari digits without allocation.
 - Formatter values `ShortFormat`, `LongFormat` and `PatternFormat` from `NepaliDate::short`, `long` and `format_pattern`, with `DateOrder`, `Separator` and `LongDate` (FORMATTING §3 to §5). Each has a generic `write_to` that writes without allocating; English or Nepali output (D-15).
+- Strict parsing through `FromStr` (ASCII and Devanagari digits, D-05) and `NepaliDate::parse_lenient` for month names, day-month-year order and era markers (PARSING, D-06). Neither allocates.

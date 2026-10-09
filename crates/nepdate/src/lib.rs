@@ -19,6 +19,7 @@ mod fiscal;
 mod format;
 mod gregorian;
 mod names;
+mod parse;
 mod range;
 
 pub use crate::arith::{DateDiff, MonthOverflow};
