@@ -1,6 +1,8 @@
 //! Repository tasks: `cargo xtask ci` runs every quality gate, `cargo xtask codegen` writes the
 //! generated tables (ADR-0006). Arguments are read from `std::env::args()` to keep this tiny.
 
+mod codegen;
+
 use std::process::{Command, ExitCode};
 
 use anyhow::{Result, bail};
@@ -10,8 +12,8 @@ fn main() -> ExitCode {
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
     let result = match args.as_slice() {
         ["ci"] => ci(),
-        ["codegen"] => codegen(false),
-        ["codegen", "--check"] => codegen(true),
+        ["codegen"] => codegen::run(false),
+        ["codegen", "--check"] => codegen::run(true),
         _ => {
             eprintln!("usage: cargo xtask <ci | codegen [--check]>");
             return ExitCode::from(2);
@@ -143,15 +145,5 @@ fn run(step: &Step) -> Result<()> {
             step.args.join(" ")
         );
     }
-    Ok(())
-}
-
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "L1 fills this in, and codegen can fail"
-)]
-fn codegen(check: bool) -> Result<()> {
-    let _ = check;
-    println!("nothing to generate yet");
     Ok(())
 }
