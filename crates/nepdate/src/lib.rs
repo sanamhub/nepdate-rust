@@ -14,8 +14,10 @@ mod calendar;
 mod civil;
 mod date;
 mod error;
+mod gregorian;
 mod names;
 
 pub use crate::date::NepaliDate;
 pub use crate::error::{Error, ParseErrorKind};
+pub use crate::gregorian::GregorianDate;
 pub use crate::names::{Lang, Month, Weekday};

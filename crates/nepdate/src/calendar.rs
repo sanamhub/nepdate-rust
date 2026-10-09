@@ -28,25 +28,13 @@ pub(crate) const fn month_length(year: u16, month: u8) -> u8 {
 /// `MONTH_INFO[i]` = start serial of BS month `i` (`i = (y - 1901) * 12 + m - 1`) `<< 2`, or'ed
 /// with `length - 29`. `MONTH_INFO[MONTHS]` = `109_212 << 2`, so `MONTH_INFO[i + 1] >> 2` is
 /// always the start of the next month.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "serial conversion arrives in L2")
-)]
 pub(crate) static MONTH_INFO: [u32; MONTHS + 1] = build_month_info();
 
 /// AD date of the first day of BS month `i`, packed `year << 9 | month << 5 | day`.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "BS to AD conversion arrives in L2")
-)]
 pub(crate) static BS_MONTH_AD: [u32; MONTHS] = build_bs_month_ad();
 
 /// Serial of the first day of AD month `j` (`j = (y - 1844) * 12 + m - 4`). Entry 0 is -10
 /// (1844-04-01 is ten days before the epoch).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "AD to BS conversion arrives in L2")
-)]
 pub(crate) static AD_MONTH_START: [i32; AD_MONTHS] = build_ad_month_start();
 
 // SAFETY-OF-INDEX (all three builders): the loop variable runs over exactly the array's length,

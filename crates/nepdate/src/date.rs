@@ -2,8 +2,16 @@
 
 use core::fmt;
 
-use crate::calendar::{MAX_YEAR, MIN_YEAR, month_length};
-use crate::{Error, Month};
+use crate::calendar::{
+    AD_MONTH_START, AD_MONTHS, BS_MONTH_AD, MAX_SERIAL, MAX_YEAR, MIN_YEAR, MONTH_INFO,
+    month_length,
+};
+use crate::civil::greg_month_length;
+use crate::{Error, GregorianDate, Month, Weekday};
+
+/// `round(2^22 / (109_212 / 3_588))`: multiplying a serial by this and shifting right by 22
+/// estimates its month index to within one (ADR-0004 §4, tested below).
+const EST_MUL: u64 = 137_797;
 
 /// A valid Bikram Sambat date from 1901-01-01 to 2199-12-30.
 ///
@@ -178,6 +186,194 @@ impl NepaliDate {
     }
 }
 
+impl NepaliDate {
+    /// Index of this date's month in the calendar tables: `(y - 1901) * 12 + m - 1`.
+    const fn month_index(self) -> usize {
+        (self.year - MIN_YEAR) as usize * 12 + self.month.number() as usize - 1
+    }
+
+    /// Days since BS 1901-01-01 (ALGORITHM §4): one table load, no loop.
+    // SAFETY-OF-INDEX: month_index() < MONTHS because every NepaliDate is in range.
+    #[allow(clippy::indexing_slicing)]
+    pub(crate) fn to_serial(self) -> u32 {
+        (MONTH_INFO[self.month_index()] >> 2) + u32::from(self.day) - 1
+    }
+
+    /// The date `s` days after BS 1901-01-01: an estimate of the month plus at most one
+    /// correction (ADR-0004 §4), no loop and no search.
+    // SAFETY-OF-INDEX: s <= MAX_SERIAL keeps the estimate in 0..=3587 (tested for every serial),
+    // and the correction moves it by one inside 0..MONTHS, so i and i + 1 index MONTH_INFO.
+    #[allow(clippy::indexing_slicing, clippy::cast_possible_truncation)]
+    pub(crate) fn from_serial(s: u32) -> Result<Self, Error> {
+        if s > MAX_SERIAL {
+            return Err(Error::OutOfRange);
+        }
+        let mut i = ((u64::from(s) * EST_MUL) >> 22) as usize;
+        if MONTH_INFO[i] >> 2 > s {
+            i -= 1;
+        } else if MONTH_INFO[i + 1] >> 2 <= s {
+            i += 1;
+        }
+        // i < MONTHS = 3588, so i / 12 < 299 and the casts can't truncate.
+        let year = MIN_YEAR + (i / 12) as u16;
+        let month = Month::ALL[i % 12];
+        let day = (s - (MONTH_INFO[i] >> 2) + 1) as u8;
+        Ok(Self::new_unchecked(year, month, day))
+    }
+
+    /// A BS date from an AD date.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidGregorian`] when the AD date doesn't exist, then [`Error::OutOfRange`]
+    /// outside AD 1844-04-11 to 2143-04-15.
+    ///
+    /// ```
+    /// use nepdate::NepaliDate;
+    ///
+    /// assert_eq!(NepaliDate::from_gregorian(2024, 4, 13)?, NepaliDate::new(2081, 1, 1)?);
+    /// # Ok::<(), nepdate::Error>(())
+    /// ```
+    #[must_use = "the conversion may fail"]
+    // SAFETY-OF-INDEX: j is checked to be in 0..AD_MONTHS before the load.
+    #[allow(
+        clippy::indexing_slicing,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss
+    )]
+    pub fn from_gregorian(year: i32, month: u8, day: u8) -> Result<Self, Error> {
+        let ad = GregorianDate::new(year, month, day)?;
+        // Range check on the year first, so the month index below can't overflow.
+        if !(1844..=2143).contains(&ad.year()) {
+            return Err(Error::OutOfRange);
+        }
+        let j = (ad.year() - 1844) * 12 + i32::from(ad.month()) - 4;
+        if j < 0 || j as usize >= AD_MONTHS {
+            return Err(Error::OutOfRange);
+        }
+        let s = AD_MONTH_START[j as usize] + i32::from(ad.day()) - 1;
+        if s < 0 {
+            return Err(Error::OutOfRange);
+        }
+        Self::from_serial(s as u32)
+    }
+
+    /// The AD date: the AD date of the month's first day plus `day - 1`, with at most one carry
+    /// into the next AD month (the offset is at most 31, every AD month has at least 28 days).
+    ///
+    /// ```
+    /// use nepdate::NepaliDate;
+    ///
+    /// assert_eq!(NepaliDate::new(2081, 1, 1)?.to_gregorian().to_string(), "2024-04-13");
+    /// # Ok::<(), nepdate::Error>(())
+    /// ```
+    #[must_use]
+    // SAFETY-OF-INDEX: month_index() < MONTHS because every NepaliDate is in range.
+    #[allow(
+        clippy::indexing_slicing,
+        clippy::cast_possible_truncation,
+        clippy::cast_possible_wrap
+    )]
+    pub fn to_gregorian(self) -> GregorianDate {
+        let v = BS_MONTH_AD[self.month_index()];
+        let mut year = (v >> 9) as i32;
+        let mut month = ((v >> 5) & 0xF) as u8;
+        let mut day = (v & 0x1F) as u8 + self.day - 1;
+        let len = greg_month_length(i64::from(year), month);
+        if day > len {
+            day -= len;
+            if month == 12 {
+                month = 1;
+                year += 1;
+            } else {
+                month += 1;
+            }
+        }
+        GregorianDate::new_unchecked(year, month, day)
+    }
+
+    /// The day of the week (ALGORITHM §7: BS 1901-01-01 was a Thursday).
+    ///
+    /// ```
+    /// use nepdate::{NepaliDate, Weekday};
+    ///
+    /// assert_eq!(NepaliDate::new(2081, 1, 1)?.weekday(), Weekday::Saturday);
+    /// # Ok::<(), nepdate::Error>(())
+    /// ```
+    #[must_use]
+    #[allow(clippy::indexing_slicing)] // % 7 is 0..=6
+    pub fn weekday(self) -> Weekday {
+        Weekday::ALL[((self.to_serial() + 4) % 7) as usize]
+    }
+
+    /// The day of the year, 1 for Baishakh 1.
+    ///
+    /// ```
+    /// assert_eq!(nepdate::NepaliDate::new(2081, 2, 1)?.day_of_year(), 32);
+    /// # Ok::<(), nepdate::Error>(())
+    /// ```
+    #[must_use]
+    // SAFETY-OF-INDEX: the year's first month index is at most month_index() < MONTHS.
+    // A year has at most 367 days, so the cast can't truncate.
+    #[allow(clippy::indexing_slicing, clippy::cast_possible_truncation)]
+    pub fn day_of_year(self) -> u16 {
+        let first = MONTH_INFO[(self.year - MIN_YEAR) as usize * 12] >> 2;
+        (self.to_serial() - first + 1) as u16
+    }
+
+    /// The next day, or `None` after BS 2199-12-30.
+    ///
+    /// ```
+    /// use nepdate::NepaliDate;
+    ///
+    /// assert_eq!(NepaliDate::new(2080, 12, 30)?.succ(), Some(NepaliDate::new(2081, 1, 1)?));
+    /// assert_eq!(NepaliDate::MAX.succ(), None);
+    /// # Ok::<(), nepdate::Error>(())
+    /// ```
+    #[must_use]
+    pub fn succ(self) -> Option<Self> {
+        Self::from_serial(self.to_serial() + 1).ok()
+    }
+
+    /// The previous day, or `None` before BS 1901-01-01.
+    ///
+    /// ```
+    /// assert_eq!(nepdate::NepaliDate::MIN.pred(), None);
+    /// ```
+    #[must_use]
+    pub fn pred(self) -> Option<Self> {
+        let s = self.to_serial().checked_sub(1)?;
+        Self::from_serial(s).ok()
+    }
+
+    /// Days from `self` to `other`: positive when `other` is later (D-07).
+    ///
+    /// ```
+    /// use nepdate::NepaliDate;
+    ///
+    /// assert_eq!(NepaliDate::MIN.days_until(NepaliDate::MAX), 109_211);
+    /// ```
+    #[must_use]
+    #[allow(clippy::cast_possible_wrap)] // serials are at most 109_211
+    pub fn days_until(self, other: Self) -> i32 {
+        other.to_serial() as i32 - self.to_serial() as i32
+    }
+}
+
+impl TryFrom<GregorianDate> for NepaliDate {
+    type Error = Error;
+
+    fn try_from(ad: GregorianDate) -> Result<Self, Error> {
+        Self::from_gregorian(ad.year(), ad.month(), ad.day())
+    }
+}
+
+impl From<NepaliDate> for GregorianDate {
+    fn from(date: NepaliDate) -> Self {
+        date.to_gregorian()
+    }
+}
+
 impl fmt::Display for NepaliDate {
     /// `YYYY/MM/DD`, zero padded, ASCII digits (FORMATTING §2).
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -266,6 +462,64 @@ mod tests {
         assert_eq!(NepaliDate::new(1901, 1, 1), Ok(NepaliDate::MIN));
         assert_eq!(NepaliDate::new(2199, 12, 30), Ok(NepaliDate::MAX));
         assert_eq!(NepaliDate::MAX.month_length(), 30);
+    }
+
+    #[test]
+    fn serial_ends() {
+        assert_eq!(NepaliDate::MIN.to_serial(), 0);
+        assert_eq!(NepaliDate::MAX.to_serial(), 109_211);
+        assert_eq!(NepaliDate::from_serial(109_212), Err(Error::OutOfRange));
+        assert_eq!(NepaliDate::from_serial(0), Ok(NepaliDate::MIN));
+    }
+
+    #[test]
+    fn month_estimate_is_off_by_at_most_one() {
+        let starts: std::vec::Vec<u32> = MONTH_INFO.iter().map(|v| v >> 2).collect();
+        for s in 0..=MAX_SERIAL {
+            let truth = starts.partition_point(|&start| start <= s) - 1;
+            #[allow(clippy::cast_possible_truncation)]
+            let estimate = ((u64::from(s) * EST_MUL) >> 22) as usize;
+            assert!(
+                estimate.abs_diff(truth) <= 1,
+                "serial {s}: {estimate} vs {truth}"
+            );
+            assert!(estimate < crate::calendar::MONTHS, "serial {s}");
+        }
+    }
+
+    #[test]
+    fn gregorian_edges() {
+        assert_eq!(NepaliDate::from_gregorian(1844, 4, 11), Ok(NepaliDate::MIN));
+        assert_eq!(NepaliDate::from_gregorian(2143, 4, 15), Ok(NepaliDate::MAX));
+        for (y, m, d) in [
+            (1844, 4, 10),
+            (1844, 4, 1),
+            (2143, 4, 16),
+            (1844, 3, 31),
+            (2143, 5, 1),
+        ] {
+            assert_eq!(
+                NepaliDate::from_gregorian(y, m, d),
+                Err(Error::OutOfRange),
+                "{y}-{m}-{d}"
+            );
+        }
+        assert_eq!(
+            NepaliDate::from_gregorian(2023, 2, 29),
+            Err(Error::InvalidGregorian)
+        );
+        assert_eq!(
+            NepaliDate::from_gregorian(i32::MAX, 1, 1),
+            Err(Error::OutOfRange)
+        );
+        assert_eq!(
+            NepaliDate::from_gregorian(i32::MIN, 1, 1),
+            Err(Error::OutOfRange)
+        );
+        assert_eq!(NepaliDate::MAX.succ(), None);
+        assert_eq!(NepaliDate::MIN.pred(), None);
+        assert_eq!(NepaliDate::MIN.days_until(NepaliDate::MAX), 109_211);
+        assert_eq!(NepaliDate::MAX.days_until(NepaliDate::MIN), -109_211);
     }
 
     #[test]

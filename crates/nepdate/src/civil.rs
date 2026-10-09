@@ -29,13 +29,11 @@ pub(crate) const fn civil_from_days(z: i64) -> (i64, i64, i64) {
 }
 
 /// Gregorian leap year rule.
-#[cfg_attr(not(test), expect(dead_code, reason = "GregorianDate arrives in L2"))]
 pub(crate) const fn is_leap(y: i64) -> bool {
     (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
 }
 
 /// Days in a Gregorian month, 28..=31. `m` must be 1..=12.
-#[cfg_attr(not(test), expect(dead_code, reason = "GregorianDate arrives in L2"))]
 pub(crate) const fn greg_month_length(y: i64, m: u8) -> u8 {
     match m {
         2 if is_leap(y) => 29,
