@@ -2,11 +2,9 @@
 //! feature, so `cargo test --features serde` alone runs the serde tests.
 #![allow(clippy::unwrap_used)]
 
-use nepdate::{Error, NepaliDate};
-
 #[cfg(feature = "serde")]
 mod serde_feature {
-    use super::*;
+    use nepdate::NepaliDate;
 
     #[test]
     fn round_trips_as_yyyy_mm_dd() {
@@ -31,8 +29,8 @@ mod serde_feature {
 
 #[cfg(feature = "chrono")]
 mod chrono_feature {
-    use super::*;
     use chrono::NaiveDate;
+    use nepdate::{Error, NepaliDate};
 
     #[test]
     fn new_year_2081_both_ways() {
@@ -61,10 +59,10 @@ mod chrono_feature {
 
 #[cfg(feature = "jiff")]
 mod jiff_feature {
-    use super::*;
     use jiff::Timestamp;
     use jiff::civil::{Date, date};
     use jiff::tz::TimeZone;
+    use nepdate::{Error, NepaliDate};
 
     #[test]
     fn new_year_2081_both_ways() {

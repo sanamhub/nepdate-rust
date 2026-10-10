@@ -17,7 +17,7 @@ fn bs(year: u16, month: u8, day: u8) -> NepaliDate {
     NepaliDate::new(year, month, day).unwrap()
 }
 
-/// Every day of BS 2001 to 2089, the years C# NepDate's offset tables span.
+/// Every day of BS 2001 to 2089, the years the offset tables of C# `NepDate` span.
 fn c_sharp_years() -> impl Iterator<Item = NepaliDate> {
     NepaliDateRange::new(bs(2001, 1, 1), NepaliDateRange::year(2089).unwrap().end())
         .unwrap()
@@ -318,7 +318,8 @@ fn cs_calendar_data_tests__all_days_in_scraped_range_no_exception_on_property_ac
         let info = info(date);
         let _ = info.tithi().map(|t| (t.name(Lang::Ne), t.name(Lang::En)));
         let _ = info.is_public_holiday();
-        let _ = info.events().map(|e| e.name(Lang::En)).count();
+        info.events()
+            .for_each(|e| assert!(!e.name(Lang::En).is_empty()));
     }
 }
 
