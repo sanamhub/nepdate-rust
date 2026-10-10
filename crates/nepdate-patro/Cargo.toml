@@ -1,0 +1,31 @@
+[package]
+name = "nepdate-patro"
+version = "0.0.0"
+description = "Tithi, Nepal public holidays and events per Bikram Sambat day, for the nepdate crate"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+categories = ["date-and-time", "no-std", "localization"]
+keywords = ["nepali", "bikram-sambat", "tithi", "holidays", "nepal"]
+
+[lib]
+name = "nepdate_patro"
+
+[dependencies]
+# Same minor as this crate (hub ADR-0004 §3). L6-07 changes it to "~0.1.0".
+nepdate = { path = "../nepdate", version = "~0.0.0", default-features = false }
+
+[[test]]
+name = "no_alloc"
+harness = false
+
+# The C# catalogue's DateTimeExtensionsTests rows test the core's jiff and chrono conversions
+# (L5-07). Same jiff features as the core, so no system time zone code is built.
+[dev-dependencies]
+nepdate = { path = "../nepdate", features = ["jiff", "chrono"] }
+jiff = { version = "0.2", default-features = false, features = ["std", "tzdb-bundle-platform", "tzdb-zoneinfo", "tzdb-concatenated"] }
+chrono = { version = "0.4", default-features = false }
+
+[lints]
+workspace = true

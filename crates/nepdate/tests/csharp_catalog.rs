@@ -1,7 +1,8 @@
 //! C# `NepDate`'s own test suite, one test per row of `shared/spec/vectors/csharp-tests/catalog.tsv`
 //! (L2-08). Names come from `cargo xtask catalog-check <phase> --list`; `cargo xtask
 //! catalog-check` fails when a row has neither a test nor a `// cs:<id> D-xx` comment.
-//! Phase 1 rows (L2-08), phase 2 (L3-06) and phase 3 (L4-06).
+//! Phase 1 rows (L2-08), phase 2 (L3-06) and phase 3 (L4-06). Rows that read the clock need the
+//! `jiff` feature (L5).
 // `non_snake_case`: the L2-08 name rule turns the `.` in a row id into `__`.
 // `nonminimal_bool` and `manual_assert_eq`: the `Operator_*` rows test each operator itself
 // (`!(a < b)` calls `<`, not `>=`), so the expressions stay as C# wrote them.
@@ -444,10 +445,17 @@ fn cs_nepali_date_properties_tests__month_name_returns_correct_enum() {
 }
 
 #[test]
-#[ignore = "L5: NepaliDate::today() comes with the jiff feature (ADR-0011)"]
+#[cfg(feature = "jiff")]
 fn cs_nepali_date_properties_tests__today_returns_current_nepali_date() {
-    // L5: assert_eq!(NepaliDate::today(), NepaliDate::try_from(jiff::Zoned::now().date()));
-    panic!("NepaliDate::today() lands in L5");
+    // The port's today() is the date in Nepal (D-14: "today" needs an explicit zone), not
+    // C#'s local date. Clock read on both sides so a midnight in between can't fail it.
+    let nepal = || {
+        let tz = jiff::tz::TimeZone::get("Asia/Kathmandu").unwrap();
+        NepaliDate::try_from(jiff::Timestamp::now().to_zoned(tz).date())
+    };
+    let before = nepal();
+    let today = NepaliDate::today();
+    assert!(today == before || today == nepal());
 }
 
 #[test]
@@ -1524,75 +1532,70 @@ fn cs_nepali_date_range_extended_tests__for_calendar_year_length_is_reasonable()
     assert!((365..=366).contains(&len), "{len}");
 }
 
-// The `Current*` rows need today's date: `NepaliDate::today()` comes with the `jiff` feature in
-// L5 (ADR-0011). Each then becomes `NepaliDateRange::month` or `year`, or `fiscal_year().range()`,
-// of `today()`.
+// The `Current*` rows need today's date, so they need the `jiff` feature (ADR-0011). Each is
+// `NepaliDateRange::month` or `year`, or `fiscal_year().range()`, of `today()`.
 
 #[test]
-#[ignore = "L5: NepaliDate::today() comes with the jiff feature (ADR-0011)"]
+#[cfg(feature = "jiff")]
 fn cs_nepali_date_range_extended_tests__current_month_start_is_first_day_of_current_month() {
-    // L5: let t = NepaliDate::today().unwrap();
-    // L5: let r = NepaliDateRange::month(t.year(), t.month_number()).unwrap();
-    // L5: assert_eq!(r.start(), t.first_day_of_month());
-    panic!("NepaliDate::today() lands in L5");
+    let t = NepaliDate::today().unwrap();
+    let r = NepaliDateRange::month(t.year(), t.month_number()).unwrap();
+    assert_eq!(r.start(), t.first_day_of_month());
 }
 
 #[test]
-#[ignore = "L5: NepaliDate::today() comes with the jiff feature (ADR-0011)"]
+#[cfg(feature = "jiff")]
 fn cs_nepali_date_range_extended_tests__current_month_end_is_last_day_of_current_month() {
-    // L5: let t = NepaliDate::today().unwrap();
-    // L5: let r = NepaliDateRange::month(t.year(), t.month_number()).unwrap();
-    // L5: assert_eq!(r.end(), t.last_day_of_month());
-    panic!("NepaliDate::today() lands in L5");
+    let t = NepaliDate::today().unwrap();
+    let r = NepaliDateRange::month(t.year(), t.month_number()).unwrap();
+    assert_eq!(r.end(), t.last_day_of_month());
 }
 
 #[test]
-#[ignore = "L5: NepaliDate::today() comes with the jiff feature (ADR-0011)"]
+#[cfg(feature = "jiff")]
 fn cs_nepali_date_range_extended_tests__current_month_contains_today() {
-    // L5: let t = NepaliDate::today().unwrap();
-    // L5: assert!(NepaliDateRange::month(t.year(), t.month_number()).unwrap().contains(t));
-    panic!("NepaliDate::today() lands in L5");
+    let t = NepaliDate::today().unwrap();
+    assert!(
+        NepaliDateRange::month(t.year(), t.month_number())
+            .unwrap()
+            .contains(t)
+    );
 }
 
 #[test]
-#[ignore = "L5: NepaliDate::today() comes with the jiff feature (ADR-0011)"]
+#[cfg(feature = "jiff")]
 fn cs_nepali_date_range_extended_tests__current_fiscal_year_contains_today() {
-    // L5: let t = NepaliDate::today().unwrap();
-    // L5: assert!(t.fiscal_year().range().unwrap().contains(t));
-    panic!("NepaliDate::today() lands in L5");
+    let t = NepaliDate::today().unwrap();
+    assert!(t.fiscal_year().range().unwrap().contains(t));
 }
 
 #[test]
-#[ignore = "L5: NepaliDate::today() comes with the jiff feature (ADR-0011)"]
+#[cfg(feature = "jiff")]
 fn cs_nepali_date_range_extended_tests__current_fiscal_year_start_is_shrawan() {
-    // L5: let start = NepaliDate::today().unwrap().fiscal_year().start().unwrap();
-    // L5: assert_eq!((start.month_number(), start.day()), (4, 1));
-    panic!("NepaliDate::today() lands in L5");
+    let start = NepaliDate::today().unwrap().fiscal_year().start().unwrap();
+    assert_eq!((start.month_number(), start.day()), (4, 1));
 }
 
 #[test]
-#[ignore = "L5: NepaliDate::today() comes with the jiff feature (ADR-0011)"]
+#[cfg(feature = "jiff")]
 fn cs_nepali_date_range_extended_tests__current_fiscal_year_end_is_ashadh() {
-    // L5: let end = NepaliDate::today().unwrap().fiscal_year().end().unwrap();
-    // L5: assert_eq!((end.month_number(), end.day()), (3, end.month_length()));
-    panic!("NepaliDate::today() lands in L5");
+    let end = NepaliDate::today().unwrap().fiscal_year().end().unwrap();
+    assert_eq!((end.month_number(), end.day()), (3, end.month_length()));
 }
 
 #[test]
-#[ignore = "L5: NepaliDate::today() comes with the jiff feature (ADR-0011)"]
+#[cfg(feature = "jiff")]
 fn cs_nepali_date_range_extended_tests__current_calendar_year_contains_today() {
-    // L5: let t = NepaliDate::today().unwrap();
-    // L5: assert!(NepaliDateRange::year(t.year()).unwrap().contains(t));
-    panic!("NepaliDate::today() lands in L5");
+    let t = NepaliDate::today().unwrap();
+    assert!(NepaliDateRange::year(t.year()).unwrap().contains(t));
 }
 
 #[test]
-#[ignore = "L5: NepaliDate::today() comes with the jiff feature (ADR-0011)"]
+#[cfg(feature = "jiff")]
 fn cs_nepali_date_range_extended_tests__current_calendar_year_start_is_baishakh1() {
-    // L5: let t = NepaliDate::today().unwrap();
-    // L5: let start = NepaliDateRange::year(t.year()).unwrap().start();
-    // L5: assert_eq!((start.month_number(), start.day()), (1, 1));
-    panic!("NepaliDate::today() lands in L5");
+    let t = NepaliDate::today().unwrap();
+    let start = NepaliDateRange::year(t.year()).unwrap().start();
+    assert_eq!((start.month_number(), start.day()), (1, 1));
 }
 
 // cs:NepaliDateRangeExtendedTests.SplitByFiscalQuarter_EmptyRange_ReturnsEmptyArray D-09 no splitting; FiscalYear::quarter_range gives each quarter
@@ -1870,11 +1873,40 @@ fn cs_optimization_verification_tests__subtraction_cross_year_correct_days() {
 
 // ---------- Core/NepaliDateIsRelativeTests.cs ----------
 
-// Not ported (D-14): compare with `NepaliDate::today()` (L5) and `checked_add_days(±1)`.
-// cs:NepaliDateIsRelativeTests.IsToday_TodaysDate_ReturnsTrue D-14 is_today() comes with jiff in L5
-// cs:NepaliDateIsRelativeTests.IsToday_YesterdaysDate_ReturnsFalse D-14 is_today() comes with jiff in L5
-// cs:NepaliDateIsRelativeTests.IsToday_TomorrowsDate_ReturnsFalse D-14 is_today() comes with jiff in L5
-// cs:NepaliDateIsRelativeTests.IsToday_ArbitraryPastDate_ReturnsFalse D-14 is_today() comes with jiff in L5
+// `is_today()` comes with the `jiff` feature; D-14 allows the helper. `today()` is the date in
+// Nepal. Midnight may pass between two clock reads, so each test accepts the next day too.
+
+#[test]
+#[cfg(feature = "jiff")]
+fn cs_nepali_date_is_relative_tests__is_today_todays_date_returns_true() {
+    let today = NepaliDate::today().unwrap();
+    assert!(today.is_today() || today.succ().unwrap().is_today());
+}
+
+#[test]
+#[cfg(feature = "jiff")]
+fn cs_nepali_date_is_relative_tests__is_today_yesterdays_date_returns_false() {
+    let yesterday = NepaliDate::today().unwrap().checked_add_days(-1).unwrap();
+    assert!(!yesterday.is_today());
+}
+
+#[test]
+#[cfg(feature = "jiff")]
+fn cs_nepali_date_is_relative_tests__is_today_tomorrows_date_returns_false() {
+    // Tomorrow becomes today if midnight passes between the two calls; read the clock again.
+    let today = NepaliDate::today().unwrap();
+    let tomorrow = today.checked_add_days(1).unwrap();
+    assert!(!tomorrow.is_today() || NepaliDate::today().unwrap() != today);
+}
+
+#[test]
+#[cfg(feature = "jiff")]
+fn cs_nepali_date_is_relative_tests__is_today_arbitrary_past_date_returns_false() {
+    assert!(!bs(2070, 1, 1).is_today());
+}
+
+// Not ported (D-14): no `is_yesterday` or `is_tomorrow`; compare with `today()` and
+// `checked_add_days(±1)`.
 // cs:NepaliDateIsRelativeTests.IsYesterday_YesterdaysDate_ReturnsTrue D-14 no IsYesterday
 // cs:NepaliDateIsRelativeTests.IsYesterday_TodaysDate_ReturnsFalse D-14 no IsYesterday
 // cs:NepaliDateIsRelativeTests.IsYesterday_TomorrowsDate_ReturnsFalse D-14 no IsYesterday

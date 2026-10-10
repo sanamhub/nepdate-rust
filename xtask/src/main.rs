@@ -1,9 +1,14 @@
 //! Repository tasks: `cargo xtask ci` runs every quality gate, `cargo xtask codegen` writes the
 //! generated tables (ADR-0006), `cargo xtask catalog-check <phase>` checks the C# test catalogue
-//! (L2-08). Arguments are read from `std::env::args()` to keep this tiny.
+//! (L2-08), `cargo xtask data-status` reports how far the patro data reaches (L5-01b) and
+//! `cargo xtask check-core-has-no-patro` keeps patro data out of the core (L5-06). Arguments
+//! are read from `std::env::args()` to keep this tiny.
 
 mod catalog;
 mod codegen;
+mod core_check;
+mod data_status;
+mod patro;
 
 use std::process::{Command, ExitCode};
 
@@ -18,9 +23,13 @@ fn main() -> ExitCode {
         ["codegen", "--check"] => codegen::run(true),
         ["catalog-check", phase] => catalog::run(phase, false),
         ["catalog-check", phase, "--list"] => catalog::run(phase, true),
+        ["data-status"] => data_status::run(None),
+        ["data-status", "--today", today] => data_status::run(Some(today)),
+        ["check-core-has-no-patro"] => core_check::run(),
         _ => {
             eprintln!(
-                "usage: cargo xtask <ci | codegen [--check] | catalog-check <phase> [--list]>"
+                "usage: cargo xtask <ci | codegen [--check] | catalog-check <phase> [--list] | \
+                 data-status [--today YYYY-MM-DD] | check-core-has-no-patro>"
             );
             return ExitCode::from(2);
         }
@@ -76,10 +85,14 @@ const STEPS: &[Step] = &[
             "--all-features",
             "--no-tests=pass",
             "-E",
-            "not binary_id(nepdate::no_alloc)",
+            "not binary_id(nepdate::no_alloc) and not binary_id(nepdate-patro::no_alloc)",
         ],
     ),
     step("cargo", &["test", "-p", "nepdate", "--test", "no_alloc"]),
+    step(
+        "cargo",
+        &["test", "-p", "nepdate-patro", "--test", "no_alloc"],
+    ),
     step("cargo", &["test", "--doc", "--workspace", "--all-features"]),
     Step {
         program: "cargo",
@@ -112,6 +125,36 @@ const STEPS: &[Step] = &[
     step("cargo", &["xtask", "catalog-check", "1"]),
     step("cargo", &["xtask", "catalog-check", "2"]),
     step("cargo", &["xtask", "catalog-check", "3"]),
+    step("cargo", &["xtask", "catalog-check", "4"]),
+    // L5-06: each feature combination on its own, since `cargo hack` isn't in the budget.
+    step(
+        "cargo",
+        &[
+            "build",
+            "-p",
+            "nepdate",
+            "--no-default-features",
+            "--features",
+            "serde",
+        ],
+    ),
+    step(
+        "cargo",
+        &["test", "-p", "nepdate", "--features", "jiff,chrono,serde"],
+    ),
+    step("cargo", &["test", "-p", "nepdate"]),
+    step("cargo", &["test", "-p", "nepdate-patro"]),
+    step(
+        "cargo",
+        &[
+            "build",
+            "-p",
+            "nepdate-patro",
+            "--target",
+            "wasm32-unknown-unknown",
+        ],
+    ),
+    step("cargo", &["xtask", "check-core-has-no-patro"]),
 ];
 
 fn ci() -> Result<()> {
