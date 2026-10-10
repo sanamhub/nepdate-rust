@@ -12,15 +12,21 @@ mod generated {
 
 mod arith;
 mod calendar;
+#[cfg(feature = "chrono")]
+mod chrono_impl;
 mod civil;
 mod date;
 mod error;
 mod fiscal;
 mod format;
 mod gregorian;
+#[cfg(feature = "jiff")]
+mod jiff_impl;
 mod names;
 mod parse;
 mod range;
+#[cfg(feature = "serde")]
+mod serde_impl;
 
 pub use crate::arith::{DateDiff, MonthOverflow};
 pub use crate::date::NepaliDate;
