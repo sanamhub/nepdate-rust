@@ -1,5 +1,6 @@
-//! Bikram Sambat (Nepali) calendar. See `shared/spec/` in the repository for the algorithm.
+#![doc = include_str!("../README.md")]
 #![no_std]
+#![deny(missing_docs)]
 #![forbid(unsafe_code)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 

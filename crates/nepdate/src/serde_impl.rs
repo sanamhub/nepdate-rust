@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize, Serializer};
 
 use crate::{DateOrder, Lang, NepaliDate, Separator};
 
+#[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
 impl Serialize for NepaliDate {
     // `collect_str` writes through `Display`, so no string is built on our side.
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -14,6 +15,7 @@ impl Serialize for NepaliDate {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
 impl<'de> Deserialize<'de> for NepaliDate {
     /// Strict parsing (PARSING §1), the same as [`str::parse`].
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {

@@ -4,6 +4,7 @@ use chrono::{Datelike, NaiveDate};
 
 use crate::{Error, NepaliDate};
 
+#[cfg_attr(docsrs, doc(cfg(feature = "chrono")))]
 impl From<NepaliDate> for NaiveDate {
     fn from(date: NepaliDate) -> Self {
         let ad = date.to_gregorian();
@@ -14,6 +15,7 @@ impl From<NepaliDate> for NaiveDate {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "chrono")))]
 impl TryFrom<NaiveDate> for NepaliDate {
     type Error = Error;
 

@@ -18,3 +18,4 @@ All notable changes to the `nepdate` crate. Format: [Keep a Changelog](https://k
 - Feature `serde`: `Serialize` and `Deserialize` as `"YYYY-MM-DD"`, deserializing with the strict parser (D-11).
 - Feature `chrono`: `From<NepaliDate> for chrono::NaiveDate` and `TryFrom<chrono::NaiveDate> for NepaliDate`.
 - Feature `jiff`: `From<NepaliDate> for jiff::civil::Date`, `TryFrom<jiff::civil::Date> for NepaliDate`, `NepaliDate::today()` (the date in `Asia/Kathmandu`), `today_in(&TimeZone)` and `is_today()`.
+- Crate documentation from `README.md` (quick start, features, C# to Rust names), and the examples `convert` and `month_calendar`.
