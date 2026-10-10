@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
-const MIN_YEAR: i64 = 1901;
+pub(crate) const MIN_YEAR: i64 = 1901;
 const MAX_YEAR: i64 = 2199;
 /// Days since 1970-01-01 of BS 1901-01-01 (AD 1844-04-11), ALGORITHM §4.
 const EPOCH_UNIX_DAYS: i64 = -45_920;
@@ -24,7 +24,7 @@ struct Output {
 
 pub(crate) fn run(check: bool) -> Result<()> {
     let root = workspace_root();
-    let outputs = vec![calendar(&root)?];
+    let outputs = vec![calendar(&root)?, patro(&root)?];
     let mut stale = Vec::new();
     for out in &outputs {
         let current = fs::read_to_string(&out.path).unwrap_or_default();
@@ -56,7 +56,7 @@ pub(crate) fn workspace_root() -> PathBuf {
     xtask.parent().unwrap_or(xtask).to_path_buf()
 }
 
-fn read_json(path: &Path) -> Result<Value> {
+pub(crate) fn read_json(path: &Path) -> Result<Value> {
     let text = fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
     serde_json::from_str(&text).with_context(|| format!("parsing {}", path.display()))
 }
@@ -146,4 +146,14 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     let doy = (153 * mp + 2) / 5 + d - 1;
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
     era * 146_097 + doe - 719_468
+}
+
+/// `crates/nepdate-patro/src/generated/patro.rs`: the per-day patro tables (L5-01).
+fn patro(root: &Path) -> Result<Output> {
+    let lengths = crate::patro::read_lengths(root)?;
+    let data = crate::patro::read(root)?;
+    Ok(Output {
+        path: root.join("crates/nepdate-patro/src/generated/patro.rs"),
+        text: crate::patro::generate(&lengths, &data)?,
+    })
 }

@@ -4,6 +4,7 @@
 
 mod catalog;
 mod codegen;
+mod patro;
 
 use std::process::{Command, ExitCode};
 
