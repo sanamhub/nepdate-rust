@@ -1,9 +1,10 @@
 //! Repository tasks: `cargo xtask ci` runs every quality gate, `cargo xtask codegen` writes the
 //! generated tables (ADR-0006), `cargo xtask catalog-check <phase>` checks the C# test catalogue
-//! (L2-08). Arguments are read from `std::env::args()` to keep this tiny.
+//! (L2-08), `cargo xtask data-status` reports how far the patro data reaches (L5-01b). Arguments are read from `std::env::args()` to keep this tiny.
 
 mod catalog;
 mod codegen;
+mod data_status;
 mod patro;
 
 use std::process::{Command, ExitCode};
@@ -19,9 +20,11 @@ fn main() -> ExitCode {
         ["codegen", "--check"] => codegen::run(true),
         ["catalog-check", phase] => catalog::run(phase, false),
         ["catalog-check", phase, "--list"] => catalog::run(phase, true),
+        ["data-status"] => data_status::run(None),
+        ["data-status", "--today", today] => data_status::run(Some(today)),
         _ => {
             eprintln!(
-                "usage: cargo xtask <ci | codegen [--check] | catalog-check <phase> [--list]>"
+                "usage: cargo xtask <ci | codegen [--check] | catalog-check <phase> [--list] |                  data-status [--today YYYY-MM-DD]>"
             );
             return ExitCode::from(2);
         }

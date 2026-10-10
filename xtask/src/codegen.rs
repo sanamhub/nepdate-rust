@@ -14,7 +14,7 @@ use serde_json::Value;
 pub(crate) const MIN_YEAR: i64 = 1901;
 const MAX_YEAR: i64 = 2199;
 /// Days since 1970-01-01 of BS 1901-01-01 (AD 1844-04-11), ALGORITHM §4.
-const EPOCH_UNIX_DAYS: i64 = -45_920;
+pub(crate) const EPOCH_UNIX_DAYS: i64 = -45_920;
 
 /// One generated file: where it goes and what it should contain.
 struct Output {
@@ -138,7 +138,7 @@ pub(crate) const PACKED_YEARS: [u32; YEARS] = [
 }
 
 /// ALGORITHM §5, the same formula the library uses, to check the epoch while generating.
-fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+pub(crate) fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     let y = if m <= 2 { y - 1 } else { y };
     let era = if y >= 0 { y } else { y - 399 } / 400;
     let yoe = y - era * 400;
