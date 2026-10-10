@@ -157,13 +157,13 @@ error.
 Implement conversions + `today()` + `is_today()` (ADR-0011).
 
 AC:
-- `today()` equals `NepaliDate::try_from(jiff::Zoned::now().date())` (not a fixed date).
+- `today_in(tz)` equals `NepaliDate::try_from(jiff::Zoned::now().with_time_zone(tz.clone()).date())`
+  (not a fixed date), and `today()` equals `today_in` with `Asia/Kathmandu`.
 - PORT-PLAN phase 4 clock test, through the interop conversion:
   `"2024-07-30T18:30:00Z".parse::<jiff::Timestamp>()`, viewed in `jiff::tz::TimeZone::UTC`,
   gives BS 2081-04-15, and viewed in `Asia/Kathmandu` gives BS 2081-04-16.
-- `today()` uses the local zone (ADR-0011). PORT-PLAN also asks for "today" with an explicit
-  zone defaulting to `Asia/Kathmandu`; that API does not exist in `docs/API.md` and is waiting
-  for a human decision. Don't add it.
+- `today()` uses `Asia/Kathmandu` and `today_in(tz)` takes the zone (ADR-0011, revised
+  2026-10-10, PORT-PLAN phase 4, PARITY D-14).
 
 ### L5-05 `chrono` feature
 `chrono = { version = "0.4", default-features = false, optional = true }`. Conversions only.
