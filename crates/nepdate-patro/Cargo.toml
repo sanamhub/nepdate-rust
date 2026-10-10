@@ -16,5 +16,16 @@ name = "nepdate_patro"
 # Same minor as this crate (hub ADR-0004 §3). L6-07 changes it to "~0.1.0".
 nepdate = { path = "../nepdate", version = "~0.0.0", default-features = false }
 
+[[test]]
+name = "no_alloc"
+harness = false
+
+# The C# catalogue's DateTimeExtensionsTests rows test the core's jiff and chrono conversions
+# (L5-07). Same jiff features as the core, so no system time zone code is built.
+[dev-dependencies]
+nepdate = { path = "../nepdate", features = ["jiff", "chrono"] }
+jiff = { version = "0.2", default-features = false, features = ["std", "tzdb-bundle-platform", "tzdb-zoneinfo", "tzdb-concatenated"] }
+chrono = { version = "0.4", default-features = false }
+
 [lints]
 workspace = true

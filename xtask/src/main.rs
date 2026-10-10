@@ -125,6 +125,7 @@ const STEPS: &[Step] = &[
     step("cargo", &["xtask", "catalog-check", "1"]),
     step("cargo", &["xtask", "catalog-check", "2"]),
     step("cargo", &["xtask", "catalog-check", "3"]),
+    step("cargo", &["xtask", "catalog-check", "4"]),
     // L5-06: each feature combination on its own, since `cargo hack` isn't in the budget.
     step(
         "cargo",

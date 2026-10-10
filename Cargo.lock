@@ -158,6 +158,8 @@ dependencies = [
 name = "nepdate-patro"
 version = "0.0.0"
 dependencies = [
+ "chrono",
+ "jiff",
  "nepdate",
 ]
 
