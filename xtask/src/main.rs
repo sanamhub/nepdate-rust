@@ -1,7 +1,8 @@
 //! Repository tasks: `cargo xtask ci` runs every quality gate, `cargo xtask codegen` writes the
 //! generated tables (ADR-0006), `cargo xtask catalog-check <phase>` checks the C# test catalogue
 //! (L2-08), `cargo xtask data-status` reports how far the patro data reaches (L5-01b) and
-//! `cargo xtask check-core-has-no-patro` keeps patro data out of the core (L5-06). Arguments
+//! `cargo xtask check-core-has-no-patro` keeps patro data out of the core (L5-06),
+//! `cargo xtask release-check` and `cargo xtask changelog` prepare a release (L6-04). Arguments
 //! are read from `std::env::args()` to keep this tiny.
 
 mod catalog;
@@ -9,6 +10,7 @@ mod codegen;
 mod core_check;
 mod data_status;
 mod patro;
+mod release;
 
 use std::process::{Command, ExitCode};
 
@@ -26,10 +28,12 @@ fn main() -> ExitCode {
         ["data-status"] => data_status::run(None),
         ["data-status", "--today", today] => data_status::run(Some(today)),
         ["check-core-has-no-patro"] => core_check::run(),
+        ["release-check", package, version] => release::run_check(package, version),
+        ["changelog", package, version] => release::run_changelog(package, version),
         _ => {
             eprintln!(
                 "usage: cargo xtask <ci | codegen [--check] | catalog-check <phase> [--list] | \
-                 data-status [--today YYYY-MM-DD] | check-core-has-no-patro>"
+                 data-status [--today YYYY-MM-DD] | check-core-has-no-patro |                  release-check <package> <version> | changelog <package> <version>>"
             );
             return ExitCode::from(2);
         }

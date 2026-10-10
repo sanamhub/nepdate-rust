@@ -1,0 +1,405 @@
+//! `cargo xtask release-check <package> <version>` and `cargo xtask changelog <package> <version>`
+//! (L6-04, ADR-0012). `<package>` is `nepdate` (both library crates, released together) or
+//! `nepdate-widget`. The checks work on file contents, so the tests use small strings.
+
+use std::fmt::Write as _;
+use std::fs;
+use std::path::Path;
+
+use anyhow::{Context, Result, bail};
+
+use crate::codegen::workspace_root;
+
+const REPO: &str = "https://github.com/sanamhub/nepdate-rust";
+
+/// The files of one package, read once.
+struct Package {
+    name: &'static str,
+    manifest: String,
+    changelog: String,
+}
+
+impl Package {
+    fn read(root: &Path, name: &'static str, dir: &str) -> Result<Self> {
+        let dir = root.join(dir);
+        let read = |file: &str| {
+            let path = dir.join(file);
+            fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))
+        };
+        Ok(Self {
+            name,
+            manifest: read("Cargo.toml")?,
+            changelog: read("CHANGELOG.md")?,
+        })
+    }
+}
+
+/// The packages a release tag covers: `nepdate` releases both library crates (ADR-0002).
+fn packages(package: &str) -> Result<Vec<Package>> {
+    let root = workspace_root();
+    match package {
+        "nepdate" => Ok(vec![
+            Package::read(&root, "nepdate", "crates/nepdate")?,
+            Package::read(&root, "nepdate-patro", "crates/nepdate-patro")?,
+        ]),
+        "nepdate-widget" => Ok(vec![Package::read(
+            &root,
+            "nepdate-widget",
+            "apps/nepdate-widget",
+        )?]),
+        other => bail!("unknown package `{other}`: expected nepdate or nepdate-widget"),
+    }
+}
+
+pub(crate) fn run_check(package: &str, version: &str) -> Result<()> {
+    let problems = check(&packages(package)?, version);
+    if problems.is_empty() {
+        println!("release-check: {package} {version} is ready");
+        Ok(())
+    } else {
+        for problem in &problems {
+            eprintln!("release-check: {problem}");
+        }
+        bail!(
+            "release-check: {package} {version} failed with {} problem(s)",
+            problems.len()
+        )
+    }
+}
+
+pub(crate) fn run_changelog(package: &str, version: &str) -> Result<()> {
+    if !is_version(version) {
+        bail!("`{version}` is not a version like 1.2.3 or 1.2.3-beta.1");
+    }
+    print!("{}", notes(package, &packages(package)?, version)?);
+    Ok(())
+}
+
+/// Every problem that stops a release of `packages` at `version`; empty when it may go out.
+fn check(packages: &[Package], version: &str) -> Vec<String> {
+    let mut problems = Vec::new();
+    if !is_version(version) {
+        problems.push(format!(
+            "`{version}` is not a version like 1.2.3 or 1.2.3-beta.1"
+        ));
+        return problems;
+    }
+    for package in packages {
+        match package_version(&package.manifest) {
+            Some(found) if found == version => {}
+            Some(found) => problems.push(format!(
+                "{}: Cargo.toml has version {found}, expected {version}",
+                package.name
+            )),
+            None => problems.push(format!("{}: Cargo.toml has no version", package.name)),
+        }
+        if section(&package.changelog, version).is_none() {
+            problems.push(format!(
+                "{}: CHANGELOG.md has no `## [{version}]` section",
+                package.name
+            ));
+        }
+    }
+    // The patro crate follows the core's minor version (hub ADR-0004 §3, ADR-0002).
+    if let Some(patro) = packages.iter().find(|p| p.name == "nepdate-patro") {
+        let expected = core_requirement(version);
+        match dependency_version(&patro.manifest, "nepdate") {
+            Some(found) if found == expected => {}
+            Some(found) => problems.push(format!(
+                "nepdate-patro: requires nepdate `{found}`, expected `{expected}`"
+            )),
+            None => problems.push("nepdate-patro: no version on its nepdate dependency".into()),
+        }
+    }
+    problems
+}
+
+/// The release notes: each package's changelog section, then Install and Verification.
+fn notes(package: &str, packages: &[Package], version: &str) -> Result<String> {
+    let mut out = String::new();
+    let several = packages.len() > 1;
+    for p in packages {
+        let text = section(&p.changelog, version)
+            .with_context(|| format!("{}: CHANGELOG.md has no `## [{version}]` section", p.name))?;
+        if several {
+            // One level down, so each crate's "### Added" sits under its "### <crate>".
+            let _ = write!(out, "### {}\n\n", p.name);
+            for line in text.lines() {
+                if line.starts_with("### ") {
+                    out.push('#');
+                }
+                out.push_str(line);
+                out.push('\n');
+            }
+        } else {
+            out.push_str(text);
+            out.push('\n');
+        }
+        out.push('\n');
+    }
+    // ADR-0012 tag names: nepdate-vX.Y.Z and widget-vX.Y.Z.
+    let tag_prefix = if package == "nepdate-widget" {
+        "widget"
+    } else {
+        package
+    };
+    let tag = format!("{tag_prefix}-v{version}");
+    if package == "nepdate-widget" {
+        let _ = write!(
+            out,
+            "### Install\n\nDownload the installer for your system from the assets below.\n\n\
+             ### Verification\n\nCheck the download against `SHA256SUMS`, or its build \
+             provenance with `gh attestation verify <file> --repo sanamhub/nepdate-rust`.\n\n\
+             Full changelog: {REPO}/blob/{tag}/apps/nepdate-widget/CHANGELOG.md\n"
+        );
+    } else {
+        let mut install = String::new();
+        let mut links = Vec::new();
+        for p in packages {
+            let _ = writeln!(install, "cargo add {}@{version}", p.name);
+            links.push(format!(
+                "[{}]({REPO}/blob/{tag}/crates/{}/CHANGELOG.md)",
+                p.name, p.name
+            ));
+        }
+        let _ = write!(
+            out,
+            "### Install\n\n```sh\n{install}```\n\n\
+             ### Verification\n\nPublished to crates.io by trusted publishing from the \
+             `release-lib.yml` workflow of {REPO}, so no long-lived token was used. \
+             Full changelogs: {}.\n",
+            links.join(", ")
+        );
+    }
+    Ok(out)
+}
+
+/// `1.2.3` or `1.2.3-pre`: three numbers, then an optional prerelease after `-`.
+fn is_version(text: &str) -> bool {
+    let core = text.split_once('-').map_or(text, |(core, _)| core);
+    let parts: Vec<&str> = core.split('.').collect();
+    parts.len() == 3
+        && parts
+            .iter()
+            .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+        && !text.ends_with('-')
+}
+
+/// `~X.Y.0` for version `X.Y.Z`: the requirement `nepdate-patro` must have on `nepdate`.
+fn core_requirement(version: &str) -> String {
+    let mut parts = version.split(['.', '-']);
+    let major = parts.next().unwrap_or("0");
+    let minor = parts.next().unwrap_or("0");
+    format!("~{major}.{minor}.0")
+}
+
+/// The lines of one TOML table (`[package]`), without the header.
+fn table<'a>(toml: &'a str, name: &str) -> impl Iterator<Item = &'a str> {
+    let header = format!("[{name}]");
+    toml.lines()
+        .map(str::trim)
+        .skip_while(move |line| *line != header)
+        .skip(1)
+        .take_while(|line| !line.starts_with('['))
+}
+
+/// The value of `key = "value"` on one line.
+fn string_value<'a>(line: &'a str, key: &str) -> Option<&'a str> {
+    let rest = line.strip_prefix(key)?.trim_start().strip_prefix('=')?;
+    let rest = rest.trim_start().strip_prefix('"')?;
+    rest.split_once('"').map(|(value, _)| value)
+}
+
+fn package_version(manifest: &str) -> Option<&str> {
+    table(manifest, "package").find_map(|line| string_value(line, "version"))
+}
+
+/// `version` inside `name = { ... version = "..." ... }` under `[dependencies]`.
+fn dependency_version<'a>(manifest: &'a str, name: &str) -> Option<&'a str> {
+    let line = table(manifest, "dependencies").find(|line| {
+        line.strip_prefix(name)
+            .is_some_and(|rest| rest.trim_start().starts_with('='))
+    })?;
+    let at = line.find("version")?;
+    string_value(line.get(at..)?, "version")
+}
+
+/// The body of `## [version]` (heading and surrounding blank lines left out), up to the next
+/// `## ` heading or the end of the file.
+fn section<'a>(changelog: &'a str, version: &str) -> Option<&'a str> {
+    let heading = format!("## [{version}]");
+    let mut offset = 0;
+    let mut start = None;
+    for line in changelog.split_inclusive('\n') {
+        let trimmed = line.trim_end();
+        match start {
+            None if trimmed == heading || trimmed.starts_with(&format!("{heading} ")) => {
+                start = Some(offset + line.len());
+            }
+            Some(begin) if trimmed.starts_with("## ") => {
+                return Some(changelog.get(begin..offset)?.trim());
+            }
+            _ => {}
+        }
+        offset += line.len();
+    }
+    start
+        .and_then(|begin| changelog.get(begin..))
+        .map(str::trim)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn manifest(version: &str, dep: Option<&str>) -> String {
+        let mut text = format!("[package]\nname = \"x\"\nversion = \"{version}\"\n");
+        if let Some(dep) = dep {
+            let _ = write!(
+                text,
+                "\n[dependencies]\nnepdate = {{ path = \"../nepdate\", version = \"{dep}\", default-features = false }}\n"
+            );
+        }
+        text
+    }
+
+    const CHANGELOG: &str = "# Changelog\n\n## [Unreleased]\n\n## [0.1.0] - 2026-10-10\n\n\
+                             ### Added\n\n- Everything.\n\n## [0.0.1] - 2026-01-01\n\n- Old.\n";
+
+    fn pair(core: &str, patro: &str, dep: &str, changelog: &str) -> Vec<Package> {
+        vec![
+            Package {
+                name: "nepdate",
+                manifest: manifest(core, None),
+                changelog: changelog.into(),
+            },
+            Package {
+                name: "nepdate-patro",
+                manifest: manifest(patro, Some(dep)),
+                changelog: changelog.into(),
+            },
+        ]
+    }
+
+    #[test]
+    fn ready_pair_passes() {
+        assert!(check(&pair("0.1.0", "0.1.0", "~0.1.0", CHANGELOG), "0.1.0").is_empty());
+    }
+
+    #[test]
+    fn missing_section_fails() {
+        let problems = check(&pair("0.2.0", "0.2.0", "~0.2.0", CHANGELOG), "0.2.0");
+        assert_eq!(problems.len(), 2, "{problems:?}");
+        assert!(
+            problems
+                .iter()
+                .all(|p| p.contains("no `## [0.2.0]` section"))
+        );
+    }
+
+    #[test]
+    fn wrong_version_fails() {
+        let problems = check(&pair("0.0.9", "0.1.0", "~0.1.0", CHANGELOG), "0.1.0");
+        assert_eq!(
+            problems,
+            ["nepdate: Cargo.toml has version 0.0.9, expected 0.1.0"]
+        );
+    }
+
+    #[test]
+    fn patro_version_differs_fails() {
+        let problems = check(&pair("0.1.0", "0.1.1", "~0.1.0", CHANGELOG), "0.1.0");
+        assert_eq!(
+            problems,
+            ["nepdate-patro: Cargo.toml has version 0.1.1, expected 0.1.0"]
+        );
+    }
+
+    #[test]
+    fn old_core_requirement_fails() {
+        let problems = check(&pair("0.1.0", "0.1.0", "~0.0.0", CHANGELOG), "0.1.0");
+        assert_eq!(
+            problems,
+            ["nepdate-patro: requires nepdate `~0.0.0`, expected `~0.1.0`"]
+        );
+    }
+
+    #[test]
+    fn patch_release_keeps_the_minor_requirement() {
+        assert_eq!(core_requirement("0.1.3"), "~0.1.0");
+        assert_eq!(core_requirement("1.2.0-beta.1"), "~1.2.0");
+    }
+
+    #[test]
+    fn bad_version_text_fails() {
+        for bad in ["0.1", "v0.1.0", "0.1.0-", "0.1.x", ""] {
+            assert!(!is_version(bad), "{bad}");
+        }
+        assert!(is_version("0.2.0-beta.1"));
+    }
+
+    #[test]
+    fn section_in_the_middle() {
+        assert_eq!(
+            section(CHANGELOG, "0.1.0"),
+            Some("### Added\n\n- Everything.")
+        );
+        assert_eq!(section(CHANGELOG, "Unreleased"), Some(""));
+    }
+
+    #[test]
+    fn section_last_in_file() {
+        assert_eq!(section(CHANGELOG, "0.0.1"), Some("- Old."));
+        assert_eq!(section("## [1.0.0]\n- Last.", "1.0.0"), Some("- Last."));
+    }
+
+    #[test]
+    fn section_needs_the_exact_version() {
+        assert_eq!(section(CHANGELOG, "0.1"), None);
+        assert_eq!(section(CHANGELOG, "0.0.10"), None);
+    }
+
+    #[test]
+    fn crlf_files_work() {
+        let text = CHANGELOG.replace('\n', "\r\n");
+        assert_eq!(section(&text, "0.0.1").map(str::trim), Some("- Old."));
+        let manifest = manifest("0.1.0", Some("~0.1.0")).replace('\n', "\r\n");
+        assert_eq!(package_version(&manifest), Some("0.1.0"));
+        assert_eq!(dependency_version(&manifest, "nepdate"), Some("~0.1.0"));
+    }
+
+    #[test]
+    fn dev_dependency_is_not_the_requirement() {
+        let text = "[package]\nversion = \"0.1.0\"\n[dependencies]\nnepdate-x = { version = \"9\" }\n\
+                    [dev-dependencies]\nnepdate = { version = \"~0.1.0\" }\n";
+        assert_eq!(dependency_version(text, "nepdate"), None);
+    }
+
+    #[test]
+    fn notes_for_the_pair() {
+        let text = notes(
+            "nepdate",
+            &pair("0.1.0", "0.1.0", "~0.1.0", CHANGELOG),
+            "0.1.0",
+        )
+        .unwrap_or_default();
+        assert!(
+            text.starts_with("### nepdate\n\n#### Added\n\n- Everything.\n\n### nepdate-patro\n")
+        );
+        assert!(text.contains("cargo add nepdate@0.1.0\ncargo add nepdate-patro@0.1.0\n"));
+        assert!(text.contains("/blob/nepdate-v0.1.0/crates/nepdate-patro/CHANGELOG.md"));
+        assert!(!text.contains("## [0.1.0]"));
+    }
+
+    #[test]
+    fn notes_need_the_section() {
+        assert!(
+            notes(
+                "nepdate",
+                &pair("0.2.0", "0.2.0", "~0.2.0", CHANGELOG),
+                "0.2.0"
+            )
+            .is_err()
+        );
+    }
+}
