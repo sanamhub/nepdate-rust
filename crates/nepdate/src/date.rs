@@ -377,8 +377,8 @@ impl From<NepaliDate> for GregorianDate {
 impl fmt::Display for NepaliDate {
     /// `YYYY/MM/DD`, zero padded, ASCII digits (FORMATTING §2).
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.short(DateOrder::Ymd, Separator::Slash, true, Lang::En)
-            .write_to(f)
+        let short = self.short(DateOrder::Ymd, Separator::Slash, true, Lang::En);
+        crate::format::write_once(f, |out| short.write_to(out))
     }
 }
 
