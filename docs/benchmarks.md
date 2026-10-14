@@ -52,7 +52,7 @@ rows: the allocation-free `write_to` and, for comparison, `to_string` (which all
 | B3 | add 1000 days | 3.19 | 0 | 17.50 | 0 | ≤ 8 |
 | B4 | add 13 months, Clamp | 2.60 | 0 | 18.85 | 0 | ≤ 8 |
 | B5 | long Nepali date with weekday, `write_to` | 16.04 | 0 | 153.02 | 435 | ≤ 40 |
-| B5 | long Nepali date with weekday, `to_string` (allocates, for comparison) | 267.81 | 141 | 153.02 | 435 | - |
+| B5 | long Nepali date with weekday, `to_string` (allocates, for comparison) | 128.91 | 55 | 153.02 | 435 | - |
 | B6 | strict parse `YYYY/MM/DD` | 18.38 | 0 | 21.55 | 0 | ≤ 20 |
 | B7 | patro info of a day | 3.46 | 0 | 47.93 | 51 | ≤ 10 |
 | B8 | patro month grid | 298.80 | 0 | 3,132.66 | 1,429 | ≤ 250 |
@@ -63,8 +63,9 @@ report a miss rather than speculate. See the note below.
 
 ### Competitors (B1 and B2 only)
 
-The `agree` binary compares each competitor with `nepdate` on the 64 dates. A rejected input
-counts as a difference, so a fast wrong answer is never listed as agreeing.
+The `agree` binary compares each competitor with `nepdate` on the 64 dates and prints every
+differing date with both answers. A rejected input counts as a difference, so a fast wrong
+answer is never listed as agreeing.
 
 | ID | Competitor | ns/op | agrees |
 |---|---|---:|---|
@@ -77,15 +78,42 @@ counts as a difference, so a fast wrong answer is never listed as agreeing.
 | B2 | nepali-date-converter (includes string parsing) | 113.35 | no (7 of 64 differ) |
 | B2 | nepdate-cli | 147.12 | no (3 of 64 differ) |
 
-`adtobs` B2 ran over the 62 inputs its AD range accepts: its `1944..=2033` range rejects the AD
-equivalents of BS 2000-01-01 (AD 1943-04-14) and BS 2090-12-30 (AD 2034). Those two count as
-"differ" above.
+`adtobs` B2 ran over the 62 inputs its AD range accepts: its `1944..=2033` range rejects AD
+1943-04-14 (BS 2000-01-01) and AD 2034-03-08 (BS 2090-11-24, the last of the 64 inputs). Those
+two count as "differ" above.
+
+Apart from those two rejections, every difference is one or two days, in both directions for
+the same dates: the competitor uses a different length for some month of that BS year, so it
+is a disagreement about the calendar table, not about the conversion arithmetic. `nepdate`
+uses the hub's table (`shared/data`, the same as the C# NepDate library and checked against its
+golden files). The differing dates, as `agree` prints them:
+
+| BS date (nepdate) | AD (nepdate) | npdatetime | adtobs | nepali-date-converter | nepdate-cli |
+|---|---|---|---|---|---|
+| 2073-07-28 | 2016-11-13 | same | same | 2016-11-14 | same |
+| 2079-05-06 | 2022-08-22 | same | same | 2022-08-23 | same |
+| 2083-09-05 | 2026-12-20 | same | same | 2026-12-21 | same |
+| 2085-02-17 | 2028-05-30 | same | same | 2028-05-31 | same |
+| 2086-07-23 | 2029-11-08 | same | 2029-11-09 | 2029-11-09 | 2029-11-09 |
+| 2088-01-04 | 2031-04-19 | 2031-04-18 | 2031-04-18 | 2031-04-18 | 2031-04-17 |
+| 2089-06-10 | 2032-09-27 | 2032-09-26 | 2032-09-26 | 2032-09-26 | 2032-09-26 |
+
+The first four rows are past or current years, which a reader can check against a published
+calendar. BS years after the current one have no official calendar yet, so every library,
+`nepdate` included, ships a projection for them; differences there show that the projections
+differ, not which one is right.
 
 ## Notes
 
 - `alloc` prints 0 calls and 0 bytes for every library B-operation; the only allocating row is
-  the labelled B5 `to_string` (3 allocations, 141 bytes per call over the 64 dates). The
-  `crates/*/tests/no_alloc.rs` tests enforce the 0 bytes in CI.
+  the labelled B5 `to_string`: one allocation per call, of the exact length (55 bytes on
+  average over the 64 dates). `Display` collects the pieces on the stack and hands the
+  `String` one write; before that change it was 3 allocations, 141 bytes and 267.81 ns per
+  call. The `crates/*/tests/no_alloc.rs` tests enforce the 0 bytes, and the single exact-size
+  allocation of `to_string`, in CI.
+- The B5 `to_string` row was measured on 2026-10-15 after that change, with the machine at
+  about 59 % load (the C++ port's build); the `write_to` row ran about 20 % slower in the same
+  run, so 128.91 ns is if anything high.
 - B8 reads the tithi, holiday flag and every event name (both languages) for every day of the
   month, as the plan specifies. That is heavier than the ADR-0004 prototype (which measured a
   lighter read at 209 ns quiet / 285 ns busy), and the run above was not on a fully idle machine.
