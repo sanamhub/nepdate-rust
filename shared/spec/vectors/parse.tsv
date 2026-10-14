@@ -62,3 +62,7 @@ Shr 15 2080	ERR:InvalidCharacter	2080-04-15
 Shr.15 2080	ERR:InvalidCharacter	ERR:Unrecognized
 15.Shrawan.2080	ERR:InvalidCharacter	ERR:Unrecognized
 B.S. 2080 Shrawan 15	ERR:InvalidCharacter	2080-04-15
+15 Kartik 2080	ERR:InvalidCharacter	2080-07-15
+15 ſhrawan 2080	ERR:InvalidCharacter	ERR:Unrecognized
+15 Ashwın 2080	ERR:InvalidCharacter	ERR:Unrecognized
+15 Shrawan 2080 Bſ	ERR:InvalidCharacter	ERR:Unrecognized

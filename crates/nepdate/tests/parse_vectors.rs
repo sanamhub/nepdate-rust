@@ -49,5 +49,5 @@ fn every_row_both_columns() {
         assert_eq!(lenient, expected(cols[2]), "lenient {input:?}");
         count += 1;
     }
-    assert_eq!(count, 63);
+    assert_eq!(count, 67);
 }

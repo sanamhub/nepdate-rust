@@ -78,7 +78,8 @@ def pattern(t,p,ne=False):
     out=[]; i=0
     while i<len(p):
         c=p[i]
-        if c=='\\' and i+1<len(p): out.append(p[i+1]); i+=2; continue
+        if c=='\\':   # FORMATTING §5: escapes the next char; a trailing backslash writes nothing
+            out.append(p[i+1:i+2]); i+=2; continue
         if c=="'":
             j=p.find("'",i+1); j=len(p) if j<0 else j; out.append(p[i+1:j]); i=j+1; continue
         if c in 'yMd':
@@ -172,10 +173,18 @@ def lenient(s):
 PARSE_FILE = ROOT/'spec/vectors/parse.tsv'
 TAB, NL = '\t', '\n'
 if '--write-parse-vectors' in sys.argv:
-    inputs = [r['input'] for r in rd('parse.tsv')] + [
+    # Existing rows first (some were added by hand), then the C# golden inputs, then the list
+    # below; dict.fromkeys keeps the first occurrence, so regenerating never drops or reorders
+    # a row.
+    existing = [r['input'] for r in csv.DictReader(open(PARSE_FILE, encoding='utf-8'),
+                delimiter=TAB, quoting=csv.QUOTE_NONE)] if PARSE_FILE.exists() else []
+    inputs = existing + [r['input'] for r in rd('parse.tsv')] + [
         '15.04.2080', '15-04-080', '2080/04/15/', '2080 Shrawan 15', 'Shrawan Bhadra 2080', '15 Foo 2080',
         '12345/01/01', '2080/01/32', '2080/02/32', '२०८०-०४-३२ बि.सं.', '2080/04/15 VS', 'Shr 15 2080',
-        '15 SHRAWAN 2080', '15 shrawan 80', '2080/4/15 ', '٢٠٨٠/٠٥/١٥', '2080 Shrawan ²']
+        '15 SHRAWAN 2080', '15 shrawan 80', '2080/4/15 ', '٢٠٨٠/٠٥/١٥', '2080 Shrawan ²',
+        # Case folding is str.lower() onto ASCII only (PARSING §2): Kelvin sign yes, long s and
+        # dotless i no, and the same for era markers.
+        '15 Kartik 2080', '15 ſhrawan 2080', '15 Ashwın 2080', '15 Shrawan 2080 Bſ']
     with open(PARSE_FILE, 'w', encoding='utf-8', newline=NL) as f:
         f.write('input' + TAB + 'strict' + TAB + 'lenient' + NL)
         for x in dict.fromkeys(inputs):
