@@ -36,6 +36,29 @@ jobs:
           tool: cargo-deny,cargo-nextest
       - run: cargo xtask ci
 
+  # W0-04: the widget's own gate. Slint's MSRV is 1.92, satisfied by the 1.98 toolchain.
+  # Linux needs winit's system libraries to link.
+  widget:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libfontconfig1-dev libdbus-1-dev
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # v1
+        with:
+          toolchain: "1.98"
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@63fed3e2fecf6f7b51dc6f043341b79ef82a9ae7 # v2.9.2
+      - run: cargo clippy -p nepdate-widget -- -D warnings
+      - run: cargo test -p nepdate-widget
+
   # L6-06: fails when shared/ differs from the hub at the commit in shared/VERSION (ADR-0003).
   shared-check:
     permissions:
