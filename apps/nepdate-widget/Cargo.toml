@@ -1,0 +1,31 @@
+[package]
+name = "nepdate-widget"
+version = "0.0.0"
+description = "Tray calendar widget for the nepdate crate"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version = "1.92" # Slint MSRV, higher than the libraries' 1.85
+publish = false
+
+[dependencies]
+# femtovg only (ADR-0010). The default `renderer-software` feature pulls Slint's fontique/skrifa
+# stack, whose `raw-dylib` imports segfault under the windows-gnu toolchain's dlltool shim.
+slint = { version = "1.18", default-features = false, features = [
+    "std",
+    "backend-default",
+    "renderer-femtovg",
+    "accessibility",
+    "compat-1-2",
+    "system-tray",
+] }
+nepdate = { path = "../../crates/nepdate" }
+jiff = "0.2"
+anyhow = "1"
+
+[build-dependencies]
+# Same reason: no `renderer-software` in the compiler.
+slint-build = { version = "1.18", default-features = false, features = ["compat-1-18"] }
+
+[lints]
+workspace = true

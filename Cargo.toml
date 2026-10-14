@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/nepdate", "crates/nepdate-patro", "xtask", "benches/nepdate-bench"]    # apps/nepdate-widget is added in W0
+members = ["crates/nepdate", "crates/nepdate-patro", "xtask", "benches/nepdate-bench", "apps/nepdate-widget"]
 default-members = ["crates/nepdate", "crates/nepdate-patro"]
 exclude = ["fuzz"]                             # cargo-fuzz crate, needs nightly (L4-07)
 

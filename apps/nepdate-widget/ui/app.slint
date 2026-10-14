@@ -1,0 +1,28 @@
+// The main window (W0-01). Shows today's BS date in both languages. The fonts are imported in
+// W0-02; until then the system font renders the text.
+
+export component AppWindow inherits Window {
+    title: "nepdate";
+    preferred-width: 360px;
+    preferred-height: 160px;
+    background: #FDFBF8; // surface, docs/plan/widget-design.md
+
+    in property <string> bs-en: "";
+    in property <string> bs-ne: "";
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 8px;
+
+        Text {
+            text: root.bs-en;
+            color: #211C17; // ink
+            font-size: 16px;
+        }
+        Text {
+            text: root.bs-ne;
+            color: #211C17; // ink
+            font-size: 22px;
+        }
+    }
+}
