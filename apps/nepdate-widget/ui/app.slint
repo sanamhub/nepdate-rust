@@ -1,11 +1,13 @@
-// The main window (W0-01). Shows today's BS date in both languages. The fonts are imported in
-// W0-02; until then the system font renders the text.
+// The main window. Shows today's BS date in both languages, in the bundled fonts.
+import "fonts/NotoSans-Variable.ttf";
+import "fonts/NotoSansDevanagari-Variable.ttf";
 
 export component AppWindow inherits Window {
     title: "nepdate";
     preferred-width: 360px;
     preferred-height: 160px;
     background: #FDFBF8; // surface, docs/plan/widget-design.md
+    default-font-family: "Noto Sans";
 
     in property <string> bs-en: "";
     in property <string> bs-ne: "";
@@ -23,6 +25,7 @@ export component AppWindow inherits Window {
             text: root.bs-ne;
             color: #211C17; // ink
             font-size: 22px;
+            font-family: "Noto Sans Devanagari";
         }
     }
 }
