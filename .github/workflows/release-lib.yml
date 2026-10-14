@@ -25,28 +25,43 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
+      # Full history, so the tagged commit can be checked against main below.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # v1
         with:
           toolchain: "1.98"
+      # The version comes from the tag (or Cargo.toml) and is validated before anything uses
+      # it; later steps get it through env, never through ${{ }} inside a script, so a crafted
+      # tag name can't inject shell.
       - name: Resolve the version
         id: version
         run: |
           set -euo pipefail
           if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
             version="${GITHUB_REF_NAME#nepdate-v}"
-            if [[ "$GITHUB_REF_NAME" != "nepdate-v$version" ]]; then
-              echo "::error::tag must look like nepdate-vX.Y.Z"
-              exit 1
-            fi
           else
             version="$(sed -n 's/^version = "\(.*\)"/\1/p' crates/nepdate/Cargo.toml | head -n1)"
           fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::version must look like X.Y.Z or X.Y.Z-pre.N (tag nepdate-vX.Y.Z)"
+            exit 1
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: The tagged commit is on main
+        if: github.ref_type == 'tag'
+        run: |
+          set -euo pipefail
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::tag $GITHUB_REF_NAME points at a commit that is not on main"
+            exit 1
+          fi
       - name: Release check
-        run: cargo xtask release-check nepdate "${{ steps.version.outputs.version }}"
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: cargo xtask release-check nepdate "$VERSION"
       # semver-checks compares against the previous published version, so it starts at 0.1.1.
       - name: Install cargo-semver-checks
         if: steps.version.outputs.version != '0.1.0'
@@ -85,7 +100,9 @@ jobs:
 
   publish:
     needs: [preflight, ci]
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.dry-run == false)
+    # Only from a tag: a manual run on a branch is always a dry run, so it can never publish or
+    # create a GitHub release named after the branch.
+    if: github.ref_type == 'tag' && (github.event_name == 'push' || inputs.dry-run == false)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: production
