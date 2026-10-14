@@ -196,6 +196,30 @@ static MONTH_ALIASES: [(&str, u8); 80] = [
     ("चैत्र", 12),
 ];
 
+/// The Kelvin sign U+212A in UTF-8.
+const KELVIN: [u8; 3] = [0xE2, 0x84, 0xAA];
+
+/// Whether `token` equals `entry` under the folding of PARSING §2: `A` to `Z` fold to lower
+/// case and the Kelvin sign folds to `k`, which is what Python `str.lower()` maps onto ASCII.
+/// Nothing else folds. `entry` is lower case (checked by a test).
+fn fold_eq(token: &str, entry: &str) -> bool {
+    let (t, e) = (token.as_bytes(), entry.as_bytes());
+    let (mut i, mut j) = (0, 0);
+    while let Some(&c) = t.get(i) {
+        let (folded, width) = if t.get(i..i + 3) == Some(&KELVIN[..]) {
+            (b'k', 3)
+        } else {
+            (c.to_ascii_lowercase(), 1)
+        };
+        if e.get(j) != Some(&folded) {
+            return false;
+        }
+        i += width;
+        j += 1;
+    }
+    j == e.len()
+}
+
 /// Era markers and the words `गते` and `मिति`, dropped by the lenient parser (PARSING §2).
 static IGNORED_TOKENS: [&str; 12] = [
     "bs",
@@ -251,13 +275,10 @@ impl Tokens {
     }
 
     fn push_word(&mut self, word: &str) {
-        if word.is_empty() || IGNORED_TOKENS.iter().any(|t| t.eq_ignore_ascii_case(word)) {
+        if word.is_empty() || IGNORED_TOKENS.iter().any(|t| fold_eq(word, t)) {
             return;
         }
-        match MONTH_ALIASES
-            .iter()
-            .find(|(alias, _)| alias.eq_ignore_ascii_case(word))
-        {
+        match MONTH_ALIASES.iter().find(|(alias, _)| fold_eq(word, alias)) {
             Some(&(_, m)) => {
                 self.month = Some(m);
                 self.month_count += 1;
@@ -534,5 +555,28 @@ mod tests {
             assert!((1..=12).contains(&m));
             assert!(!alias.bytes().any(|c| c.is_ascii_uppercase()), "{alias}");
         }
+        for token in IGNORED_TOKENS {
+            assert!(!token.bytes().any(|c| c.is_ascii_uppercase()), "{token}");
+        }
+    }
+
+    #[test]
+    fn fold_eq_folds_like_str_lower_onto_ascii() {
+        assert!(fold_eq("SHRAWAN", "shrawan"));
+        assert!(fold_eq("ShRaWaN", "shrawan"));
+        assert!(
+            fold_eq("\u{212A}artik", "kartik"),
+            "the Kelvin sign folds to k"
+        );
+        assert!(
+            !fold_eq("\u{17F}hrawan", "shrawan"),
+            "the long s does not fold"
+        );
+        assert!(!fold_eq("\u{131}", "i"), "the dotless i does not fold");
+        assert!(!fold_eq("B\u{17F}", "bs"));
+        assert!(!fold_eq("shrawa", "shrawan"));
+        assert!(!fold_eq("shrawann", "shrawan"));
+        assert!(fold_eq("", ""));
+        assert!(fold_eq("श्रावण", "श्रावण"));
     }
 }
