@@ -1,0 +1,25 @@
+# L6-06: weekly sync of `shared/` with the hub (ADR-0003). Runs the hub's reusable workflow,
+# pinned to a full hub commit SHA. The reusable workflow reads `vars.SYNC_APP_ID` and
+# `secrets.SYNC_APP_PRIVATE_KEY` from this repository and opens one PR on `bot/shared-sync`.
+
+name: shared-sync
+
+on:
+  schedule:
+    # Weekly, Tuesday 03:15 UTC (hub data-update runbook).
+    - cron: "15 3 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: sanamhub/nepdate/.github/workflows/shared-sync.yml@e2f977849877be6828e6d6ebbb638fcf708638e7
+    with:
+      regenerate: cargo xtask codegen
+    secrets:
+      SYNC_APP_PRIVATE_KEY: ${{ secrets.SYNC_APP_PRIVATE_KEY }}

@@ -36,6 +36,12 @@ jobs:
           tool: cargo-deny,cargo-nextest
       - run: cargo xtask ci
 
+  # L6-06: fails when shared/ differs from the hub at the commit in shared/VERSION (ADR-0003).
+  shared-check:
+    permissions:
+      contents: read
+    uses: sanamhub/nepdate/.github/workflows/shared-check.yml@e2f977849877be6828e6d6ebbb638fcf708638e7
+
   # L6-03: not a `cargo xtask ci` step, because llvm-cov needs the llvm-tools component.
   coverage:
     runs-on: ubuntu-latest
