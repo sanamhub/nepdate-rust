@@ -1,5 +1,5 @@
-//! Repository tasks: `cargo xtask ci` runs every quality gate, `cargo xtask codegen` writes the
-//! generated tables (ADR-0006), `cargo xtask catalog-check <phase>` checks the C# test catalogue
+//! Repository tasks: `cargo xtask ci` runs every quality gate, `cargo xtask coverage` the
+//! coverage gate (L6-03), `cargo xtask codegen` writes the generated tables (ADR-0006), `cargo xtask catalog-check <phase>` checks the C# test catalogue
 //! (L2-08), `cargo xtask data-status` reports how far the patro data reaches (L5-01b) and
 //! `cargo xtask check-core-has-no-patro` keeps patro data out of the core (L5-06),
 //! `cargo xtask release-check` and `cargo xtask changelog` prepare a release (L6-04). Arguments
@@ -21,6 +21,7 @@ fn main() -> ExitCode {
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
     let result = match args.as_slice() {
         ["ci"] => ci(),
+        ["coverage"] => run(&COVERAGE),
         ["codegen"] => codegen::run(false),
         ["codegen", "--check"] => codegen::run(true),
         ["catalog-check", phase] => catalog::run(phase, false),
@@ -32,7 +33,7 @@ fn main() -> ExitCode {
         ["changelog", package, version] => release::run_changelog(package, version),
         _ => {
             eprintln!(
-                "usage: cargo xtask <ci | codegen [--check] | catalog-check <phase> [--list] | \
+                "usage: cargo xtask <ci | coverage | codegen [--check] | catalog-check <phase> [--list] | \
                  data-status [--today YYYY-MM-DD] | check-core-has-no-patro |                  release-check <package> <version> | changelog <package> <version>>"
             );
             return ExitCode::from(2);
@@ -160,6 +161,22 @@ const STEPS: &[Step] = &[
     ),
     step("cargo", &["xtask", "check-core-has-no-patro"]),
 ];
+
+/// L6-03: line coverage of both libraries, at least 90 % (ADR-0014). Not a `ci` step, because
+/// it needs `cargo-llvm-cov` and the `llvm-tools-preview` component; CI runs it as its own job.
+const COVERAGE: Step = step(
+    "cargo",
+    &[
+        "llvm-cov",
+        "-p",
+        "nepdate",
+        "-p",
+        "nepdate-patro",
+        "--all-features",
+        "--fail-under-lines",
+        "90",
+    ],
+);
 
 fn ci() -> Result<()> {
     for (index, step) in STEPS.iter().enumerate() {

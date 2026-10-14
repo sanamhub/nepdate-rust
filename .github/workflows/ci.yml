@@ -36,6 +36,24 @@ jobs:
           tool: cargo-deny,cargo-nextest
       - run: cargo xtask ci
 
+  # L6-03: not a `cargo xtask ci` step, because llvm-cov needs the llvm-tools component.
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # v1
+        with:
+          toolchain: "1.98"
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@63fed3e2fecf6f7b51dc6f043341b79ef82a9ae7 # v2.9.2
+      - uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2.87.26
+        with:
+          tool: cargo-llvm-cov
+      - run: cargo xtask coverage
+
   msrv:
     runs-on: ubuntu-latest
     timeout-minutes: 15
