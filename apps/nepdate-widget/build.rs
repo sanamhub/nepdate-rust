@@ -5,5 +5,7 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 fn main() {
+    // app.slint is the single entry; it imports font-test.slint, so one compile call emits both
+    // windows (a second call would overwrite the first's generated file).
     slint_build::compile("ui/app.slint").expect("slint compile");
 }

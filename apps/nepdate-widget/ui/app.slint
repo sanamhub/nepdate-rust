@@ -1,4 +1,8 @@
 // The main window. Shows today's BS date in both languages, in the bundled fonts.
+// font-test.slint is the debug-only Devanagari spike window (W0-03); importing it here keeps a
+// single slint_build::compile entry point.
+import { FontTestWindow } from "font-test.slint";
+export { FontTestWindow }
 import "fonts/NotoSans-Variable.ttf";
 import "fonts/NotoSansDevanagari-Variable.ttf";
 

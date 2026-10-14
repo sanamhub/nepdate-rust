@@ -8,6 +8,7 @@
 // allowed crate-wide rather than failing the workspace gate on generated code.
 #![allow(
     missing_docs,
+    unreachable_pub,
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,
@@ -50,10 +51,15 @@ fn today() -> anyhow::Result<Today> {
 }
 
 fn main() -> anyhow::Result<()> {
-    let today = today()?;
-    let ui = AppWindow::new()?;
-    ui.set_bs_en(today.en.into());
-    ui.set_bs_ne(today.ne.into());
-    ui.run()?;
+    if std::env::args().any(|arg| arg == "--font-test") {
+        let ui = FontTestWindow::new()?;
+        ui.run()?;
+    } else {
+        let today = today()?;
+        let ui = AppWindow::new()?;
+        ui.set_bs_en(today.en.into());
+        ui.set_bs_ne(today.ne.into());
+        ui.run()?;
+    }
     Ok(())
 }
