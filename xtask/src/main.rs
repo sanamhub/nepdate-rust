@@ -5,6 +5,7 @@
 //! `cargo xtask release-check` and `cargo xtask changelog` prepare a release (L6-04). Arguments
 //! are read from `std::env::args()` to keep this tiny.
 
+mod bench;
 mod catalog;
 mod codegen;
 mod core_check;
@@ -22,6 +23,7 @@ fn main() -> ExitCode {
     let result = match args.as_slice() {
         ["ci"] => ci(),
         ["coverage"] => run(&COVERAGE),
+        ["bench"] => bench::run(),
         ["codegen"] => codegen::run(false),
         ["codegen", "--check"] => codegen::run(true),
         ["catalog-check", phase] => catalog::run(phase, false),
@@ -33,7 +35,7 @@ fn main() -> ExitCode {
         ["changelog", package, version] => release::run_changelog(package, version),
         _ => {
             eprintln!(
-                "usage: cargo xtask <ci | coverage | codegen [--check] | catalog-check <phase> [--list] | \
+                "usage: cargo xtask <ci | coverage | bench | codegen [--check] | catalog-check <phase> [--list] | \
                  data-status [--today YYYY-MM-DD] | check-core-has-no-patro |                  release-check <package> <version> | changelog <package> <version>>"
             );
             return ExitCode::from(2);
