@@ -1,19 +1,6 @@
-//! Tithi, Nepal public holidays and events per Bikram Sambat day, for the `nepdate` crate.
-//!
-//! The data covers BS 2077-01-01 to 2084-08-20 ([`coverage`]); tithi only 2078-01-02 to
-//! 2083-12-30. Every lookup is O(1) over per-day tables compiled into the crate, and every name
-//! is a `&'static str`. Nothing allocates. Semantics: `shared/spec/PATRO.md` in the repository.
-//!
-//! ```
-//! use nepdate::{Lang, NepaliDate};
-//!
-//! let info = nepdate_patro::info(NepaliDate::new(2081, 1, 1)?);
-//! assert_eq!(info.tithi().map(|t| t.name(Lang::En)), Some("Panchami"));
-//! assert!(info.is_public_holiday());
-//! assert_eq!(info.events().next().map(|e| e.name(Lang::En)), Some("New Year"));
-//! # Ok::<(), nepdate::Error>(())
-//! ```
+#![doc = include_str!("../README.md")]
 #![no_std]
+#![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
 use core::iter::FusedIterator;

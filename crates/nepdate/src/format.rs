@@ -3,12 +3,57 @@
 //! Each formatter is a small `Copy` value that remembers what to write. `write_to` writes
 //! `&'static str` pieces (names, separators, one digit at a time) or slices of the caller's
 //! pattern with `out.write_str`, so nothing allocates, no bytes are built and then checked as
-//! UTF-8, and a caller with its own buffer gets static dispatch. `Display::fmt` is one
-//! call to `write_to`.
+//! UTF-8, and a caller with its own buffer gets static dispatch. `Display::fmt` collects the
+//! same pieces on the stack and hands the `Formatter` one `write_str` (`write_once`).
 
 use core::fmt;
 
 use crate::{Lang, NepaliDate};
+
+/// Room for every short and long date (the longest, a Nepali long date with weekday, is under
+/// 80 bytes); a longer pattern result falls back to piece-by-piece writing.
+const STACK_STR_CAPACITY: usize = 128;
+
+/// Pieces collected on the stack. Only whole `&str` pieces are appended, so the bytes are
+/// always UTF-8.
+struct StackStr {
+    bytes: [u8; STACK_STR_CAPACITY],
+    len: usize,
+}
+
+impl fmt::Write for StackStr {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        let end = self.len.checked_add(s.len()).ok_or(fmt::Error)?;
+        let dest = self.bytes.get_mut(self.len..end).ok_or(fmt::Error)?;
+        dest.copy_from_slice(s.as_bytes());
+        self.len = end;
+        Ok(())
+    }
+}
+
+/// Runs `write` into a stack buffer and passes the result to `f` with one `write_str`, so a
+/// `String` target (`to_string`, `format!`) grows once, to the exact size, instead of once per
+/// piece. When the result doesn't fit, `write` runs on `f` directly. Width and fill flags are
+/// ignored either way, as before.
+pub(crate) fn write_once(
+    f: &mut fmt::Formatter<'_>,
+    write: impl Fn(&mut dyn fmt::Write) -> fmt::Result,
+) -> fmt::Result {
+    let mut buf = StackStr {
+        bytes: [0; STACK_STR_CAPACITY],
+        len: 0,
+    };
+    if write(&mut buf).is_ok() {
+        if let Some(s) = buf
+            .bytes
+            .get(..buf.len)
+            .and_then(|b| core::str::from_utf8(b).ok())
+        {
+            return f.write_str(s);
+        }
+    }
+    write(f)
+}
 
 /// The order of year, month and day in [`NepaliDate::short`]. Same order as C# `DateFormats`.
 ///
@@ -187,7 +232,7 @@ impl Digits {
 
 impl fmt::Display for Digits {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.write_to(f)
+        write_once(f, |out| self.write_to(out))
     }
 }
 
@@ -290,7 +335,7 @@ enum Part {
 
 impl fmt::Display for ShortFormat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.write_to(f)
+        write_once(f, |out| self.write_to(out))
     }
 }
 
@@ -345,7 +390,7 @@ impl LongFormat {
 
 impl fmt::Display for LongFormat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.write_to(f)
+        write_once(f, |out| self.write_to(out))
     }
 }
 
@@ -405,7 +450,7 @@ impl PatternFormat<'_> {
 
 impl fmt::Display for PatternFormat<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.write_to(f)
+        write_once(f, |out| self.write_to(out))
     }
 }
 

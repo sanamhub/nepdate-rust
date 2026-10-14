@@ -10,6 +10,7 @@ use crate::{Error, NepaliDate};
 /// Nepal Standard Time, UTC+05:45, for when the time zone database lacks `Asia/Kathmandu`.
 const NEPAL_OFFSET_SECONDS: i32 = 5 * 3600 + 45 * 60;
 
+#[cfg_attr(docsrs, doc(cfg(feature = "jiff")))]
 impl From<NepaliDate> for Date {
     fn from(date: NepaliDate) -> Self {
         let ad = date.to_gregorian();
@@ -27,6 +28,7 @@ impl From<NepaliDate> for Date {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "jiff")))]
 impl TryFrom<Date> for NepaliDate {
     type Error = Error;
 
@@ -54,6 +56,7 @@ fn fixed_nepal() -> TimeZone {
     Offset::from_seconds(NEPAL_OFFSET_SECONDS).map_or(TimeZone::UTC, TimeZone::fixed)
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "jiff")))]
 impl NepaliDate {
     /// Today's date in Nepal: `Asia/Kathmandu`, or a fixed UTC+05:45 when the time zone
     /// database lacks it. Needs the `jiff` feature.

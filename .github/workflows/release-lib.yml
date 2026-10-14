@@ -1,0 +1,196 @@
+# L6-05: one tag `nepdate-vX.Y.Z` releases `nepdate` then `nepdate-patro` (ADR-0012, ADR-0002).
+# preflight -> ci -> publish -> verify-published. Published by crates.io trusted publishing, so
+# no long-lived registry token exists. The `production` environment gates `publish` behind a
+# human reviewer. See docs/runbooks/release-library.md.
+
+name: release-lib
+
+on:
+  push:
+    tags: ["nepdate-v*"]
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Run everything except publishing"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      # Full history, so the tagged commit can be checked against main below.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # v1
+        with:
+          toolchain: "1.98"
+      # The version comes from the tag (or Cargo.toml) and is validated before anything uses
+      # it; later steps get it through env, never through ${{ }} inside a script, so a crafted
+      # tag name can't inject shell.
+      - name: Resolve the version
+        id: version
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            version="${GITHUB_REF_NAME#nepdate-v}"
+          else
+            version="$(sed -n 's/^version = "\(.*\)"/\1/p' crates/nepdate/Cargo.toml | head -n1)"
+          fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::version must look like X.Y.Z or X.Y.Z-pre.N (tag nepdate-vX.Y.Z)"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: The tagged commit is on main
+        if: github.ref_type == 'tag'
+        run: |
+          set -euo pipefail
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::tag $GITHUB_REF_NAME points at a commit that is not on main"
+            exit 1
+          fi
+      - name: Release check
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: cargo xtask release-check nepdate "$VERSION"
+      # semver-checks compares against the previous published version, so it starts at 0.1.1.
+      - name: Install cargo-semver-checks
+        if: steps.version.outputs.version != '0.1.0'
+        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2.87.26
+        with:
+          tool: cargo-semver-checks
+      - name: Semver checks
+        if: steps.version.outputs.version != '0.1.0'
+        run: cargo semver-checks -p nepdate -p nepdate-patro
+
+  ci:
+    needs: preflight
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # v1
+        with:
+          toolchain: "1.98"
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@63fed3e2fecf6f7b51dc6f043341b79ef82a9ae7 # v2.9.2
+      - uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2.87.26
+        with:
+          tool: cargo-deny,cargo-nextest
+      - run: cargo xtask ci
+      # Packages each crate from its packaged files only, so a missing `include` is caught.
+      - if: matrix.os == 'ubuntu-latest'
+        run: cargo package -p nepdate -p nepdate-patro
+
+  publish:
+    needs: [preflight, ci]
+    # Only from a tag: a manual run on a branch is always a dry run, so it can never publish or
+    # create a GitHub release named after the branch.
+    if: github.ref_type == 'tag' && (github.event_name == 'push' || inputs.dry-run == false)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # v1
+        with:
+          toolchain: "1.98"
+      - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+        with:
+          cargoCommand: cargo
+      - name: Publish nepdate
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          set -euo pipefail
+          status="$(curl -s -o /dev/null -w '%{http_code}' "https://crates.io/api/v1/crates/nepdate/${VERSION}")"
+          if [ "$status" = "200" ]; then
+            echo "nepdate ${VERSION} already published"
+          else
+            cargo publish -p nepdate
+          fi
+      - name: Publish nepdate-patro
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          set -euo pipefail
+          status="$(curl -s -o /dev/null -w '%{http_code}' "https://crates.io/api/v1/crates/nepdate-patro/${VERSION}")"
+          if [ "$status" = "200" ]; then
+            echo "nepdate-patro ${VERSION} already published"
+          else
+            cargo publish -p nepdate-patro
+          fi
+      - name: Build release notes
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: cargo xtask changelog nepdate "${VERSION}" > notes.md
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          tag_name: ${{ github.ref_name }}
+          body_path: notes.md
+          prerelease: ${{ contains(needs.preflight.outputs.version, '-') }}
+
+  verify-published:
+    needs: [preflight, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # v1
+        with:
+          toolchain: "1.98"
+      - name: Install from crates.io and run the README quick starts
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          set -euo pipefail
+          cargo new verify-published --bin
+          cd verify-published
+          # Retry while the index catches up: up to 10 minutes, one attempt per minute.
+          for i in $(seq 1 10); do
+            if cargo add "nepdate@${VERSION}" "nepdate-patro@${VERSION}"; then
+              break
+            fi
+            if [ "$i" -eq 10 ]; then
+              echo "::error::crates.io index still lacks ${VERSION} after 10 minutes"
+              exit 1
+            fi
+            sleep 60
+          done
+          cat > src/main.rs <<'EOF'
+          // The quick-start code from the nepdate and nepdate-patro READMEs.
+          use nepdate::{Lang, NepaliDate};
+
+          fn main() {
+              let date = NepaliDate::new(2081, 4, 15).expect("valid");
+              let ad = date.to_gregorian();
+              assert_eq!((ad.year(), ad.month(), ad.day()), (2024, 7, 30));
+              assert_eq!("2081/04/15".parse::<NepaliDate>().expect("valid"), date);
+
+              let info = nepdate_patro::info(NepaliDate::new(2081, 1, 1).expect("valid"));
+              assert_eq!(info.tithi().map(|t| t.name(Lang::En)), Some("Panchami"));
+              assert!(info.is_public_holiday());
+              println!("verify-published: ok");
+          }
+          EOF
+          cargo run

@@ -1,0 +1,33 @@
+[package]
+name = "nepdate-bench"
+version = "0.0.0"
+description = "B1 to B8 of shared/spec/BENCHMARK.md for nepdate, nepdate-patro and other BS crates (L6-02)"
+edition.workspace = true
+license.workspace = true
+publish = false
+
+# The competitors are normal dependencies, not dev-dependencies, because the `alloc` and
+# `agree` binaries call them too. `publish = false` keeps them away from every published crate,
+# and `exclude-unpublished` in deny.toml keeps their GPL licenses out of the license check.
+[dependencies]
+nepdate = { path = "../../crates/nepdate" }
+nepdate-patro = { path = "../../crates/nepdate-patro" }
+# Only to read the `chrono::NaiveDate` that `adtobs` returns for its B1; already in the tree
+# through `adtobs`, so this adds no new crate, just a direct dependency.
+chrono = "0.4"
+npdatetime = "=0.2.10"
+adtobs = "=0.2.0"
+nepali-date-converter = "=0.1.1"
+nepdate-cli = "=0.1.5"
+
+[dev-dependencies]
+criterion = "0.8"
+
+[[bench]]
+name = "compare"
+harness = false
+
+[lints]
+workspace = true
+# No `[profile.release]` here: workspace profiles are read from the root only, and the root
+# already sets `lto = "fat"` and `codegen-units = 1` (the settings ADR-0004 measured with).

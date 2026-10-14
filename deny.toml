@@ -2,6 +2,9 @@
 
 [graph]
 all-features = true
+# L6-02: the bench crate is publish = false, and two of its competitors are GPL; excluding
+# unpublished crates keeps their licenses (which never reach users) out of the check.
+exclude-unpublished = true
 
 [advisories]
 version = 2

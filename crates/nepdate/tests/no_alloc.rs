@@ -18,12 +18,15 @@ use nepdate::{Lang, LongDate, MonthOverflow, NepaliDate, NepaliDateRange};
 struct Counting;
 
 static ALLOCATED: AtomicUsize = AtomicUsize::new(0);
+/// Number of `alloc` and `realloc` calls.
+static CALLS: AtomicUsize = AtomicUsize::new(0);
 
 // SAFETY: forwards every call to `System` unchanged; only adds to a counter.
 #[allow(unsafe_code)]
 unsafe impl GlobalAlloc for Counting {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         ALLOCATED.fetch_add(layout.size(), Ordering::Relaxed);
+        CALLS.fetch_add(1, Ordering::Relaxed);
         // SAFETY: same contract as the caller's.
         unsafe { System.alloc(layout) }
     }
@@ -33,6 +36,7 @@ unsafe impl GlobalAlloc for Counting {
     }
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
         ALLOCATED.fetch_add(new_size, Ordering::Relaxed);
+        CALLS.fetch_add(1, Ordering::Relaxed);
         // SAFETY: same contract as the caller's.
         unsafe { System.realloc(ptr, layout, new_size) }
     }
@@ -174,4 +178,36 @@ fn main() {
         std::process::exit(1);
     }
     println!("no_alloc: B5, B6, format_pattern and parse_lenient allocated 0 bytes");
+
+    to_string_allocates_once(&dates, weekday);
+}
+
+/// `to_string` goes through `Display`, which hands the `String` one `write_str`: one allocation
+/// of the exact size, not one regrowth per piece.
+fn to_string_allocates_once(dates: &[NepaliDate; 64], weekday: LongDate) {
+    for &date in dates {
+        let long = date.long(weekday, Lang::Ne);
+        let before = CALLS.load(Ordering::Relaxed);
+        let text = black_box(long.to_string());
+        let calls = CALLS.load(Ordering::Relaxed) - before;
+        if calls != 1 || text.capacity() != text.len() {
+            eprintln!(
+                "no_alloc: {date} long to_string made {calls} allocations, capacity {} for {} bytes",
+                text.capacity(),
+                text.len()
+            );
+            std::process::exit(1);
+        }
+        let before = CALLS.load(Ordering::Relaxed);
+        let text = black_box(date.to_string());
+        if CALLS.load(Ordering::Relaxed) - before != 1 || text.len() != 10 {
+            eprintln!("no_alloc: {date} to_string made more than one allocation");
+            std::process::exit(1);
+        }
+    }
+    // A pattern result longer than the stack buffer still formats, piece by piece.
+    let long_pattern = "yyyy ".repeat(40);
+    let text = dates[0].format_pattern(&long_pattern, Lang::Ne).to_string();
+    assert_eq!(text, "२००० ".repeat(40));
+    println!("no_alloc: to_string allocates once, at the exact size; long patterns still format");
 }
