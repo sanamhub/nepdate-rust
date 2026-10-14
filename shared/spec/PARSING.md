@@ -36,6 +36,11 @@ For human input (e.g. the widget converter). Steps:
      and dots is re-split on dots (`2080.05.15` gives three numbers). Any other token stays one
      word, dots included: `B.S.` is a word, and so are `Shr.15` and `2080.B.S.`, which therefore
      match no month and no era (vectors in `parse.tsv`).
+   - "Case-insensitive" here and in §3 means exactly what the reference's Python `str.lower()`
+     maps onto ASCII: `A` to `Z` fold to `a` to `z`, and the Kelvin sign U+212A folds to `k`. No
+     other character folds: the long s `ſ` (U+017F) does not match `s`, and the dotless `ı`
+     (U+0131) does not match `i`. Full Unicode case folding (for example Go's
+     `strings.EqualFold`) is wrong here (vectors in `parse.tsv`).
    - Drop tokens that are (case-insensitive) era markers: `BS`, `B.S.`, `B.S`, `VS`,
      `V.S.`, `V.S`, `बि.सं.`, `वि.सं.`, `बि.सं`, `वि.सं`.
    - Drop tokens `गते`, `मिति`.
