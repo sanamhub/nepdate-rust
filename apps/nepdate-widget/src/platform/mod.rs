@@ -6,5 +6,8 @@ pub mod clipboard;
 pub mod logging;
 mod settings_store;
 mod single_instance;
+pub mod taskbar;
 pub mod taskbar_scheme;
 pub mod tray;
+#[cfg(windows)]
+mod windows;
