@@ -1,37 +1,14 @@
-// The main window. Shows today's BS date in both languages, in the bundled fonts.
-// font-test.slint is the debug-only Devanagari spike window (W0-03); importing it here keeps a
-// single slint_build::compile entry point.
+// The single slint_build::compile entry point (build.rs). It imports every window and global so
+// one compile call emits them all for `slint::include_modules!()`.
 import { FontTestWindow } from "font-test.slint";
 export { FontTestWindow }
+import { PopupWindow, PopupClockLine } from "popup.slint";
+export { PopupWindow, PopupClockLine }
+import { TrayComponent } from "tray.slint";
+export { TrayComponent }
+import { MenuText } from "menu-text.slint";
+export { MenuText }
 import "fonts/NotoSans-Variable.ttf";
 import "fonts/NotoSansDevanagari-Variable.ttf";
 import { Theme, ThemeChoice } from "theme.slint";
 export { Theme, ThemeChoice }
-
-export component AppWindow inherits Window {
-    title: "nepdate";
-    preferred-width: 360px;
-    preferred-height: 160px;
-    background: Theme.surface;
-    default-font-family: "Noto Sans";
-
-    in property <string> bs-en: "";
-    in property <string> bs-ne: "";
-
-    VerticalLayout {
-        padding: 12px;
-        spacing: 8px;
-
-        Text {
-            text: root.bs-en;
-            color: Theme.ink;
-            font-size: 16px;
-        }
-        Text {
-            text: root.bs-ne;
-            color: Theme.ink;
-            font-size: 22px;
-            font-family: "Noto Sans Devanagari";
-        }
-    }
-}

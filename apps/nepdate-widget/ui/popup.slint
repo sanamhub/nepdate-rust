@@ -1,0 +1,71 @@
+// The popup window (WR-02): borderless, always-on-top, fixed 360x440. It shows today's header
+// and the clock lines, hides on Escape and on focus loss (WR-02 AC2).
+import { Theme } from "theme.slint";
+
+export struct PopupClockLine {
+    is-local: bool,
+    zone-city: string,
+    offset: string,
+    time: string,
+}
+
+export component PopupWindow inherits Window {
+    no-frame: true;
+    always-on-top: true;
+    width: 360px;
+    height: 440px;
+    background: Theme.surface;
+    default-font-family: "Noto Sans";
+
+    in property <string> bs: "";
+    in property <string> weekday: "";
+    in property <string> ad: "";
+    in property <[PopupClockLine]> clocks: [];
+
+    // Forward the window focus to the FocusScope so it receives key events and its focus-lost
+    // fires when the popup is deactivated (WR-02 AC2).
+    forward-focus: fs;
+
+    // Fired when focus loss hides the popup. A click on the tray icon takes the focus first, so
+    // the app needs to know the popup was open a moment ago, or that click would reopen it.
+    callback hidden-by-focus-loss();
+
+    fs := FocusScope {
+        focus-lost(_) => {
+            root.hide();
+            root.hidden-by-focus-loss();
+        }
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                root.hide();
+                return accept;
+            }
+            reject
+        }
+
+        // Content stacks from the top; W2's month grid takes the remaining height.
+        VerticalLayout {
+            alignment: start;
+            padding: 12px;
+            spacing: 4px;
+
+            Text { text: root.weekday; color: Theme.ink-muted; font-size: 14px; }
+            Text { text: root.bs; color: Theme.ink; font-size: 22px; }
+            Text { text: root.ad; color: Theme.ink-muted; font-size: 14px; }
+
+            Rectangle { height: 1px; background: Theme.hairline; }
+
+            for line in root.clocks: HorizontalLayout {
+                spacing: 8px;
+                Text {
+                    text: line.is-local ? @tr("Local") : line.zone-city + " " + line.offset;
+                    color: Theme.ink-muted;
+                    font-size: 14px;
+                    horizontal-stretch: 1;
+                    vertical-alignment: center;
+                }
+                Text { text: line.time; color: Theme.ink; font-size: 16px; vertical-alignment: center; }
+            }
+        }
+    }
+}

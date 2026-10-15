@@ -1,0 +1,44 @@
+// Tray icon and menu (WR-01), implementation A: Slint `SystemTrayIcon` (ADR-0010).
+// The day-number icons are pre-rendered by `cargo xtask icons` (W1-03) into `tray-icons.slint`;
+// Rust sets the index. There is one set per taskbar scheme: dark ink for a light taskbar, light ink
+// for a dark one. Until W1B reads the taskbar's own scheme (`SystemUsesLightTheme`), the app's
+// system scheme stands in for it; Windows uses the same setting for both unless the user picks
+// "Custom" colours.
+// `title` and `tooltip` of `SystemTrayIcon` are bound to in-out properties because a
+// `SystemTrayIcon`-rooted component does not expose the inherited properties to Rust.
+import { MenuText } from "menu-text.slint";
+import { TrayIcons } from "tray-icons.slint";
+import { Palette } from "std-widgets.slint";
+
+export component TrayComponent inherits SystemTrayIcon {
+    in property <int> day-index: 0;   // 0..=31, day 1..32
+    in property <bool> is-ne: false;
+    in property <bool> dark-taskbar: Palette.color-scheme == ColorScheme.dark;
+    in-out property <string> title-text: "";
+    in-out property <string> tooltip-text: "";
+
+    // Windows/Linux render the icon; macOS shows the title instead (WR-01 AC2).
+    icon: root.is-ne
+        ? (root.dark-taskbar ? TrayIcons.ne-dark[root.day-index] : TrayIcons.ne-light[root.day-index])
+        : (root.dark-taskbar ? TrayIcons.en-dark[root.day-index] : TrayIcons.en-light[root.day-index]);
+    tooltip: root.tooltip-text;
+    title: root.title-text;
+
+    // Left-click toggles the popup on Windows/Linux. On macOS `clicked` fires only without a
+    // menu, so macOS uses the menu's "Open" item (WR-01 AC4).
+    clicked => { root.open(); }
+
+    Menu {
+        MenuItem { title: MenuText.open; activated => { root.open(); } }
+        MenuItem { title: MenuText.copy-bs; activated => { root.copy-bs(); } }
+        MenuItem { title: MenuText.copy-ad; activated => { root.copy-ad(); } }
+        MenuItem { title: MenuText.settings; activated => { root.settings(); } }
+        MenuItem { title: MenuText.quit; activated => { root.quit(); } }
+    }
+
+    callback open();
+    callback copy-bs();
+    callback copy-ad();
+    callback settings();
+    callback quit();
+}

@@ -111,6 +111,8 @@ the widget keeps the workspace `deny`.
 
 - `windows` 0.62 (already in `Cargo.lock` through winit), Windows-only target dependency, only
   the `Win32_*` features the module uses.
+- `windows-registry` 0.6 (same windows-rs family, safe API), Windows-only, for reading
+  `SystemUsesLightTheme` without `unsafe`; W1 uses it for the tray icon ink before W1B lands.
 - `embed-manifest` (build dependency) for the application manifest: Windows 8 to 11
   `supportedOS`, per-monitor-v2 DPI awareness, UTF-8 active code page.
 - `image` (PNG only) moves behind a cargo feature `snapshot`, off by default. ADR-0015 says

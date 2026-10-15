@@ -1,0 +1,25 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: nepdate-widget\n"
+"Language: ne\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "Open"
+msgstr "खोल्नुहोस्"
+
+msgid "Copy today (BS)"
+msgstr "आज (वि.सं.) प्रतिलिपि गर्नुहोस्"
+
+msgid "Copy today (AD)"
+msgstr "आज (ई.सं.) प्रतिलिपि गर्नुहोस्"
+
+msgid "Settings"
+msgstr "सेटिङ्हरू"
+
+msgid "Quit"
+msgstr "बन्द गर्नुहोस्"
+
+msgid "Local"
+msgstr "स्थानीय"

@@ -2,8 +2,9 @@
 //! Slint types except `tray.rs`. W1 to W3 fill these modules.
 
 mod autostart;
-mod clipboard;
-mod logging;
+pub mod clipboard;
+pub mod logging;
 mod settings_store;
 mod single_instance;
-mod tray;
+pub mod taskbar_scheme;
+pub mod tray;
