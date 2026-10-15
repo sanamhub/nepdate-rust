@@ -1,6 +1,5 @@
 // The single slint_build::compile entry point (build.rs). It imports every window and global so
 // one compile call emits them all for `slint::include_modules!()`.
-// AppWindow is the W0 placeholder; it is removed when main.rs switches to the popup (W1-05).
 import { FontTestWindow } from "font-test.slint";
 export { FontTestWindow }
 import { PopupWindow, PopupClockLine } from "popup.slint";
@@ -13,31 +12,3 @@ import "fonts/NotoSans-Variable.ttf";
 import "fonts/NotoSansDevanagari-Variable.ttf";
 import { Theme, ThemeChoice } from "theme.slint";
 export { Theme, ThemeChoice }
-
-export component AppWindow inherits Window {
-    title: "nepdate";
-    preferred-width: 360px;
-    preferred-height: 160px;
-    background: Theme.surface;
-    default-font-family: "Noto Sans";
-
-    in property <string> bs-en: "";
-    in property <string> bs-ne: "";
-
-    VerticalLayout {
-        padding: 12px;
-        spacing: 8px;
-
-        Text {
-            text: root.bs-en;
-            color: Theme.ink;
-            font-size: 16px;
-        }
-        Text {
-            text: root.bs-ne;
-            color: Theme.ink;
-            font-size: 22px;
-            font-family: "Noto Sans Devanagari";
-        }
-    }
-}

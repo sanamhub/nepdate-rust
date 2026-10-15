@@ -3,7 +3,9 @@
 import { Theme } from "theme.slint";
 
 export struct PopupClockLine {
-    label: string,
+    is-local: bool,
+    zone-city: string,
+    offset: string,
     time: string,
 }
 
@@ -46,7 +48,7 @@ export component PopupWindow inherits Window {
 
             for line in root.clocks: HorizontalLayout {
                 spacing: 8px;
-                Text { text: line.label; color: Theme.ink-muted; font-size: 14px; }
+                Text { text: line.is-local ? @tr("Local") : line.zone-city + " " + line.offset; color: Theme.ink-muted; font-size: 14px; }
                 Text { text: line.time; color: Theme.ink; font-size: 16px; }
             }
         }

@@ -5,9 +5,6 @@
 //! WR-01 on some OS, implementation B (`tray-icon` + `muda`, ADR-0010) replaces this module; the
 //! `Tray` trait keeps the rest of the app unchanged.
 
-// Filled before main.rs wires it (W1-05); removed then.
-#![allow(dead_code)]
-
 use nepdate::Lang;
 
 use crate::TrayComponent;

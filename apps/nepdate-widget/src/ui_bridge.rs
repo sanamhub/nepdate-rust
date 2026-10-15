@@ -1,7 +1,8 @@
 //! Maps `app` view models to Slint generated types and callbacks (ADR-0015). The only place that
 //! converts between the two. W1 adds the popup placement (W1-04); W1B reuses `PopupAnchor::Above`.
 
-// Filled before main.rs wires it (W1-05); removed then.
+// `PopupAnchor::Above`, `Rect` and `above_position` are only wired in W1B; the bin target sees
+// them as unused until then.
 #![allow(dead_code)]
 
 use slint::ComponentHandle;
@@ -47,23 +48,28 @@ pub fn set_header(popup: &PopupWindow, header: &Header) {
     popup.set_ad(header.ad.as_str().into());
 }
 
-/// Sets the popup's clock lines. `labels` has one entry per `ClockLine`; the local line's label
-/// is the `@tr("Local")` string, the extra zone's is `{city} {offset}`.
-pub fn set_clocks(popup: &PopupWindow, lines: &[crate::app::clock::ClockLine], local_label: &str) {
+/// Sets the popup's clock lines. The local line's label is `@tr("Local")` in the markup; the
+/// extra zone's is `{city} {offset}`.
+pub fn set_clocks(popup: &PopupWindow, lines: &[crate::app::clock::ClockLine]) {
     let model: std::vec::Vec<PopupClockLine> = lines
         .iter()
-        .map(|line| {
-            let label = match &line.zone_city {
-                Some(city) => format!("{city} {offset}", offset = line.offset),
-                None => local_label.to_owned(),
-            };
-            PopupClockLine {
-                label: label.into(),
-                time: line.time.clone().into(),
-            }
+        .map(|line| PopupClockLine {
+            is_local: line.zone_city.is_none(),
+            zone_city: line.zone_city.clone().unwrap_or_default().into(),
+            offset: line.offset.clone().into(),
+            time: line.time.clone().into(),
         })
         .collect();
     popup.set_clocks(slint::ModelRc::new(slint::VecModel::from(model)));
+}
+
+/// Maps the `theme` setting of WR-06 onto the `ThemeChoice` of `ui/theme.slint`.
+pub fn theme_choice(theme: &str) -> crate::ThemeChoice {
+    match theme {
+        "light" => crate::ThemeChoice::Light,
+        "dark" => crate::ThemeChoice::Dark,
+        _ => crate::ThemeChoice::System,
+    }
 }
 
 /// Positions the popup at the OS-specific corner of the primary monitor (WR-02 AC1).
