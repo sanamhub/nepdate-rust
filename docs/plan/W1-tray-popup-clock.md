@@ -43,6 +43,9 @@ AC (tests named after the requirement):
 - Implementation A: Slint `SystemTrayIcon` (in `.slint`). It has `icon`, `tooltip`, `title`
   (macOS menu-bar text) and one child `Menu` of `MenuItem`s (`activated`). `clicked` fires on
   Windows/Linux, and on macOS only when there is no menu, so macOS uses the menu's "Open" item (WR-01 AC4).
+- Menu labels live once, in a Slint global `MenuText` with `@tr` out properties (open, copy BS,
+  copy AD, settings, quit). The tray menu binds to it, and `ui_bridge.rs` reads it so W1B's
+  native taskbar menu shows the same translated labels.
 - If A can't meet WR-01 on some OS, implementation B uses `tray-icon` + `muda` (ADR-0010).
   Document which OS uses which implementation in `src/platform/tray.rs` module docs.
 - Day-number icon (Windows/Linux): `cargo xtask icons` pre-renders `ui/tray/{en,ne}/{1..32}.png`
@@ -59,6 +62,10 @@ AC (tests named after the requirement):
   `slint::BackendSelector::new().with_winit_window_attributes_hook(|a| a.with_skip_taskbar(true))`
   under `#[cfg(windows)]` (`winit::platform::windows::WindowAttributesExtWindows`). macOS: the
   packaged app sets `LSUIElement` (no Dock icon). Linux: a taskbar entry is acceptable.
+- Placement is one function, `show_popup_at(anchor: PopupAnchor)` with `PopupAnchor::TrayCorner`
+  (the rule above) and `PopupAnchor::Above(rect)` (used by W1B: above a rectangle, left-aligned,
+  clamped to the monitor's work area). Only `TrayCorner` is wired in W1; `Above` gets unit tests
+  on the clamping maths now.
 - Hide on focus loss and on Escape (WR-02 AC2).
 - Header + clock lines bound to properties set from `app::clock`.
 
