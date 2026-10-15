@@ -1,1 +1,98 @@
-//! Settings struct, defaults and validation, no file IO (WR-06). Filled in W3.
+//! Settings struct, defaults and validation, no file IO (WR-06). W1 holds the plain struct and
+//! the WR-06 defaults; W3 adds serde, file IO and validation.
+
+use nepdate::Lang;
+
+/// Per-user settings (WR-06). Plain struct in W1; the `language` and `theme` values stay strings
+/// so W3's serde deserializes them as written in the file. The four bools are the four bool keys
+/// of WR-06, so the lint is allowed rather than re-shaping the config file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct Settings {
+    pub schema: u32,
+    pub language: String,
+    pub theme: String,
+    pub clock_24h: bool,
+    pub show_seconds: bool,
+    pub extra_time_zone: String,
+    pub launch_at_login: bool,
+    pub taskbar_text: bool,
+}
+
+impl Settings {
+    /// The active language. Anything other than `"ne"` is English (WR-06 AC2 fallback).
+    pub fn lang(&self) -> Lang {
+        match self.language.as_str() {
+            "ne" => Lang::Ne,
+            _ => Lang::En,
+        }
+    }
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings {
+            schema: 1,
+            language: "en".to_owned(),
+            theme: "system".to_owned(),
+            clock_24h: false,
+            show_seconds: false,
+            extra_time_zone: "Asia/Kathmandu".to_owned(),
+            launch_at_login: true,
+            taskbar_text: true,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn defaults_match_wr06() {
+        let s = Settings::default();
+        assert_eq!(s.schema, 1);
+        assert_eq!(s.language, "en");
+        assert_eq!(s.theme, "system");
+        assert!(!s.clock_24h);
+        assert!(!s.show_seconds);
+        assert_eq!(s.extra_time_zone, "Asia/Kathmandu");
+        assert!(s.launch_at_login);
+        assert!(s.taskbar_text);
+    }
+
+    #[test]
+    fn lang_falls_back_to_en_for_unknown() {
+        assert_eq!(Settings::default().lang(), Lang::En);
+        let ne = Settings {
+            language: "ne".to_owned(),
+            ..Settings::default()
+        };
+        assert_eq!(ne.lang(), Lang::Ne);
+        let bogus = Settings {
+            language: "fr".to_owned(),
+            ..Settings::default()
+        };
+        assert_eq!(bogus.lang(), Lang::En);
+    }
+
+    /// Every `msgstr` in the Nepali translation file must be non-empty, except the header
+    /// block's own `msgstr ""`. An empty translation would silently fall back to English
+    /// (ADR-0008 A.3), so this test fails the build of a half-filled `.po` file.
+    #[test]
+    fn po_file_has_no_empty_translations() {
+        let po = include_str!("../../i18n/ne/LC_MESSAGES/nepdate-widget.po");
+        let mut header_seen = false;
+        for entry in po.split("\n\n") {
+            let Some(msgstr) = entry.lines().find(|l| l.starts_with("msgstr ")) else {
+                continue;
+            };
+            let value = msgstr.trim_start_matches("msgstr ").trim_matches('"');
+            if value.is_empty() {
+                assert!(!header_seen, "empty translation in entry:\n{entry}");
+                header_seen = true;
+            }
+        }
+        assert!(header_seen, "no header block in the .po file");
+    }
+}

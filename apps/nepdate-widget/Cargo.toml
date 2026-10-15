@@ -12,7 +12,7 @@ publish = false
 # Default features (ADR-0010: femtovg renderer, winit backend, plus the software renderer for
 # headless use). No feature overrides: the plan (W0-01) spells `slint = "1.18"`.
 slint = "1.18"
-nepdate = { path = "../../crates/nepdate" }
+nepdate = { path = "../../crates/nepdate", features = ["jiff"] }
 jiff = "0.2"
 anyhow = "1"
 # PNG encoding for the --snapshot flag. `image` is already in the tree through i-slint-core, so
