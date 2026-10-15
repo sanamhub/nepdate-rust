@@ -69,14 +69,16 @@ with a no-op implementation on macOS and Linux. Files:
 - `render.rs`: Direct2D + DirectWrite into a premultiplied BGRA buffer (ADR-0016 point 4),
   fonts from the bundled TTFs through the in-memory loader, grayscale antialiasing, minimum
   alpha 1 on every pixel. Returns the buffer and its size, so it is testable without a window.
-- `theme.rs`: `SystemUsesLightTheme` via `RegGetValueW` (missing value = dark), plus the two
-  `ink` colours as constants.
+- Taskbar scheme: reuse `src/platform/taskbar_scheme.rs` from W1 (`windows-registry`, missing
+  value = dark); do not add a second reader. `theme.rs` here holds only the two `ink` colours as
+  constants. On `WM_SETTINGCHANGE` "ImmersiveColorSet" the controller re-reads the scheme and
+  updates both the text window and the tray icon (`Tray::set_dark_taskbar`) at once.
 - `build.rs`: `embed-manifest` with Windows 8 to 11 `supportedOS`, per-monitor-v2 DPI and the
   UTF-8 code page (ADR-0016). Check that winit/Slint still start and the popup still opens with
   the manifest.
 
 Tests (Windows-only, `#[cfg(windows)]`):
-- `wr12_ac2_theme_value`: DWORD 0 = dark, 1 = light, missing = dark (pure parse helper).
+- The DWORD-to-scheme mapping is already tested in W1 (`registry_value_to_scheme`).
 - `wr12_ac2_ink_matches_design`: the two constants equal the `ink` row of `widget-design.md`
   (same style as the W0 theme drift test). Negative control: change one, see it fail, revert.
 - `render_is_premultiplied_and_hit_testable`: render both lines, then every pixel has
