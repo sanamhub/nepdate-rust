@@ -52,6 +52,13 @@ pub fn clock_lines(now: &jiff::Zoned, s: &Settings) -> Vec<ClockLine> {
     lines
 }
 
+/// The local time string for `now`, per WR-05 AC2. The taskbar text (WR-12 AC1) reuses this so
+/// the two surfaces never format the time differently.
+#[allow(dead_code)] // first caller is `app::taskbar::taskbar_lines`, wired in W1B-03
+pub fn local_time(now: &jiff::Zoned, s: &Settings) -> String {
+    format_time(now.time(), s.clock_24h, s.show_seconds, s.lang())
+}
+
 /// The time until the next wake-up: the next second boundary when seconds are shown, the next
 /// minute boundary otherwise, both plus 50 ms (WR-05 AC5). The 50 ms makes the wake land just
 /// after the boundary so the clock reads the new minute or second.
