@@ -27,7 +27,11 @@ pub fn taskbar_lines(now: &jiff::Zoned, s: &Settings) -> TaskbarLines {
         return TaskbarLines::default();
     };
     TaskbarLines {
-        line1: format!("{} | {}", bs.weekday().name(lang), clock::local_time(now, s)),
+        line1: format!(
+            "{} | {}",
+            bs.weekday().name(lang),
+            clock::local_time(now, s)
+        ),
         line2: format!(
             "{} | {}",
             bs.long(
