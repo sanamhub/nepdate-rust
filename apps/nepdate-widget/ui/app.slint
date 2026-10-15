@@ -5,12 +5,14 @@ import { FontTestWindow } from "font-test.slint";
 export { FontTestWindow }
 import "fonts/NotoSans-Variable.ttf";
 import "fonts/NotoSansDevanagari-Variable.ttf";
+import { Theme } from "theme.slint";
+export { Theme }
 
 export component AppWindow inherits Window {
     title: "nepdate";
     preferred-width: 360px;
     preferred-height: 160px;
-    background: #FDFBF8; // surface, docs/plan/widget-design.md
+    background: Theme.surface;
     default-font-family: "Noto Sans";
 
     in property <string> bs-en: "";
@@ -22,12 +24,12 @@ export component AppWindow inherits Window {
 
         Text {
             text: root.bs-en;
-            color: #211C17; // ink
+            color: Theme.ink;
             font-size: 16px;
         }
         Text {
             text: root.bs-ne;
-            color: #211C17; // ink
+            color: Theme.ink;
             font-size: 22px;
             font-family: "Noto Sans Devanagari";
         }

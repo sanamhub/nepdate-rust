@@ -1,0 +1,41 @@
+// Global design tokens (docs/plan/widget-design.md §2), in one file so every window and every
+// later phase reads the same palette through `Theme.surface`, `Theme.ink`, and so on.
+//
+// The light and dark values live side by side here. `is-dark` is the single switch, set from
+// Rust (src/theme.rs) from the system light/dark scheme or the `--theme` flag, and the resolved
+// `out` properties below follow it automatically.
+
+export global Theme {
+    // Single switch, set from Rust so the whole app follows one scheme.
+    in property <bool> is-dark: false;
+
+    // Light values (lokta paper white).
+    in property <color> surface-light: #FDFBF8;
+    in property <color> surface-raised-light: #FFFFFF;
+    in property <color> ink-light: #211C17;
+    in property <color> ink-muted-light: #6E655C;
+    in property <color> sindoor-light: #C12B2B;
+    in property <color> marigold-light: #E8A33D;
+    in property <color> saturday-light: #5B7C99;
+    in property <color> hairline-light: #E7E0D6;
+
+    // Dark values.
+    in property <color> surface-dark: #16120E;
+    in property <color> surface-raised-dark: #201B16;
+    in property <color> ink-dark: #F1ECE4;
+    in property <color> ink-muted-dark: #9B9288;
+    in property <color> sindoor-dark: #E05B5B;
+    in property <color> marigold-dark: #E8A33D;
+    in property <color> saturday-dark: #7FA3C4;
+    in property <color> hairline-dark: #2C2620;
+
+    // Resolved tokens. Reference these everywhere; never the `-light` / `-dark` properties.
+    out property <color> surface: is-dark ? surface-dark : surface-light;
+    out property <color> surface-raised: is-dark ? surface-raised-dark : surface-raised-light;
+    out property <color> ink: is-dark ? ink-dark : ink-light;
+    out property <color> ink-muted: is-dark ? ink-muted-dark : ink-muted-light;
+    out property <color> sindoor: is-dark ? sindoor-dark : sindoor-light;
+    out property <color> marigold: is-dark ? marigold-dark : marigold-light;
+    out property <color> saturday: is-dark ? saturday-dark : saturday-light;
+    out property <color> hairline: is-dark ? hairline-dark : hairline-light;
+}

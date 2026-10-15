@@ -1857,6 +1857,7 @@ version = "1.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0f519a8611a4982921e46e391015e5e40ceac5cc63813333ef91ada77df180d8"
 dependencies = [
+ "bytemuck",
  "calloop 0.14.4",
  "cfg_aliases",
  "drm",
@@ -1865,8 +1866,10 @@ dependencies = [
  "i-slint-common",
  "i-slint-core",
  "i-slint-renderer-femtovg",
+ "i-slint-renderer-software",
  "input",
  "libseat",
+ "memmap2",
  "nix",
  "raw-window-handle",
  "xkbcommon",
@@ -1881,11 +1884,25 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "i-slint-backend-linuxkms",
+ "i-slint-backend-testing",
  "i-slint-backend-winit",
  "i-slint-common",
  "i-slint-core",
  "i-slint-core-macros",
  "i-slint-renderer-femtovg",
+]
+
+[[package]]
+name = "i-slint-backend-testing"
+version = "1.18.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "01943d6c5ea5bc913d497bdaa423c309e7627afff47a6794bfd13be5c564209f"
+dependencies = [
+ "cfg_aliases",
+ "i-slint-common",
+ "i-slint-core",
+ "i-slint-renderer-software",
+ "vtable",
 ]
 
 [[package]]
@@ -1898,6 +1915,7 @@ dependencies = [
  "accesskit_winit",
  "arboard",
  "block2 0.6.2",
+ "bytemuck",
  "cfg-if",
  "cfg_aliases",
  "futures",
@@ -1908,6 +1926,8 @@ dependencies = [
  "i-slint-core-macros",
  "i-slint-renderer-femtovg",
  "i-slint-renderer-skia",
+ "i-slint-renderer-software",
+ "imgref",
  "lyon_path",
  "muda",
  "objc2 0.6.5",
@@ -1917,6 +1937,7 @@ dependencies = [
  "objc2-ui-kit 0.3.2",
  "pin-weak",
  "raw-window-handle",
+ "rgb",
  "scoped-tls-hkt",
  "scopeguard",
  "softbuffer",
@@ -1960,6 +1981,7 @@ dependencies = [
  "i-slint-common",
  "icu_normalizer",
  "icu_properties",
+ "image",
  "indexmap",
  "itertools 0.15.0",
  "lyon_extra",
@@ -1967,10 +1989,14 @@ dependencies = [
  "num_enum",
  "proc-macro2",
  "quote",
+ "rayon",
+ "resvg",
  "rowan",
  "rspolib",
+ "skrifa",
  "smol_str 0.3.2",
  "strum",
+ "swash",
  "typed-index-collections",
  "unicode-segmentation",
  "url",
@@ -2992,6 +3018,7 @@ name = "nepdate-widget"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "image",
  "jiff",
  "nepdate",
  "slint",
@@ -4401,6 +4428,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ea28d4e1ad47d829b91e227f17037fac07a8001668a93fee47ac04f88718ebc"
 dependencies = [
  "derive_more",
+ "fontique",
  "i-slint-compiler",
  "spin_on",
  "toml_edit",

@@ -9,23 +9,18 @@ rust-version = "1.92" # Slint MSRV, higher than the libraries' 1.85
 publish = false
 
 [dependencies]
-# femtovg only (ADR-0010). The default `renderer-software` feature pulls Slint's fontique/skrifa
-# stack, whose `raw-dylib` imports segfault under the windows-gnu toolchain's dlltool shim.
-slint = { version = "1.18", default-features = false, features = [
-    "std",
-    "backend-default",
-    "renderer-femtovg",
-    "accessibility",
-    "compat-1-2",
-    "system-tray",
-] }
+# Default features (ADR-0010: femtovg renderer, winit backend, plus the software renderer for
+# headless use). No feature overrides: the plan (W0-01) spells `slint = "1.18"`.
+slint = "1.18"
 nepdate = { path = "../../crates/nepdate" }
 jiff = "0.2"
 anyhow = "1"
+# PNG encoding for the --snapshot flag. `image` is already in the tree through i-slint-core, so
+# this adds no new crate; only the `png` codec feature is enabled.
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 [build-dependencies]
-# Same reason: no `renderer-software` in the compiler.
-slint-build = { version = "1.18", default-features = false, features = ["compat-1-18"] }
+slint-build = "1.18"
 
 [lints]
 workspace = true
