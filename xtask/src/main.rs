@@ -32,13 +32,15 @@ fn main() -> ExitCode {
         ["data-status"] => data_status::run(None),
         ["data-status", "--today", today] => data_status::run(Some(today)),
         ["check-core-has-no-patro"] => core_check::run(),
-        ["icons"] => icons::icons(),
+        ["icons"] => icons::icons(false),
+        ["icons", "--check"] => icons::icons(true),
         ["release-check", package, version] => release::run_check(package, version),
         ["changelog", package, version] => release::run_changelog(package, version),
         _ => {
             eprintln!(
                 "usage: cargo xtask <ci | coverage | bench | codegen [--check] | catalog-check <phase> [--list] | \
-                 data-status [--today YYYY-MM-DD] | check-core-has-no-patro | icons |                  release-check <package> <version> | changelog <package> <version>>"
+                 data-status [--today YYYY-MM-DD] | check-core-has-no-patro | icons [--check] | \
+                 release-check <package> <version> | changelog <package> <version>>"
             );
             return ExitCode::from(2);
         }
@@ -125,6 +127,7 @@ const STEPS: &[Step] = &[
         ],
     ),
     step("cargo", &["xtask", "codegen", "--check"]),
+    step("cargo", &["xtask", "icons", "--check"]),
     Step {
         program: "cargo",
         args: &["deny", "check"],

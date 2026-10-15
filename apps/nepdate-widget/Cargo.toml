@@ -32,3 +32,6 @@ slint-build = "1.18"
 
 [lints]
 workspace = true
+
+[target."cfg(windows)".dependencies]
+windows-registry = "0.6.1"

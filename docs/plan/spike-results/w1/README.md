@@ -1,21 +1,25 @@
 # W1 spike results (popup and tray icons)
 
-Generated with the W1 snapshot tool (`--popup --snapshot <png> --theme light|dark --lang en|ne`)
-and `cargo xtask icons`, on Windows with the MSVC toolchain. The popup PNGs show today's header
-and clock lines; the tray PNGs are the pre-rendered day-number icons.
+Generated on Windows with the MSVC toolchain: the popup with
+`--popup --snapshot <png> --theme light|dark --lang en|ne`, the tray icons with
+`cargo xtask icons` (`tray-icons.png` puts days 1, 15, 22 and 32 of each digit set on a light
+taskbar colour, top row, and a dark one, bottom row, at 2x).
 
-The visual verdicts are the human reviewer's (quality bar §2a); the agent could not view the
-images, so nothing here is marked PASS.
+Reviewed by eye on 2026-10-15 (quality bar section 2a).
 
-| File | What it shows |
-|---|---|
-| `popup-light-en.png` | popup, light theme, English |
-| `popup-light-ne.png` | popup, light theme, Nepali |
-| `popup-dark-en.png` | popup, dark theme, English |
-| `popup-dark-ne.png` | popup, dark theme, Nepali |
-| `tray-en-1.png`, `tray-en-15.png`, `tray-en-32.png` | tray day icons, English digits (1, 15, 32) |
-| `tray-ne-1.png`, `tray-ne-15.png`, `tray-ne-32.png` | tray day icons, Devanagari digits (१, १५, ३२) |
+| File | What it shows | Verdict |
+|---|---|---|
+| `popup-light-en.png` | popup, light theme, English | PASS |
+| `popup-light-ne.png` | popup, light theme, Nepali | PASS |
+| `popup-dark-en.png` | popup, dark theme, English | PASS |
+| `popup-dark-ne.png` | popup, dark theme, Nepali | PASS |
+| `tray-icons.png` | tray day icons, en and ne, light and dark taskbar | PASS, also checked at 16 px |
 
-The popup header is the `nepdate` long format (`Ashoj 8, 2083` / `असोज ८, २०८३`), the weekday
-and AD date come from the same local date (WR-05 AC4), and the clock lines follow WR-05 AC1 to
-AC3. The tray icon is white ink on a transparent background, the notification-area convention.
+The popup header is the `nepdate` long format (`Ashoj 29, 2083` / `असोज २९, २०८३`); weekday and
+AD date come from the same local date (WR-05 AC4). These snapshots show one clock line because
+this machine's zone is Asia/Kathmandu, the default extra zone, so WR-05 AC1 hides it; the unit
+tests cover the two-line case.
+
+Review history: the first W1 icons were white only (invisible on a light taskbar) and thin at
+16 px, and the popup stretched its four rows over the full height. The icons now come in two
+inks, `ink` for each taskbar scheme, thickened with a stroke, and the popup stacks from the top.

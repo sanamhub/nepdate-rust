@@ -35,7 +35,13 @@ slint::include_modules!();
 /// The shared state (ADR-0015): settings now, the viewed month and selection from W2 on.
 struct AppState {
     settings: Settings,
+    /// When focus loss last hid the popup; see `handle_tray_event`.
+    popup_hidden_at: Option<std::time::Instant>,
 }
+
+/// A tray click within this long after focus loss hid the popup was the click that took the focus
+/// away, so it means "close", not "open again".
+const REOPEN_GUARD: std::time::Duration = std::time::Duration::from_millis(400);
 
 /// Command-line flags. `theme` and `lang` override the settings, for snapshot determinism.
 #[derive(Debug, Default)]
@@ -137,7 +143,10 @@ fn main() -> anyhow::Result<()> {
             .select()?;
     }
 
-    let state = Rc::new(RefCell::new(AppState { settings }));
+    let state = Rc::new(RefCell::new(AppState {
+        settings,
+        popup_hidden_at: None,
+    }));
     let popup = PopupWindow::new()?;
     theme::apply(
         &popup,
@@ -163,6 +172,10 @@ fn main() -> anyhow::Result<()> {
     }
 
     let popup_weak = popup.as_weak();
+    popup.on_hidden_by_focus_loss({
+        let state = state.clone();
+        move || state.borrow_mut().popup_hidden_at = Some(std::time::Instant::now())
+    });
 
     // Tray (W1-03): WR-01 events delivered back here.
     let tray = Rc::new(SlintTray::new(lang, {
@@ -190,9 +203,13 @@ fn handle_tray_event(
             let Some(popup) = popup_weak.upgrade() else {
                 return;
             };
+            let just_hidden = state
+                .borrow()
+                .popup_hidden_at
+                .is_some_and(|at| at.elapsed() < REOPEN_GUARD);
             if popup.window().is_visible() {
                 let _ = popup.hide();
-            } else {
+            } else if !just_hidden {
                 update_popup(state, popup_weak);
                 let _ = ui_bridge::show_popup_at(&popup, ui_bridge::PopupAnchor::TrayCorner);
             }
@@ -252,6 +269,11 @@ fn update_tray(state: &Rc<RefCell<AppState>>, tray: &Rc<SlintTray>) {
         bs.month().short_name(lang)
     ));
     tray.set_icon_day(&bs.day().to_string());
+    // Re-read each tick, so a light/dark switch reaches the icon within a minute; W1B reacts to
+    // WM_SETTINGCHANGE at once. Elsewhere the markup follows Slint's palette.
+    if let Some(dark) = platform::taskbar_scheme::taskbar_is_dark() {
+        tray.set_dark_taskbar(dark);
+    }
     tray.set_tooltip(&format!(
         "{} · {}",
         bs.long(

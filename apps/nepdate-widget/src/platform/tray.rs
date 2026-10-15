@@ -24,6 +24,8 @@ pub trait Tray {
     fn set_title(&self, text: &str);
     fn set_icon_day(&self, day: &str);
     fn set_tooltip(&self, tooltip: &str);
+    /// Picks the icon ink for a dark (`true`) or light taskbar.
+    fn set_dark_taskbar(&self, dark: bool);
 }
 
 /// Implementation A: a Slint `SystemTrayIcon`. The two day-number image arrays live in
@@ -82,5 +84,9 @@ impl Tray for SlintTray {
 
     fn set_tooltip(&self, tooltip: &str) {
         self.component.set_tooltip_text(tooltip.into());
+    }
+
+    fn set_dark_taskbar(&self, dark: bool) {
+        self.component.set_dark_taskbar(dark);
     }
 }

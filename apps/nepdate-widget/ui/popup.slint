@@ -26,8 +26,15 @@ export component PopupWindow inherits Window {
     // fires when the popup is deactivated (WR-02 AC2).
     forward-focus: fs;
 
+    // Fired when focus loss hides the popup. A click on the tray icon takes the focus first, so
+    // the app needs to know the popup was open a moment ago, or that click would reopen it.
+    callback hidden-by-focus-loss();
+
     fs := FocusScope {
-        focus-lost(_) => { root.hide(); }
+        focus-lost(_) => {
+            root.hide();
+            root.hidden-by-focus-loss();
+        }
         key-pressed(event) => {
             if (event.text == Key.Escape) {
                 root.hide();
@@ -36,7 +43,9 @@ export component PopupWindow inherits Window {
             reject
         }
 
+        // Content stacks from the top; W2's month grid takes the remaining height.
         VerticalLayout {
+            alignment: start;
             padding: 12px;
             spacing: 4px;
 
@@ -48,8 +57,14 @@ export component PopupWindow inherits Window {
 
             for line in root.clocks: HorizontalLayout {
                 spacing: 8px;
-                Text { text: line.is-local ? @tr("Local") : line.zone-city + " " + line.offset; color: Theme.ink-muted; font-size: 14px; }
-                Text { text: line.time; color: Theme.ink; font-size: 16px; }
+                Text {
+                    text: line.is-local ? @tr("Local") : line.zone-city + " " + line.offset;
+                    color: Theme.ink-muted;
+                    font-size: 14px;
+                    horizontal-stretch: 1;
+                    vertical-alignment: center;
+                }
+                Text { text: line.time; color: Theme.ink; font-size: 16px; vertical-alignment: center; }
             }
         }
     }
