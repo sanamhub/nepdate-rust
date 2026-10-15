@@ -19,6 +19,10 @@ anyhow = "1"
 # Clipboard (WR-01 AC5). Already in the tree through Slint's winit backend, so no new crate;
 # text-only, no image feature (ADR-0015).
 arboard = { version = "3", default-features = false, features = ["wayland-data-control"] }
+# Logging (W1-06, ADR-0015): file logger + panic hook.
+log = "0.4"
+simplelog = "0.12"
+dirs = "6"
 # PNG encoding for the --snapshot flag. `image` is already in the tree through i-slint-core, so
 # this adds no new crate; only the `png` codec feature is enabled.
 image = { version = "0.25", default-features = false, features = ["png"] }

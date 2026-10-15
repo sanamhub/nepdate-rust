@@ -3,7 +3,7 @@
 
 mod autostart;
 pub mod clipboard;
-mod logging;
+pub mod logging;
 mod settings_store;
 mod single_instance;
 pub mod tray;

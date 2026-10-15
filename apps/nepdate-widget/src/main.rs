@@ -101,6 +101,10 @@ impl Cli {
 }
 
 fn main() -> anyhow::Result<()> {
+    // Best-effort: the app still runs if the file logger can't start; the panic hook is
+    // installed regardless (W1-06).
+    let _ = platform::logging::init();
+
     let cli = Cli::parse(std::env::args().skip(1))?;
 
     // W0 Devanagari spike window (unchanged).
