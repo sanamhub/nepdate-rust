@@ -53,35 +53,20 @@ fn today() -> anyhow::Result<Today> {
     })
 }
 
-/// Explicit theme for a run. `System` follows the platform light/dark scheme.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-enum ThemeFlag {
-    Light,
-    Dark,
-    #[default]
-    System,
-}
-
-impl ThemeFlag {
-    fn resolve(self) -> theme::Scheme {
-        match self {
-            ThemeFlag::Light => theme::Scheme::Light,
-            ThemeFlag::Dark => theme::Scheme::Dark,
-            ThemeFlag::System => theme::system_scheme(),
-        }
-    }
-}
-
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct Cli {
     font_test: bool,
     snapshot: Option<PathBuf>,
-    theme: ThemeFlag,
+    theme: ThemeChoice,
 }
 
 impl Cli {
     fn parse(args: impl Iterator<Item = String>) -> anyhow::Result<Self> {
-        let mut cli = Cli::default();
+        let mut cli = Cli {
+            font_test: false,
+            snapshot: None,
+            theme: ThemeChoice::System,
+        };
         let mut args = args.peekable();
         while let Some(arg) = args.next() {
             match arg.as_str() {
@@ -97,9 +82,9 @@ impl Cli {
                         .next()
                         .ok_or_else(|| anyhow::anyhow!("--theme needs light, dark or system"))?;
                     cli.theme = match value.as_str() {
-                        "light" => ThemeFlag::Light,
-                        "dark" => ThemeFlag::Dark,
-                        "system" => ThemeFlag::System,
+                        "light" => ThemeChoice::Light,
+                        "dark" => ThemeChoice::Dark,
+                        "system" => ThemeChoice::System,
                         other => {
                             anyhow::bail!("--theme must be light, dark or system, got {other}")
                         }
@@ -187,11 +172,9 @@ fn write_snapshot(ui: &FontTestWindow, path: &std::path::Path) -> anyhow::Result
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse(std::env::args().skip(1))?;
-    let scheme = cli.theme.resolve();
-
     if cli.font_test {
         let ui = FontTestWindow::new()?;
-        theme::apply(&ui, scheme);
+        theme::apply(&ui, cli.theme);
         match cli.snapshot {
             Some(path) => snapshot_font_test(&ui, &path)?,
             None => ui.run()?,
@@ -199,7 +182,7 @@ fn main() -> anyhow::Result<()> {
     } else {
         let today = today()?;
         let ui = AppWindow::new()?;
-        theme::apply(&ui, scheme);
+        theme::apply(&ui, cli.theme);
         ui.set_bs_en(today.en.into());
         ui.set_bs_ne(today.ne.into());
         ui.run()?;
