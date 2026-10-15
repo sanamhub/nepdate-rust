@@ -1,0 +1,104 @@
+// Tray icon and menu (WR-01), implementation A: Slint `SystemTrayIcon` (ADR-0010).
+// The day-number icons are pre-rendered by `cargo xtask icons` (W1-03); Rust sets the index.
+// `title` and `tooltip` of `SystemTrayIcon` are bound to in-out properties because a
+// `SystemTrayIcon`-rooted component does not expose the inherited properties to Rust.
+import { MenuText } from "menu-text.slint";
+
+export component TrayComponent inherits SystemTrayIcon {
+    in property <int> day-index: 0;   // 0..=31, day 1..32
+    in property <bool> is-ne: false;
+    in-out property <string> title-text: "";
+    in-out property <string> tooltip-text: "";
+
+    in property <[image]> en-days: [
+        @image-url("tray/en/1.png"),
+        @image-url("tray/en/2.png"),
+        @image-url("tray/en/3.png"),
+        @image-url("tray/en/4.png"),
+        @image-url("tray/en/5.png"),
+        @image-url("tray/en/6.png"),
+        @image-url("tray/en/7.png"),
+        @image-url("tray/en/8.png"),
+        @image-url("tray/en/9.png"),
+        @image-url("tray/en/10.png"),
+        @image-url("tray/en/11.png"),
+        @image-url("tray/en/12.png"),
+        @image-url("tray/en/13.png"),
+        @image-url("tray/en/14.png"),
+        @image-url("tray/en/15.png"),
+        @image-url("tray/en/16.png"),
+        @image-url("tray/en/17.png"),
+        @image-url("tray/en/18.png"),
+        @image-url("tray/en/19.png"),
+        @image-url("tray/en/20.png"),
+        @image-url("tray/en/21.png"),
+        @image-url("tray/en/22.png"),
+        @image-url("tray/en/23.png"),
+        @image-url("tray/en/24.png"),
+        @image-url("tray/en/25.png"),
+        @image-url("tray/en/26.png"),
+        @image-url("tray/en/27.png"),
+        @image-url("tray/en/28.png"),
+        @image-url("tray/en/29.png"),
+        @image-url("tray/en/30.png"),
+        @image-url("tray/en/31.png"),
+        @image-url("tray/en/32.png")
+    ];
+    in property <[image]> ne-days: [
+        @image-url("tray/ne/1.png"),
+        @image-url("tray/ne/2.png"),
+        @image-url("tray/ne/3.png"),
+        @image-url("tray/ne/4.png"),
+        @image-url("tray/ne/5.png"),
+        @image-url("tray/ne/6.png"),
+        @image-url("tray/ne/7.png"),
+        @image-url("tray/ne/8.png"),
+        @image-url("tray/ne/9.png"),
+        @image-url("tray/ne/10.png"),
+        @image-url("tray/ne/11.png"),
+        @image-url("tray/ne/12.png"),
+        @image-url("tray/ne/13.png"),
+        @image-url("tray/ne/14.png"),
+        @image-url("tray/ne/15.png"),
+        @image-url("tray/ne/16.png"),
+        @image-url("tray/ne/17.png"),
+        @image-url("tray/ne/18.png"),
+        @image-url("tray/ne/19.png"),
+        @image-url("tray/ne/20.png"),
+        @image-url("tray/ne/21.png"),
+        @image-url("tray/ne/22.png"),
+        @image-url("tray/ne/23.png"),
+        @image-url("tray/ne/24.png"),
+        @image-url("tray/ne/25.png"),
+        @image-url("tray/ne/26.png"),
+        @image-url("tray/ne/27.png"),
+        @image-url("tray/ne/28.png"),
+        @image-url("tray/ne/29.png"),
+        @image-url("tray/ne/30.png"),
+        @image-url("tray/ne/31.png"),
+        @image-url("tray/ne/32.png")
+    ];
+
+    // Windows/Linux render the icon; macOS shows the title instead (WR-01 AC2).
+    icon: root.is-ne ? root.ne-days[root.day-index] : root.en-days[root.day-index];
+    tooltip: root.tooltip-text;
+    title: root.title-text;
+
+    // Left-click toggles the popup on Windows/Linux. On macOS `clicked` fires only without a
+    // menu, so macOS uses the menu's "Open" item (WR-01 AC4).
+    clicked => { root.open(); }
+
+    Menu {
+        MenuItem { title: MenuText.open; activated => { root.open(); } }
+        MenuItem { title: MenuText.copy-bs; activated => { root.copy-bs(); } }
+        MenuItem { title: MenuText.copy-ad; activated => { root.copy-ad(); } }
+        MenuItem { title: MenuText.settings; activated => { root.settings(); } }
+        MenuItem { title: MenuText.quit; activated => { root.quit(); } }
+    }
+
+    callback open();
+    callback copy-bs();
+    callback copy-ad();
+    callback settings();
+    callback quit();
+}

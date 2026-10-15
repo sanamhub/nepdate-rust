@@ -10,6 +10,7 @@ mod catalog;
 mod codegen;
 mod core_check;
 mod data_status;
+mod icons;
 mod patro;
 mod release;
 
@@ -31,12 +32,13 @@ fn main() -> ExitCode {
         ["data-status"] => data_status::run(None),
         ["data-status", "--today", today] => data_status::run(Some(today)),
         ["check-core-has-no-patro"] => core_check::run(),
+        ["icons"] => icons::icons(),
         ["release-check", package, version] => release::run_check(package, version),
         ["changelog", package, version] => release::run_changelog(package, version),
         _ => {
             eprintln!(
                 "usage: cargo xtask <ci | coverage | bench | codegen [--check] | catalog-check <phase> [--list] | \
-                 data-status [--today YYYY-MM-DD] | check-core-has-no-patro |                  release-check <package> <version> | changelog <package> <version>>"
+                 data-status [--today YYYY-MM-DD] | check-core-has-no-patro | icons |                  release-check <package> <version> | changelog <package> <version>>"
             );
             return ExitCode::from(2);
         }
