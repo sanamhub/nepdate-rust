@@ -99,6 +99,7 @@ Stored per user at `dirs::config_dir()/nepdate-widget/settings.toml`: Windows
 | `show_seconds` | bool | false |
 | `extra_time_zone` | IANA string or `""` | `"Asia/Kathmandu"` |
 | `launch_at_login` | bool | true |
+| `taskbar_text` | bool | true (Windows 11 only, WR-12; ignored elsewhere) |
 
 - AC1: Settings UI is a panel inside the popup. Changes apply immediately, with no
   restart.
@@ -151,3 +152,31 @@ Not in v0.1 (ADR-0008 §B). ID kept so later IDs don't change.
   Resource Monitor). No telemetry, no crash upload, no update check.
 - AC2: Logs contain no personal data (no user names, paths inside the home folder are
   shown as `~`).
+
+## WR-12 Windows taskbar text
+
+Windows 11 only (ADR-0016). Elsewhere the tray icon (WR-01) is the only always-visible date.
+
+- AC1: With a bottom, centre-aligned Windows 11 taskbar, two lines are drawn inside the
+  taskbar of the primary monitor, in the free area left of the Start button (right of the
+  Widgets button if it is shown), 12 px from that area's left edge, vertically centred.
+  Line 1: weekday, ` | `, local time (WR-05 AC2 format). Line 2: BS long date, ` | `, AD date
+  as `Oct 15, 2026`. Example (en): `Thursday | 1:50 PM` / `Ashoj 29, 2083 | Oct 15, 2026`.
+  With language = ne the weekday, the time digits and the BS date are Nepali
+  (`बिहिवार | १:५० PM` / `असोज २९, २०८३ | Oct 15, 2026`); the AD date stays Latin. The
+  weekday and BS date come from the same local date (WR-05 AC4), formatted by `nepdate`.
+- AC2: Text colour is the `ink` token for the **taskbar** theme (`SystemUsesLightTheme`), not
+  the app theme, and changes within 1 s of a system light/dark switch, without restart.
+- AC3: Left click toggles the popup, which opens above the text, left-aligned with it, fully
+  on-screen. Right click opens a menu with the WR-01 AC5 items in the current language.
+- AC4: The text never overlaps the Start button, Widgets button or taskbar icons. When the
+  icons grow towards it (apps opened), it hides within 1 s, and shows again when room
+  returns. It is hidden, with one log line giving the reason, on Windows 10, with a
+  left-aligned or non-bottom taskbar, or when it does not fit.
+- AC5: It moves with an auto-hiding taskbar and is not visible over a full-screen app.
+- AC6: After Explorer restarts, the text is back within 5 s. Any failure hides the text and
+  logs once; the app and the tray icon keep running.
+- AC7: It follows DPI and scale changes (100 % to 200 %) and monitor changes with no restart.
+- AC8: Setting `taskbar_text` (WR-06) turns it on and off immediately. Idle cost: it redraws
+  only when its text, colour, DPI or position changes (at most once per minute with seconds
+  hidden), and adds no measurable idle CPU.

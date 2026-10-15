@@ -58,7 +58,15 @@ sections 16.
 - Digits follow the language: Devanagari for `ne`, ASCII for `en`. `nepdate` provides both via
   `Lang::digits`.
 
-## 5. Principles
+## 5. Windows taskbar text (WR-12, ADR-0016)
+
+Two lines, 12 px at 100 % scale, line 1 regular, line 2 semibold, line gap 2 px. Latin in Noto
+Sans, Devanagari in Noto Sans Devanagari (12 px is the Devanagari minimum of §4, so it is not
+reduced at any scale). Colour: `ink` for the taskbar's theme (light taskbar: light `ink`, dark
+taskbar: dark `ink`), no accent colours, no background (the taskbar's material shows through).
+Left inset 12 px. It should read like the system clock, not like a badge.
+
+## 6. Principles
 
 - Vermillion only for "today" and public holidays.
 - Flat surfaces, no decorative shadows or gradients. Borders (`hairline`) do the structural work.
