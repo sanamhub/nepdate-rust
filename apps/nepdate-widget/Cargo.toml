@@ -8,6 +8,13 @@ repository.workspace = true
 rust-version = "1.92" # Slint MSRV, higher than the libraries' 1.85
 publish = false
 
+[features]
+# PNG encoding for the --snapshot and --taskbar-snapshot flags (W0/W1 test tools). `image` is
+# already in the tree through i-slint-core, so this adds no new crate; only the `png` codec
+# feature is enabled. Off by default: the shipped binary has no image crate (ADR-0016).
+default = []
+snapshot = ["dep:image"]
+
 [dependencies]
 # Default features (ADR-0010: femtovg renderer, winit backend, plus the software renderer for
 # headless use), plus `unstable-winit-030` so the popup can opt out of the Windows taskbar
@@ -23,9 +30,8 @@ arboard = { version = "3", default-features = false, features = ["wayland-data-c
 log = "0.4"
 simplelog = "0.12"
 dirs = "6"
-# PNG encoding for the --snapshot flag. `image` is already in the tree through i-slint-core, so
-# this adds no new crate; only the `png` codec feature is enabled.
-image = { version = "0.25", default-features = false, features = ["png"] }
+# PNG encoding for the snapshot flags, behind the `snapshot` feature (W1B-00, ADR-0016).
+image = { version = "0.25", default-features = false, features = ["png"], optional = true }
 
 [build-dependencies]
 slint-build = "1.18"

@@ -128,6 +128,11 @@ const STEPS: &[Step] = &[
     ),
     step("cargo", &["xtask", "codegen", "--check"]),
     step("cargo", &["xtask", "icons", "--check"]),
+    // W1B-00: the snapshot feature stays off by default; this build keeps its code compiling.
+    step(
+        "cargo",
+        &["build", "-p", "nepdate-widget", "--features", "snapshot"],
+    ),
     Step {
         program: "cargo",
         args: &["deny", "check"],

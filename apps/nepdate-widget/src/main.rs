@@ -20,6 +20,7 @@ mod theme;
 mod ui_bridge;
 
 use std::cell::RefCell;
+#[cfg(feature = "snapshot")]
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -48,6 +49,7 @@ const REOPEN_GUARD: std::time::Duration = std::time::Duration::from_millis(400);
 struct Cli {
     font_test: bool,
     popup: bool,
+    #[cfg(feature = "snapshot")]
     snapshot: Option<PathBuf>,
     theme: Option<ThemeChoice>,
     lang: Option<Lang>,
@@ -61,6 +63,7 @@ impl Cli {
             match arg.as_str() {
                 "--font-test" => cli.font_test = true,
                 "--popup" => cli.popup = true,
+                #[cfg(feature = "snapshot")]
                 "--snapshot" => {
                     let path = args
                         .next()
@@ -93,11 +96,14 @@ impl Cli {
                 other => anyhow::bail!("unknown argument: {other}"),
             }
         }
-        if cli.snapshot.is_some() && !cli.font_test && !cli.popup {
-            anyhow::bail!("--snapshot needs --font-test or --popup");
-        }
-        if cli.popup && cli.snapshot.is_none() {
-            anyhow::bail!("--popup needs --snapshot");
+        #[cfg(feature = "snapshot")]
+        {
+            if cli.snapshot.is_some() && !cli.font_test && !cli.popup {
+                anyhow::bail!("--snapshot needs --font-test or --popup");
+            }
+            if cli.popup && cli.snapshot.is_none() {
+                anyhow::bail!("--popup needs --snapshot");
+            }
         }
         if cli.font_test && cli.popup {
             anyhow::bail!("--font-test and --popup are exclusive");
@@ -117,10 +123,11 @@ fn main() -> anyhow::Result<()> {
     if cli.font_test {
         let ui = FontTestWindow::new()?;
         theme::apply(&ui, cli.theme.unwrap_or(ThemeChoice::System));
-        match cli.snapshot {
-            Some(path) => snapshot(&ui, &path)?,
-            None => ui.run()?,
+        #[cfg(feature = "snapshot")]
+        if let Some(path) = cli.snapshot {
+            return snapshot(&ui, &path);
         }
+        ui.run()?;
         return Ok(());
     }
 
@@ -162,6 +169,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     // Snapshot the popup (W1 test tool): fill it with today's header and clocks, then render.
+    #[cfg(feature = "snapshot")]
     if cli.popup {
         let path = cli
             .snapshot
@@ -313,6 +321,7 @@ fn arm_timer(state: Rc<RefCell<AppState>>, popup_weak: Weak<PopupWindow>, tray: 
 /// Renders a window and writes it as a PNG (W0 tool, reused for the popup). Uses Slint's
 /// `Window::take_snapshot` and the `image` crate; the window is sized on the first event-loop
 /// turn, so the snapshot runs from a timer once `Window::size()` is non-zero.
+#[cfg(feature = "snapshot")]
 fn snapshot<C: ComponentHandle + 'static>(ui: &C, path: &std::path::Path) -> anyhow::Result<()> {
     use std::cell::Cell;
 
@@ -363,6 +372,7 @@ fn snapshot<C: ComponentHandle + 'static>(ui: &C, path: &std::path::Path) -> any
 }
 
 /// Encodes the window's RGBA8 snapshot buffer as a PNG at `path`.
+#[cfg(feature = "snapshot")]
 fn write_snapshot<C: ComponentHandle>(ui: &C, path: &std::path::Path) -> anyhow::Result<()> {
     let buffer = ui.window().take_snapshot()?;
     let (width, height) = (buffer.width(), buffer.height());
