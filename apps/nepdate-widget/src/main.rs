@@ -29,6 +29,8 @@ use slint::{ComponentHandle, Weak};
 
 use crate::app::clock;
 use crate::app::settings::Settings;
+use crate::app::taskbar::taskbar_lines;
+use crate::platform::taskbar::{MenuItem, TaskbarEvent, TaskbarText};
 use crate::platform::tray::{SlintTray, Tray, TrayEvent};
 
 slint::include_modules!();
@@ -53,6 +55,7 @@ struct Cli {
     snapshot: Option<PathBuf>,
     theme: Option<ThemeChoice>,
     lang: Option<Lang>,
+    no_taskbar_text: bool,
 }
 
 impl Cli {
@@ -63,6 +66,7 @@ impl Cli {
             match arg.as_str() {
                 "--font-test" => cli.font_test = true,
                 "--popup" => cli.popup = true,
+                "--no-taskbar-text" => cli.no_taskbar_text = true,
                 #[cfg(feature = "snapshot")]
                 "--snapshot" => {
                     let path = args
@@ -154,6 +158,10 @@ fn main() -> anyhow::Result<()> {
         settings,
         popup_hidden_at: None,
     }));
+    // The `--no-taskbar-text` flag turns WR-12 off for this run (W3 builds the settings UI).
+    if cli.no_taskbar_text {
+        state.borrow_mut().settings.taskbar_text = false;
+    }
     let popup = PopupWindow::new()?;
     theme::apply(
         &popup,
@@ -192,9 +200,31 @@ fn main() -> anyhow::Result<()> {
         move |event| handle_tray_event(event, &state, &popup_weak)
     })?);
 
+    // Taskbar text (W1B-03): WR-12 on Windows 11, a no-op elsewhere. Its events run the same
+    // actions as the tray menu; its scheme callback keeps the tray icon ink in step.
+    let taskbar: Rc<dyn TaskbarText> = Rc::from(platform::taskbar::create(
+        {
+            let state = state.clone();
+            let popup_weak = popup_weak.clone();
+            move |event| handle_taskbar_event(event, &state, &popup_weak)
+        },
+        {
+            let tray = tray.clone();
+            move |dark| tray.set_dark_taskbar(dark)
+        },
+    ));
+    taskbar.set_menu_labels(&ui_bridge::menu_labels(&popup));
+    taskbar.set_enabled(state.borrow().settings.taskbar_text);
+    // First taskbar lines, then the timer updates them each tick (WR-12 AC1).
+    {
+        let s = state.borrow();
+        let now = jiff::Zoned::now();
+        taskbar.set_lines(&taskbar_lines(&now, &s.settings));
+    }
+
     // First paint of the tray, then the once-per-minute (or per-second) timer (W1-05).
     update_tray(&state, &tray);
-    arm_timer(state.clone(), popup_weak.clone(), tray);
+    arm_timer(state.clone(), popup_weak.clone(), tray, taskbar);
 
     slint::run_event_loop()?;
     Ok(())
@@ -227,6 +257,39 @@ fn handle_tray_event(
         TrayEvent::Settings => {}
         TrayEvent::Quit => {
             let _ = slint::quit_event_loop();
+        }
+    }
+}
+
+/// Handles a WR-12 taskbar event. `Toggle` opens or hides the popup above the text; `Menu` runs
+/// the same actions as the tray menu (ADR-0016 point 7).
+fn handle_taskbar_event(
+    event: TaskbarEvent,
+    state: &Rc<RefCell<AppState>>,
+    popup_weak: &Weak<PopupWindow>,
+) {
+    match event {
+        TaskbarEvent::Toggle { anchor } => {
+            let Some(popup) = popup_weak.upgrade() else {
+                return;
+            };
+            if popup.window().is_visible() {
+                let _ = popup.hide();
+            } else {
+                update_popup(state, popup_weak);
+                let _ =
+                    ui_bridge::show_popup_at(&popup, ui_bridge::PopupAnchor::Above(anchor.into()));
+            }
+        }
+        TaskbarEvent::Menu(item) => {
+            let tray_event = match item {
+                MenuItem::Open => TrayEvent::Open,
+                MenuItem::CopyBs => TrayEvent::CopyBs,
+                MenuItem::CopyAd => TrayEvent::CopyAd,
+                MenuItem::Settings => TrayEvent::Settings,
+                MenuItem::Quit => TrayEvent::Quit,
+            };
+            handle_tray_event(tray_event, state, popup_weak);
         }
     }
 }
@@ -296,25 +359,34 @@ fn update_tray(state: &Rc<RefCell<AppState>>, tray: &Rc<SlintTray>) {
     ));
 }
 
-/// One tick of the W1 timer: tray, then popup, then re-arms for the next boundary (WR-05 AC5/AC6).
+/// One tick of the W1 timer: tray, popup, taskbar text, then re-arms (WR-05 AC5/AC6).
 fn update_tick(
     state: &Rc<RefCell<AppState>>,
     popup_weak: &Weak<PopupWindow>,
     tray: &Rc<SlintTray>,
+    taskbar: &Rc<dyn TaskbarText>,
 ) {
     update_tray(state, tray);
     update_popup(state, popup_weak);
+    let s = state.borrow();
+    let now = jiff::Zoned::now();
+    taskbar.set_lines(&taskbar_lines(&now, &s.settings));
 }
 
 /// Schedules the next single-shot tick. The closure re-arms itself, so the process sleeps about
 /// 60 s between wakes when seconds are hidden (WR-05 AC5).
-fn arm_timer(state: Rc<RefCell<AppState>>, popup_weak: Weak<PopupWindow>, tray: Rc<SlintTray>) {
+fn arm_timer(
+    state: Rc<RefCell<AppState>>,
+    popup_weak: Weak<PopupWindow>,
+    tray: Rc<SlintTray>,
+    taskbar: Rc<dyn TaskbarText>,
+) {
     let now = jiff::Zoned::now();
     let show_seconds = state.borrow().settings.show_seconds;
     let delay = clock::next_wakeup(&now, show_seconds);
     slint::Timer::single_shot(delay, move || {
-        update_tick(&state, &popup_weak, &tray);
-        arm_timer(state, popup_weak, tray);
+        update_tick(&state, &popup_weak, &tray, &taskbar);
+        arm_timer(state, popup_weak, tray, taskbar);
     });
 }
 

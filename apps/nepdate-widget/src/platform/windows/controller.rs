@@ -92,7 +92,7 @@ struct Controller {
 /// `RefCell` is the interior mutability the `&self` trait needs; every access is on the main
 /// thread, and the window procedure holds the only raw `&mut` while a message is dispatched.
 pub struct WindowsTaskbarText {
-    inner: RefCell<Controller>,
+    inner: RefCell<Box<Controller>>,
 }
 
 impl WindowsTaskbarText {
@@ -100,11 +100,14 @@ impl WindowsTaskbarText {
         on_event: impl FnMut(TaskbarEvent) + 'static,
         on_taskbar_scheme: impl FnMut(bool) + 'static,
     ) -> Self {
-        let mut inner = RefCell::new(Controller::new(
+        // `Box<Controller>` keeps the controller on the heap, so moving the outer `RefCell` (the
+        // `create` factory boxes this struct into an `Rc`) never moves the controller and the
+        // window procedure's raw pointer stays valid.
+        let mut inner = RefCell::new(Box::new(Controller::new(
             Box::new(on_event),
             Box::new(on_taskbar_scheme),
-        ));
-        let ptr = inner.as_ptr();
+        )));
+        let ptr = std::ptr::from_mut(inner.get_mut().as_mut());
         inner.get_mut().bind(ptr);
         inner.get_mut().refresh();
         Self { inner }
@@ -292,8 +295,10 @@ impl Controller {
         if shown.rect != rect_screen {
             shown.rect = rect_screen;
             let hwnd = self.text_hwnd;
+            // `UpdateLayeredWindow` positions a child window in its parent's client coordinates,
+            // so pass `rect_client`, not the screen rectangle stored for the popup anchor.
             if let Err(error) =
-                update_window(hwnd, &shown.pixels, shown.width, shown.height, rect_screen)
+                update_window(hwnd, &shown.pixels, shown.width, shown.height, rect_client)
             {
                 log::warn!("taskbar text: UpdateLayeredWindow failed: {error}");
                 self.hide(Hidden::NoRoom);

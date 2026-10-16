@@ -1,14 +1,12 @@
 //! Maps `app` view models to Slint generated types and callbacks (ADR-0015). The only place that
-//! converts between the two. W1 adds the popup placement (W1-04); W1B reuses `PopupAnchor::Above`.
-
-// `PopupAnchor::Above`, `Rect` and `above_position` are only wired in W1B; the bin target sees
-// them as unused until then.
-#![allow(dead_code)]
+//! converts between the two. W1 adds the popup placement (W1-04); W1B wires `PopupAnchor::Above`
+//! for the taskbar text (W1B-03).
 
 use slint::ComponentHandle;
 
 use crate::app::clock::Header;
-use crate::{PopupClockLine, PopupWindow};
+use crate::platform::taskbar::MenuLabels;
+use crate::{MenuText, PopupClockLine, PopupWindow};
 
 /// Where to open the popup (W1-04).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,8 +31,7 @@ pub struct Rect {
 pub fn show_popup_at(popup: &PopupWindow, anchor: PopupAnchor) -> anyhow::Result<()> {
     match anchor {
         PopupAnchor::TrayCorner => position_tray_corner(popup),
-        // W1B computes the work area and calls `above_position`; W1 does not wire `Above`.
-        PopupAnchor::Above(_) => {}
+        PopupAnchor::Above(anchor) => position_above(popup, anchor),
     }
     popup.show()?;
     popup.invoke_focus();
@@ -70,6 +67,71 @@ pub fn theme_choice(theme: &str) -> crate::ThemeChoice {
         "dark" => crate::ThemeChoice::Dark,
         _ => crate::ThemeChoice::System,
     }
+}
+
+/// The WR-01 AC5 menu labels, read from the translated `MenuText` global (W1B-03). The taskbar
+/// text's right-click menu and the tray menu read the same `@tr` strings.
+pub fn menu_labels(popup: &PopupWindow) -> MenuLabels {
+    let menu = popup.global::<MenuText>();
+    MenuLabels {
+        open: menu.get_open().to_string(),
+        copy_bs: menu.get_copy_bs().to_string(),
+        copy_ad: menu.get_copy_ad().to_string(),
+        settings: menu.get_settings().to_string(),
+        quit: menu.get_quit().to_string(),
+    }
+}
+
+impl From<crate::app::taskbar::Rect> for Rect {
+    fn from(rect: crate::app::taskbar::Rect) -> Self {
+        Rect {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+        }
+    }
+}
+
+/// Positions the popup above `anchor`, left-aligned and clamped to the primary monitor (WR-12
+/// AC3). The anchor is physical pixels; the popup position is logical, so both are scaled by the
+/// window's scale factor before the pure `above_position` maths runs. winit 0.30 exposes the full
+/// monitor rect but not the work area; WR-12 only shows on a bottom taskbar, where the popup opens
+/// above the text and the full monitor rect clamps it correctly.
+// Screen coordinates are far below f32's exact integer range (2^24), so the f64-to-i32 and
+// i32-to-f32 casts are lossless.
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+fn position_above(popup: &PopupWindow, anchor: Rect) {
+    use slint::winit_030::WinitWindowAccessor;
+
+    let Some(monitor) = popup
+        .window()
+        .with_winit_window(slint::winit_030::winit::window::Window::primary_monitor)
+        .flatten()
+    else {
+        return; // No monitor (headless); keep the OS default placement.
+    };
+    let scale = f64::from(popup.window().scale_factor());
+    let position = monitor.position();
+    let size = monitor.size();
+    let work = Rect {
+        left: (f64::from(position.x) / scale) as i32,
+        top: (f64::from(position.y) / scale) as i32,
+        right: (f64::from(position.x) / scale + f64::from(size.width) / scale) as i32,
+        bottom: (f64::from(position.y) / scale + f64::from(size.height) / scale) as i32,
+    };
+    let anchor = Rect {
+        left: (f64::from(anchor.left) / scale) as i32,
+        top: (f64::from(anchor.top) / scale) as i32,
+        right: (f64::from(anchor.right) / scale) as i32,
+        bottom: (f64::from(anchor.bottom) / scale) as i32,
+    };
+    let (x, y) = above_position(anchor, (POPUP_W as i32, POPUP_H as i32), work);
+    popup
+        .window()
+        .set_position(slint::WindowPosition::Logical(slint::LogicalPosition::new(
+            x as f32, y as f32,
+        )));
 }
 
 /// Positions the popup at the OS-specific corner of the primary monitor (WR-02 AC1).

@@ -24,13 +24,14 @@ use windows::Win32::Graphics::Direct2D::{
     D2D1_RENDER_TARGET_USAGE_GDI_COMPATIBLE, D2D1CreateFactory, ID2D1DCRenderTarget, ID2D1Factory,
 };
 use windows::Win32::Graphics::DirectWrite::{
-    DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_SIMULATIONS_NONE, DWRITE_FONT_STRETCH_NORMAL,
-    DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_WEIGHT, DWRITE_FONT_WEIGHT_REGULAR,
-    DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_METRICS, DWRITE_UNICODE_RANGE,
-    DWRITE_WORD_WRAPPING_NO_WRAP, DWriteCreateFactory, IDWriteFactory, IDWriteFactory3,
-    IDWriteFactory5, IDWriteFontCollection, IDWriteFontFaceReference, IDWriteFontFallback,
-    IDWriteFontFallbackBuilder, IDWriteFontSet, IDWriteFontSetBuilder,
-    IDWriteInMemoryFontFileLoader, IDWriteTextFormat, IDWriteTextFormat1, IDWriteTextLayout,
+    DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_PROPERTY, DWRITE_FONT_PROPERTY_ID_FAMILY_NAME,
+    DWRITE_FONT_SIMULATIONS_NONE, DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+    DWRITE_FONT_WEIGHT, DWRITE_FONT_WEIGHT_REGULAR, DWRITE_FONT_WEIGHT_SEMI_BOLD,
+    DWRITE_TEXT_METRICS, DWRITE_UNICODE_RANGE, DWRITE_WORD_WRAPPING_NO_WRAP, DWriteCreateFactory,
+    IDWriteFactory, IDWriteFactory3, IDWriteFactory5, IDWriteFontCollection,
+    IDWriteFontFaceReference, IDWriteFontFallback, IDWriteFontFallbackBuilder, IDWriteFontSet,
+    IDWriteFontSetBuilder, IDWriteInMemoryFontFileLoader, IDWriteTextFormat, IDWriteTextFormat1,
+    IDWriteTextLayout,
 };
 use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM;
 use windows::Win32::Graphics::Gdi::{
@@ -185,15 +186,25 @@ fn fonts(dw: &IDWriteFactory5) -> anyhow::Result<IDWriteFontCollection> {
     let dw3: IDWriteFactory3 = dw.cast()?;
     // SAFETY: the builder is a fresh DirectWrite object.
     let builder: IDWriteFontSetBuilder = unsafe { dw3.CreateFontSetBuilder()? };
-    // SAFETY: the face references keep the font files alive; empty properties use the font
-    // files' own family metadata (Noto Sans and Noto Sans Devanagari).
+    // SAFETY: the face references keep the font files alive; the family-name property makes each
+    // font findable by `CreateTextFormat`, and the variable font's axis still serves every weight.
     unsafe {
+        let en_props = [DWRITE_FONT_PROPERTY {
+            propertyId: DWRITE_FONT_PROPERTY_ID_FAMILY_NAME,
+            propertyValue: w!("Noto Sans"),
+            localeName: w!(""),
+        }];
+        let ne_props = [DWRITE_FONT_PROPERTY {
+            propertyId: DWRITE_FONT_PROPERTY_ID_FAMILY_NAME,
+            propertyValue: w!("Noto Sans Devanagari"),
+            localeName: w!(""),
+        }];
         let en_ref: IDWriteFontFaceReference =
             dw3.CreateFontFaceReference(&en, 0, DWRITE_FONT_SIMULATIONS_NONE)?;
-        builder.AddFontFaceReference(&en_ref, &[])?;
+        builder.AddFontFaceReference(&en_ref, &en_props)?;
         let ne_ref: IDWriteFontFaceReference =
             dw3.CreateFontFaceReference(&ne, 0, DWRITE_FONT_SIMULATIONS_NONE)?;
-        builder.AddFontFaceReference(&ne_ref, &[])?;
+        builder.AddFontFaceReference(&ne_ref, &ne_props)?;
     }
     // SAFETY: the font set is freshly built from the two face references above.
     let set: IDWriteFontSet = unsafe { builder.CreateFontSet()? };
@@ -408,6 +419,27 @@ mod tests {
             }
         }
         assert!(opaque > 0, "no opaque text pixels");
+    }
+
+    #[test]
+    fn render_width_is_reasonable() {
+        let rendered = render(&lines(), 1.0, theme::INK_LIGHT).expect("render");
+        // The two English lines are around 170 px wide; a much smaller width means the Latin
+        // glyphs did not shape.
+        assert!(
+            rendered.width > 100,
+            "rendered width too small: {}",
+            rendered.width
+        );
+        assert!(rendered.height > 20, "rendered height too small");
+    }
+
+    #[test]
+    fn render_twice_is_stable() {
+        let first = render(&lines(), 1.0, theme::INK_LIGHT).expect("render");
+        let second = render(&lines(), 1.0, theme::INK_LIGHT).expect("render");
+        assert_eq!(first.width, second.width, "render width not stable");
+        assert!(first.width > 100, "width too small: {}", first.width);
     }
 
     #[test]
