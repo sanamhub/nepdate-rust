@@ -10,7 +10,7 @@ L0 workspace+CI ─► L1 core types+codegen ─► L2 conversion ─► L3 arit
                                                    │
                                                    └──────► L4 format+parse ─► L5 patro+features ─► L6 release 0.1.0
                                                                                                  │
-W0 skeleton+font spike ─► W1 tray+popup+clock ─► W1B Windows taskbar text ─► W2 month grid ─► W3 converter/settings/lifecycle ─► W4 package+release
+W0 skeleton+font spike ─► W1 tray+popup+clock ─► W1B Windows taskbar text ─► W1R rename to MitiBar ─► W2 month grid ─► W3 converter/settings/lifecycle ─► W4 package+release
 ```
 
 L3 and L4 both depend only on L2 and may run in parallel (separate agents/branches).
@@ -35,6 +35,7 @@ are part of the tasks listed.
 | W0 | – | `W0-widget-skeleton.md` | Slint app boots, fonts, Devanagari spike (go/no-go) | `learn/08-slint-basics.md` |
 | W1 | – | `W1-tray-popup-clock.md` | tray, popup, header, clock timer | `learn/09-event-loop-and-state.md` |
 | W1B | – | `W1B-windows-taskbar-text.md` | Windows 11 taskbar text (ADR-0016, WR-12) | – |
+| W1R | – | `W1R-rename-mitibar.md` | Rename the app to MitiBar (ADR-0017), no behaviour change | – |
 | W2 | – | `W2-month-grid.md` | grid, navigation, day detail, next holiday | `learn/10-models-and-callbacks.md` |
 | W3 | – | `W3-converter-settings-lifecycle.md` | converter, settings, persistence, autostart, single instance | `learn/11-io-and-platform.md` |
 | W4 | – | `W4-package-and-release.md` | installers, perf check, manual test, release 0.1.0 | `learn/12-shipping.md` |
