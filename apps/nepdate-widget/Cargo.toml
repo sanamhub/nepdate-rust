@@ -8,6 +8,13 @@ repository.workspace = true
 rust-version = "1.92" # Slint MSRV, higher than the libraries' 1.85
 publish = false
 
+[features]
+# PNG encoding for the --snapshot and --taskbar-snapshot flags (W0/W1 test tools). `image` is
+# already in the tree through i-slint-core, so this adds no new crate; only the `png` codec
+# feature is enabled. Off by default: the shipped binary has no image crate (ADR-0016).
+default = []
+snapshot = ["dep:image"]
+
 [dependencies]
 # Default features (ADR-0010: femtovg renderer, winit backend, plus the software renderer for
 # headless use), plus `unstable-winit-030` so the popup can opt out of the Windows taskbar
@@ -23,15 +30,40 @@ arboard = { version = "3", default-features = false, features = ["wayland-data-c
 log = "0.4"
 simplelog = "0.12"
 dirs = "6"
-# PNG encoding for the --snapshot flag. `image` is already in the tree through i-slint-core, so
-# this adds no new crate; only the `png` codec feature is enabled.
-image = { version = "0.25", default-features = false, features = ["png"] }
+# PNG encoding for the snapshot flags, behind the `snapshot` feature (W1B-00, ADR-0016).
+image = { version = "0.25", default-features = false, features = ["png"], optional = true }
 
 [build-dependencies]
 slint-build = "1.18"
+# Application manifest (ADR-0016): Windows 8 to 11 `supportedOS`, per-monitor-v2 DPI and the
+# UTF-8 active code page. Layered child windows need the `supportedOS` entry.
+embed-manifest = "1.5"
 
 [lints]
 workspace = true
 
 [target."cfg(windows)".dependencies]
 windows-registry = "0.6.1"
+# Win32 and COM for the taskbar text (ADR-0016). Only the features the module uses.
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_System_ProcessStatus",
+    "Win32_System_Threading",
+    "Win32_System_Variant",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Shell",
+    "Win32_UI_HiDpi",
+    "Win32_Graphics_Gdi",
+    "Win32_Graphics_Direct2D",
+    "Win32_Graphics_Direct2D_Common",
+    "Win32_Graphics_DirectWrite",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_UI_Accessibility",
+] }
+# `windows-core` is a direct dependency for the `#[implement]` macro, which generates
+# `::windows_core::...` paths (uia.rs).
+windows-core = "0.62"
+# `windows_numerics::Vector2` is the Direct2D `DrawTextLayout` origin type (via the `windows`
+# crate); it is already in the tree through that dependency.
+windows-numerics = "0.3"

@@ -6,3 +6,4 @@ mod converter;
 mod holidays;
 mod month_view;
 pub mod settings;
+pub mod taskbar;

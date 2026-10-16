@@ -124,3 +124,117 @@ The implementation agent stops here for review. The reviewer checks:
 - [ ] Taskbar PNGs (light, dark, en, ne, scales) looked at; Devanagari shaped.
 - [ ] Full-screen grabs of the real taskbar, light and dark, looked at.
 - [ ] Idle CPU over 2 minutes with the text on, method given; binary size and startup versus W1.
+
+## Review fixes (W1B-05), from the reviewer on 2026-10-16
+
+The checkpoint is not merged. Fix these on `feat/W1B-taskbar`, in this order, one commit each.
+
+1. **Aliasing in the window procedure (soundness).** `wnd_proc` turns `GWLP_USERDATA` into
+   `&mut Controller` on every message while `WindowsTaskbarText` may already hold a
+   `RefCell::borrow_mut()` of the same controller. Re-entry paths that create a second `&mut`:
+   messages sent synchronously by `ShowWindow`, `UpdateLayeredWindow` and `DestroyWindow` from
+   inside `refresh`; `TrackPopupMenuEx`'s modal loop, which dispatches the Slint timer and so calls
+   `set_lines`; and `on_event`, which runs app code that may call back into the taskbar text.
+   Design:
+   - The controller lives in `Rc<RefCell<Controller>>`. `GWLP_USERDATA` holds a raw pointer to the
+     `RefCell` (from `Rc::as_ptr`), never to the inner value. The `Rc` is kept by
+     `WindowsTaskbarText`; the windows are destroyed before it drops, and `GWLP_USERDATA` is
+     cleared first.
+   - `wnd_proc` takes `try_borrow_mut()`. If the cell is already borrowed (re-entry), it returns
+     `DefWindowProcW` for that message, except `WM_APP_RECTS`, `WM_SETTINGCHANGE` and
+     `TaskbarCreated`, which it re-posts to the controller window (`PostMessageW`) so nothing is
+     lost.
+   - No callback runs while a borrow is held. `handle` returns what to do (`Vec<TaskbarEvent>` or
+     an enum), the borrow ends, then the events are delivered. The right-click menu: collect
+     labels and anchor under the borrow, drop it, run `TrackPopupMenuEx` without a borrow, then
+     deliver the chosen item.
+   - A unit test with a fake re-entrant callback is not possible without a window; instead the
+     module docs state the rule ("no `&mut Controller` across a Win32 call that can send a message
+     or a callback") and each `borrow_mut` site has a comment saying why it can't re-enter.
+
+2. **Font loader leak.** `render::fonts` creates and registers a new in-memory font loader on the
+   shared DirectWrite factory on every render and never unregisters it, so a running widget grows
+   by one loader with both fonts every minute. Build the DirectWrite factory, the D2D factory, the
+   loader and the font collection once per thread (`thread_local!` `OnceCell`, the controller
+   thread is the only caller; the `--taskbar-snapshot` tool uses the same cache) and reuse them.
+   Test: render 1,000 times in a loop and assert the process private bytes grow by less than
+   1 MiB (`GetProcessMemoryInfo`), with the old code failing it (negative control).
+
+3. **UIA handler never removed, and the idle CPU.** `Subscription::drop` doesn't call
+   `RemovePropertyChangedEventHandler`, so every restart stacks another handler. The handler
+   holds an `IUIAutomation` and calls `report`, which runs two `FindFirst(TreeScope_Descendants)`
+   walks over Explorer's tree and posts `WM_APP_RECTS` on every event, changed or not; the
+   controller then re-renders when the text is hidden (`hide` drops `shown`). With another
+   taskbar app redrawing every second, that is the measured 1 to 3 % idle CPU. Design:
+   - `Subscription` keeps the automation object and removes its handler in `Drop`.
+   - `subscribe` finds the Start and Widgets elements once and keeps them. The handler reads only
+     `CurrentBoundingRectangle` of the kept elements, compares with the last posted value, and
+     posts only on a change. Re-finding happens on `WM_APP_RESTART` only (Explorer restart,
+     `TraySettings`, display change), which the controller posts to the worker.
+   - The handler holds no `IUIAutomation` (no reference cycle with the subscription).
+   - The controller keeps the rendered bitmap when it hides (`hide` clears visibility, not the
+     render cache), so a hidden refresh never re-renders; it re-renders only when lines, ink or
+     scale change.
+   - Measure idle CPU again over 2 minutes with the text on, the same method, and report it next
+     to the old 1 to 3 %. Target: within 0.1 percentage points of W1's 0.05 %.
+
+4. **Smaller items.**
+   - `platform/windows/mod.rs` still has `#![allow(dead_code)]` "until wired"; it is wired. Remove
+     it and fix what it hid.
+   - `controller.rs` allows nine clippy lints module-wide. Keep `borrow_as_ptr` and `ptr_as_ptr`
+     there (FFI), move each cast allow to the one function that needs it with a reason.
+   - `dib_with_pixels` copies `pixels.len()` bytes into a DIB of `width * height * 4` bytes without
+     checking they are equal. Check it and return an error otherwise.
+   - `uia.rs`: fix the "unsubbscribe" typo while rewriting `Drop`.
+
+5. **Real-taskbar evidence.** Both real grabs show only the C# NepDateWidget's text, which sits in
+   the same place (another child of `Shell_TrayWnd`). The owner will close NepDateWidget before
+   the grabs. Then take: dark taskbar en, light taskbar en, dark taskbar ne, and one at 150 %
+   scale if the machine allows it, plus the manual checklist items you can do (left click, right
+   click menu, live theme switch, 10 apps opened until the text hides). Re-open nothing of the
+   owner's afterwards; say in the report which apps you opened and closed.
+
+## Review of W1B-05 items 1 to 4, and what is left (W1B-06), from the reviewer on 2026-10-17
+
+Items 1 to 4 landed in 630e782, 9d1d1ca, 400588c and 74a201b. The reviewer fixed four more things
+in the review commit after them:
+
+- The re-entry path reposted `WM_SETTINGCHANGE` with its original `lParam`. That string belongs to
+  the sender and is freed when the send returns, so the reposted message read freed memory. The
+  re-entry path now reads the setting while the send is still running and posts `WM_APP_SETTING`
+  with `SETTING_COLOR` or `SETTING_TRAY` in `wParam` and no pointer. `WM_DISPLAYCHANGE` and
+  `WM_DPICHANGED` during a borrow now repost as `WM_APP_RECTS` instead of being dropped.
+- `taskbar_edge` mapped `0` to `Top` and `1` to `Left`; `ABE_LEFT` is 0 and `ABE_TOP` is 1. It
+  now uses the named constants. Only `Bottom` shows the text, so the old mapping hid the text for
+  the right reason but logged the wrong edge.
+- `render.rs` still had `#![allow(dead_code)]`, and `uia.rs` still allowed six lints module-wide.
+  The first is gone. `uia.rs` keeps `borrow_as_ptr` and `ptr_as_ptr` (FFI), plus `ref_as_ptr` and
+  `inline_always`, which fire only in the code `#[implement]` generates; `run` now borrows its
+  `Arc`, so `needless_pass_by_value` and `single_match` are gone too.
+- The `once_cell` dependency is replaced by `std::cell::OnceCell`. The memory test reads
+  `PROCESS_MEMORY_COUNTERS_EX`, which windows 0.62 does provide, instead of a hand-written copy.
+  Negative control rerun: always building the fonts grows private bytes from 17.8 MB to 1.32 GB
+  and fails; the cache passes.
+
+`cargo xtask ci`: all 23 steps passed after the review commit.
+
+### W1B-06 tasks
+
+1. **Idle CPU by thread.** 0.72 % is still about 14 times W1's 0.05 %. The UIA handler fired once
+   in 30 s, so it is not the handler. With the C# NepDateWidget closed, measure over 2 minutes,
+   release build, three runs:
+   - `--no-taskbar-text` (W1 baseline on this machine today);
+   - text on;
+   - text on, with the per-thread split: sample `(Get-Process nepdate-widget).Threads` (`Id`,
+     `TotalProcessorTime`) at the start and end and report the top five threads by CPU delta.
+     Log the UIA worker's thread id at `debug` level at startup so its row can be named; the main
+     thread is the lowest id.
+   Report the three numbers and the table. Do not change code to chase the number in this task;
+   the reviewer designs the fix from the table.
+2. **Real-taskbar evidence** (W1B-05 item 5, unchanged): grabs on a dark taskbar in English, on a
+   light taskbar in English, on a dark taskbar in Nepali, and at 150 % scale if the machine allows
+   it. Then the manual checklist items you can do: left click, the right-click menu, a live theme
+   switch, and opening apps until the text hides (about 10). Say which apps you opened and closed,
+   and leave the desktop as you found it.
+3. Before either task, check that the C# widget is closed: a UIA dump under `Shell_TrayWnd` has no
+   `MiniBarStrip` element. If it is still there, stop and report; do not close it yourself.

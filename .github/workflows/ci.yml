@@ -83,26 +83,38 @@ jobs:
       - uses: Swatinem/rust-cache@63fed3e2fecf6f7b51dc6f043341b79ef82a9ae7 # v2.9.2
       - name: Render light snapshot (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: xvfb-run -a -s "-screen 0 1280x1024x24" cargo run -p nepdate-widget -- --font-test --snapshot snapshot-light.png --theme light
+        run: xvfb-run -a -s "-screen 0 1280x1024x24" cargo run -p nepdate-widget --features snapshot -- --font-test --snapshot snapshot-light.png --theme light
         env:
           LIBGL_ALWAYS_SOFTWARE: "1"
       - name: Render dark snapshot (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: xvfb-run -a -s "-screen 0 1280x1024x24" cargo run -p nepdate-widget -- --font-test --snapshot snapshot-dark.png --theme dark
+        run: xvfb-run -a -s "-screen 0 1280x1024x24" cargo run -p nepdate-widget --features snapshot -- --font-test --snapshot snapshot-dark.png --theme dark
         env:
           LIBGL_ALWAYS_SOFTWARE: "1"
       - name: Render light snapshot (macOS, Windows)
         if: matrix.os != 'ubuntu-latest'
-        run: cargo run -p nepdate-widget -- --font-test --snapshot snapshot-light.png --theme light
+        run: cargo run -p nepdate-widget --features snapshot -- --font-test --snapshot snapshot-light.png --theme light
       - name: Render dark snapshot (macOS, Windows)
         if: matrix.os != 'ubuntu-latest'
-        run: cargo run -p nepdate-widget -- --font-test --snapshot snapshot-dark.png --theme dark
+        run: cargo run -p nepdate-widget --features snapshot -- --font-test --snapshot snapshot-dark.png --theme dark
+      - name: Render taskbar snapshots (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          foreach ($theme in @('light','dark')) {
+            foreach ($lang in @('en','ne')) {
+              foreach ($scale in @('1','1.5','2')) {
+                cargo run -p nepdate-widget --features snapshot -- --taskbar-snapshot "taskbar-$theme-$lang-$scale.png" --taskbar-theme $theme --lang $lang --scale $scale
+              }
+            }
+          }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: snapshot-${{ matrix.os }}
           path: |
             snapshot-light.png
             snapshot-dark.png
+            taskbar-*.png
           if-no-files-found: error
 
   # L6-06: fails when shared/ differs from the hub at the commit in shared/VERSION (ADR-0003).
