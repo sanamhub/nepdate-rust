@@ -22,8 +22,11 @@ regular, line 2 semibold, 12 px at 100 % scale, 2 px line gap (widget-design.md 
 ## Real taskbar grabs
 
 - `taskbar-real.png`: full-screen grab of the real taskbar (dark, `SystemUsesLightTheme` = 0) with
-  the text window visible at `[12, 1038, 171x35]`. The C# NepDateWidget reference app was also
-  running on this machine during part of the work and shows its own text in the same area; check
-  which text the grab shows before judging.
+  the text window visible at `[12, 1038, 171x35]`.
+- `taskbar-real-light.png`: full-screen grab of the real taskbar (light, `SystemUsesLightTheme`
+  toggled to 1, then reverted to 0 after the grab) with the text window shown.
 
-The reviewer looks at these PNGs and gives the verdicts.
+The C# NepDateWidget reference app runs on this machine and draws its own text into the same free
+area, so the real grabs may show both texts overlapping and are not reliable evidence of our
+render. The `taskbar-*.png` snapshots (this directory) are unambiguous: they composite only our
+render. The reviewer looks at all of them and gives the verdicts.
