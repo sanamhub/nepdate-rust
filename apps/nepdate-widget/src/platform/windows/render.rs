@@ -2,8 +2,6 @@
 //! caller passes the two lines, the DPI scale and the ink colour, and gets back the pixels and
 //! their size, so the rendering is testable without a display. The bundled Noto fonts are loaded
 //! from memory into a private collection, so there is no system-font dependency.
-// W1B-03 wires this into `main.rs`; until then the binary does not call it. Remove this allow.
-#![allow(dead_code)]
 // FFI conventions the renderer cannot avoid: `&x` where `*const T` is expected, and the text
 // dimensions, font sizes and DIB metrics, which are all a few hundred pixels or bytes at most.
 #![allow(
@@ -14,7 +12,6 @@
 )]
 
 use anyhow::{Context, bail};
-use once_cell::unsync::OnceCell;
 use windows::Win32::Foundation::RECT;
 use windows::Win32::Graphics::Direct2D::Common::{
     D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F, D2D1_PIXEL_FORMAT,
@@ -64,7 +61,11 @@ pub struct Rendered {
 /// factories, the font loader and the font collection are built once per thread (W1B-05 item 2).
 pub fn render(lines: &TaskbarLines, scale: f32, ink: [u8; 4]) -> anyhow::Result<Rendered> {
     FONTS.with(|cell| {
-        let fonts = cell.get_or_try_init(init_fonts)?;
+        if cell.get().is_none() {
+            // A failed init leaves the cell empty, so the next render tries again.
+            let _ = cell.set(init_fonts()?);
+        }
+        let fonts = cell.get().context("font cache is empty after init")?;
         render_with(fonts, lines, scale, ink)
     })
 }
@@ -79,7 +80,7 @@ struct Fonts {
 }
 
 thread_local! {
-    static FONTS: OnceCell<Fonts> = const { OnceCell::new() };
+    static FONTS: std::cell::OnceCell<Fonts> = const { std::cell::OnceCell::new() };
 }
 
 /// Builds the DirectWrite factory, the Direct2D factory, the in-memory font loader and the font
@@ -496,35 +497,17 @@ mod tests {
     #[test]
     fn render_does_not_leak_font_loaders() {
         use windows::Win32::System::ProcessStatus::{
-            GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS,
+            GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS, PROCESS_MEMORY_COUNTERS_EX,
         };
         use windows::Win32::System::Threading::GetCurrentProcess;
 
-        // windows-rs 0.62 models PROCESS_MEMORY_COUNTERS without its last field (PrivateUsage),
-        // so define the full layout here and cast to the truncated type.
-        #[repr(C)]
-        #[derive(Default)]
-        struct MemoryCounters {
-            cb: u32,
-            page_fault_count: u32,
-            peak_working_set_size: usize,
-            working_set_size: usize,
-            quota_peak_paged_pool_usage: usize,
-            quota_paged_pool_usage: usize,
-            quota_peak_non_paged_pool_usage: usize,
-            quota_non_paged_pool_usage: usize,
-            pagefile_usage: usize,
-            peak_pagefile_usage: usize,
-            private_usage: usize,
-        }
-
         fn private_bytes() -> usize {
-            let mut counters = MemoryCounters {
-                cb: std::mem::size_of::<MemoryCounters>() as u32,
+            let mut counters = PROCESS_MEMORY_COUNTERS_EX {
+                cb: std::mem::size_of::<PROCESS_MEMORY_COUNTERS_EX>() as u32,
                 ..Default::default()
             };
-            // SAFETY: `counters` has the real PROCESS_MEMORY_COUNTERS layout and `cb` is its full
-            // byte size, so the Win32 function writes every field, including `private_usage`.
+            // SAFETY: GetProcessMemoryInfo takes the _EX layout through the base pointer type when
+            // `cb` is the _EX size, as its documentation describes; `counters` lives for the call.
             unsafe {
                 GetProcessMemoryInfo(
                     GetCurrentProcess(),
@@ -533,7 +516,7 @@ mod tests {
                 )
                 .expect("GetProcessMemoryInfo");
             }
-            counters.private_usage
+            counters.PrivateUsage
         }
 
         let _guard = render_guard();

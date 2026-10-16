@@ -30,9 +30,6 @@ arboard = { version = "3", default-features = false, features = ["wayland-data-c
 log = "0.4"
 simplelog = "0.12"
 dirs = "6"
-# One-per-thread font cache (W1B-05 item 2). Already in the tree through other crates; `unsync`
-# `OnceCell` is the reviewer's named type and provides the fallible `get_or_try_init`.
-once_cell = "1"
 # PNG encoding for the snapshot flags, behind the `snapshot` feature (W1B-00, ADR-0016).
 image = { version = "0.25", default-features = false, features = ["png"], optional = true }
 

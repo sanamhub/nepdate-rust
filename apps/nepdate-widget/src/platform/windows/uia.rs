@@ -2,14 +2,13 @@
 //! the UI thread. This thread owns every UIA object, finds the Start and Widgets buttons under
 //! `Shell_TrayWnd`, subscribes to the Start button's `BoundingRectangle` changes and posts the
 //! rectangles to the controller window with `PostMessageW`. The UI thread never calls UIA.
-// FFI conventions this module cannot avoid: `&x` where `*const T` is expected, the `#[implement]`
-// macro's generated code, and the worker-thread plumbing below.
+// FFI conventions this module cannot avoid: `&x` where `*const T` is expected. `ref_as_ptr` and
+// `inline_always` fire only inside the code `#[implement]` generates next to `Handler`, which an
+// item-level allow cannot reach.
 #![allow(
     clippy::borrow_as_ptr,
     clippy::ptr_as_ptr,
     clippy::ref_as_ptr,
-    clippy::needless_pass_by_value,
-    clippy::single_match,
     clippy::inline_always
 )]
 
@@ -65,12 +64,12 @@ pub fn spawn(controller: HWND, state: Arc<Mutex<UiaState>>) -> anyhow::Result<u3
             // SAFETY: GetCurrentThreadId has no preconditions.
             let tid = unsafe { GetCurrentThreadId() };
             let _ = tx.send(tid);
-            run(HWND(controller_bits as *mut std::ffi::c_void), state);
+            run(HWND(controller_bits as *mut std::ffi::c_void), &state);
         })?;
     Ok(rx.recv()?)
 }
 
-fn run(controller: HWND, state: Arc<Mutex<UiaState>>) {
+fn run(controller: HWND, state: &Arc<Mutex<UiaState>>) {
     // SAFETY: COM is initialized for this thread only, and uninitialized on every exit path.
     unsafe {
         if CoInitializeEx(None, COINIT_MULTITHREADED).is_err() {
@@ -86,7 +85,7 @@ fn run(controller: HWND, state: Arc<Mutex<UiaState>>) {
     };
 
     loop {
-        let subscription = subscribe(&automation, controller, &state);
+        let subscription = subscribe(&automation, controller, state);
         // Pump until the controller posts a restart or quit message. Dropping the subscription
         // removes the event handler.
         let restart = pump();

@@ -23,7 +23,9 @@ use windows::Win32::Graphics::Gdi::{
 };
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
-use windows::Win32::UI::Shell::{ABE_BOTTOM, ABM_GETTASKBARPOS, APPBARDATA, SHAppBarMessage};
+use windows::Win32::UI::Shell::{
+    ABE_BOTTOM, ABE_LEFT, ABE_TOP, ABM_GETTASKBARPOS, APPBARDATA, SHAppBarMessage,
+};
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CS_HREDRAW, CS_VREDRAW, CreatePopupMenu, CreateWindowExW, DefWindowProcW,
     DestroyMenu, DestroyWindow, FindWindowW, GWLP_USERDATA, GetClientRect, GetCursorPos,
@@ -52,6 +54,11 @@ const TEXT_CLASS: PCWSTR = w!("nepdate-taskbar-text");
 /// Controller messages (uia.rs keeps the same numbers).
 const WM_APP_RECTS: u32 = WM_APP + 1;
 const WM_APP_RESTART: u32 = WM_APP + 3;
+/// A `WM_SETTINGCHANGE` that arrived during a borrow, reposted with the setting in `wParam`
+/// (`SETTING_COLOR` or `SETTING_TRAY`) instead of the sender's string pointer.
+const WM_APP_SETTING: u32 = WM_APP + 4;
+const SETTING_COLOR: usize = 1;
+const SETTING_TRAY: usize = 2;
 
 /// The `TaskbarCreated` registered message id, read by the window procedure without a borrow.
 static TASKBAR_CREATED: AtomicU32 = AtomicU32::new(0);
@@ -397,7 +404,7 @@ impl Controller {
         &mut self,
         hwnd: HWND,
         msg: u32,
-        _wparam: WPARAM,
+        wparam: WPARAM,
         lparam: LPARAM,
     ) -> (Outcome, Action) {
         if hwnd == self.text_hwnd {
@@ -448,23 +455,28 @@ impl Controller {
                     self.refresh();
                     return (Outcome::Return(LRESULT(0)), Action::None);
                 }
-                WM_SETTINGCHANGE => {
-                    if let Some(name) = setting_name(lparam) {
-                        if name == "ImmersiveColorSet" {
+                WM_SETTINGCHANGE | WM_APP_SETTING => {
+                    let code = if msg == WM_APP_SETTING {
+                        Some(wparam.0)
+                    } else {
+                        setting_code(lparam)
+                    };
+                    let action = match code {
+                        Some(SETTING_COLOR) => {
                             self.dark = taskbar_is_dark().unwrap_or(false);
                             self.refresh();
-                            return (
-                                Outcome::Return(LRESULT(0)),
-                                Action::Deliver {
-                                    events: Vec::new(),
-                                    scheme: Some(self.dark),
-                                },
-                            );
-                        } else if name == "TraySettings" {
-                            self.refresh();
+                            Action::Deliver {
+                                events: Vec::new(),
+                                scheme: Some(self.dark),
+                            }
                         }
-                    }
-                    return (Outcome::Return(LRESULT(0)), Action::None);
+                        Some(SETTING_TRAY) => {
+                            self.refresh();
+                            Action::None
+                        }
+                        _ => Action::None,
+                    };
+                    return (Outcome::Return(LRESULT(0)), action);
                 }
                 _ if msg == TASKBAR_CREATED.load(Ordering::Relaxed) && msg != 0 => {
                     log::info!("taskbar text: Explorer restarted, recreating the text window");
@@ -632,14 +644,21 @@ unsafe extern "system" fn wnd_proc(
     } else {
         // Re-entry: the controller is already borrowed (a synchronous message sent from
         // `ShowWindow`/`UpdateLayeredWindow`/`DestroyWindow`, or a callback). Repost the
-        // messages that carry state so nothing is lost; drop the rest.
-        if msg == WM_APP_RECTS
-            || msg == WM_SETTINGCHANGE
-            || (msg != 0 && msg == TASKBAR_CREATED.load(Ordering::Relaxed))
-        {
-            // SAFETY: posting to our own window is always safe.
+        // messages that carry state so nothing is lost; drop the rest. `WM_SETTINGCHANGE` is
+        // never reposted as is: its `lParam` string belongs to the sender and is freed when the
+        // send returns, so read it now and post only which setting changed.
+        let repost = match msg {
+            WM_APP_RECTS | WM_DISPLAYCHANGE | WM_DPICHANGED => Some((WM_APP_RECTS, WPARAM(0))),
+            WM_SETTINGCHANGE => setting_code(lparam).map(|code| (WM_APP_SETTING, WPARAM(code))),
+            _ if msg != 0 && msg == TASKBAR_CREATED.load(Ordering::Relaxed) => {
+                Some((msg, WPARAM(0)))
+            }
+            _ => None,
+        };
+        if let Some((msg, wparam)) = repost {
+            // SAFETY: posting to our own window is always safe; no pointer travels with it.
             unsafe {
-                let _ = PostMessageW(Some(hwnd), msg, wparam, lparam);
+                let _ = PostMessageW(Some(hwnd), msg, wparam, LPARAM(0));
             }
         }
         // SAFETY: the default handler is safe for any message.
@@ -739,8 +758,8 @@ fn taskbar_edge(taskbar: HWND) -> Edge {
     }
     match data.uEdge {
         ABE_BOTTOM => Edge::Bottom,
-        0 => Edge::Top,
-        1 => Edge::Left,
+        ABE_TOP => Edge::Top,
+        ABE_LEFT => Edge::Left,
         _ => Edge::Right,
     }
 }
@@ -763,7 +782,18 @@ fn client_rect(hwnd: HWND) -> Option<RECT> {
     Some(rect)
 }
 
-/// The `WM_SETTINGCHANGE` `lParam` string (`ImmersiveColorSet`, `TraySettings`), or `None`.
+/// Which setting a `WM_SETTINGCHANGE` names: `SETTING_COLOR` for `ImmersiveColorSet`,
+/// `SETTING_TRAY` for `TraySettings`, `None` for anything else. Call it only while the message is
+/// being sent, since the string belongs to the sender.
+fn setting_code(lparam: LPARAM) -> Option<usize> {
+    match setting_name(lparam)?.as_str() {
+        "ImmersiveColorSet" => Some(SETTING_COLOR),
+        "TraySettings" => Some(SETTING_TRAY),
+        _ => None,
+    }
+}
+
+/// The `WM_SETTINGCHANGE` `lParam` string, or `None`.
 fn setting_name(lparam: LPARAM) -> Option<String> {
     if lparam.0 == 0 {
         return None;

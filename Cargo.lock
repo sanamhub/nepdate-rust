@@ -3072,7 +3072,6 @@ dependencies = [
  "jiff",
  "log",
  "nepdate",
- "once_cell",
  "simplelog",
  "slint",
  "slint-build",
