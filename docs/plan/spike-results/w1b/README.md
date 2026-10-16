@@ -30,3 +30,19 @@ The C# NepDateWidget reference app runs on this machine and draws its own text i
 area, so the real grabs may show both texts overlapping and are not reliable evidence of our
 render. The `taskbar-*.png` snapshots (this directory) are unambiguous: they composite only our
 render. The reviewer looks at all of them and gives the verdicts.
+
+## W1B-06 manual checklist (what the agent ran)
+
+- Left click on the text: the window procedure handled `WM_LBUTTONUP` and delivered
+  `TaskbarEvent::Toggle`; a temporary log confirmed the popup went from hidden to
+  `is_visible() = true` (the log was reverted). The popup's visual position is not verified.
+- Right-click menu: `run_menu` is entered and runs `TrackPopupMenuEx` (temporary log, reverted).
+  The menu's visual appearance is not verified.
+- Open apps until the text hides: not triggered. 21 distinct apps moved the Start button from
+  x=850 to x=476, but on this 1920 px centred taskbar the icon group overflows before it reaches
+  the text (`place` hides at `start.left < 195`), so `NoRoom` never fired (log stayed on `shown`).
+  The agent opened and closed: Calculator, Command Prompt, Windows PowerShell, PowerShell ISE,
+  Snipping Tool, Remote Desktop, Character Map, Registry Editor, Control Panel, System
+  Configuration, DirectX Diagnostic, Disk Cleanup, Settings, Clock, Photos, Chrome, VS Code,
+  Microsoft Store. Notepad++ and Task Manager were already open (the human's) and were left open.
+  The `NoRoom` path itself is covered by the W1B-01 unit tests.
