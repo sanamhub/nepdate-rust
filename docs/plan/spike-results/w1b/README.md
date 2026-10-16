@@ -46,3 +46,23 @@ render. The reviewer looks at all of them and gives the verdicts.
   Configuration, DirectX Diagnostic, Disk Cleanup, Settings, Clock, Photos, Chrome, VS Code,
   Microsoft Store. Notepad++ and Task Manager were already open (the human's) and were left open.
   The `NoRoom` path itself is covered by the W1B-01 unit tests.
+
+## W1B-07 crops and z-order (after the bridge fix)
+
+W1B-07 fixed the z-order: `controller.rs` now raises the text window with
+`SetWindowPos(HWND_TOP, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)` after every show, because
+Explorer's `Windows.UI.Composition.DesktopWindowContentBridge` sibling covers the whole taskbar
+and is raised above our window whenever it redraws. The crops below are the evidence that the
+text is actually on top now. All visual verdicts are the reviewer's; the agent could not view the
+images.
+
+| File | What it shows | Verdict |
+|---|---|---|
+| `w1b07-crop-dark-en.png` | dark taskbar, English, 420x60 crop at the taskbar's left end (BitBlt + CAPTUREBLT) | not verified |
+| `w1b07-crop-dark-ne.png` | dark taskbar, Nepali (`--lang ne`), same crop | not verified |
+| `w1b07-zorder.txt` | z-order dump of Shell_TrayWnd's children (class, visible, rect), top to bottom, our window first | see below |
+
+The z-order dump shows `nepdate-taskbar-text` at `[0]` (topmost), above
+`Windows.UI.Composition.DesktopWindowContentBridge` at `[1]`, which covers `[0,1032,1920x48]`.
+A light-taskbar crop was not taken: the agent does not change `SystemUsesLightTheme`; the human
+would need to switch the theme first.
