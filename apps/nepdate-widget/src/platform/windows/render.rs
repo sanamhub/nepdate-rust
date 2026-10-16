@@ -14,6 +14,7 @@
 )]
 
 use anyhow::{Context, bail};
+use once_cell::unsync::OnceCell;
 use windows::Win32::Foundation::RECT;
 use windows::Win32::Graphics::Direct2D::Common::{
     D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F, D2D1_PIXEL_FORMAT,
@@ -59,30 +60,68 @@ pub struct Rendered {
 }
 
 /// Renders `lines` at `scale` (dpi / 96) in `ink` (premultiplied RGBA). Every pixel gets at least
-/// alpha 1, so the whole rectangle takes clicks (ADR-0016 point 4).
+/// alpha 1, so the whole rectangle takes clicks (ADR-0016 point 4). The DirectWrite and Direct2D
+/// factories, the font loader and the font collection are built once per thread (W1B-05 item 2).
 pub fn render(lines: &TaskbarLines, scale: f32, ink: [u8; 4]) -> anyhow::Result<Rendered> {
+    FONTS.with(|cell| {
+        let fonts = cell.get_or_try_init(init_fonts)?;
+        render_with(fonts, lines, scale, ink)
+    })
+}
+
+/// The shared DirectWrite and Direct2D state for this thread. The controller thread is the only
+/// render caller; the `--taskbar-snapshot` tool reuses the same cache.
+struct Fonts {
+    dw: IDWriteFactory5,
+    d2d: ID2D1Factory,
+    collection: IDWriteFontCollection,
+    fallback: IDWriteFontFallback,
+}
+
+thread_local! {
+    static FONTS: OnceCell<Fonts> = const { OnceCell::new() };
+}
+
+/// Builds the DirectWrite factory, the Direct2D factory, the in-memory font loader and the font
+/// collection once for this thread. The loader is never unregistered, so this must run once, not
+/// once per render.
+fn init_fonts() -> anyhow::Result<Fonts> {
     // SAFETY: DirectWrite is a process-wide COM API; a shared factory is the documented default.
     let dw: IDWriteFactory5 = unsafe { DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED)? };
-    let collection = fonts(&dw)?;
+    // SAFETY: a single-threaded D2D factory is used on this thread only, as Direct2D documents.
+    let d2d: ID2D1Factory = unsafe { D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, None)? };
+    let collection = build_collection(&dw)?;
     let fallback = devanagari_fallback(&dw, &collection)?;
+    Ok(Fonts {
+        dw,
+        d2d,
+        collection,
+        fallback,
+    })
+}
 
-    let format1 = text_format(
-        &dw,
-        &collection,
-        DWRITE_FONT_WEIGHT_REGULAR,
-        scale,
-        &fallback,
-    )?;
+/// The render body, using the cached factories, collection and fallback.
+fn render_with(
+    fonts: &Fonts,
+    lines: &TaskbarLines,
+    scale: f32,
+    ink: [u8; 4],
+) -> anyhow::Result<Rendered> {
+    let dw = &fonts.dw;
+    let collection = &fonts.collection;
+    let fallback = &fonts.fallback;
+
+    let format1 = text_format(dw, collection, DWRITE_FONT_WEIGHT_REGULAR, scale, fallback)?;
     let format2 = text_format(
-        &dw,
-        &collection,
+        dw,
+        collection,
         DWRITE_FONT_WEIGHT_SEMI_BOLD,
         scale,
-        &fallback,
+        fallback,
     )?;
 
-    let layout1 = layout(&dw, &lines.line1, &format1)?;
-    let layout2 = layout(&dw, &lines.line2, &format2)?;
+    let layout1 = layout(dw, &lines.line1, &format1)?;
+    let layout2 = layout(dw, &lines.line2, &format2)?;
     let (w1, h1) = metrics(&layout1)?;
     let (w2, h2) = metrics(&layout2)?;
 
@@ -90,8 +129,7 @@ pub fn render(lines: &TaskbarLines, scale: f32, ink: [u8; 4]) -> anyhow::Result<
     let height = (h1 + LINE_GAP * scale + h2).ceil().max(1.0) as u32;
 
     let dib = Dib::new(width, height)?;
-    // SAFETY: a single-threaded factory is used on the main thread only, as Direct2D documents.
-    let d2d: ID2D1Factory = unsafe { D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, None)? };
+    let d2d = &fonts.d2d;
     let properties = D2D1_RENDER_TARGET_PROPERTIES {
         r#type: D2D1_RENDER_TARGET_TYPE_DEFAULT,
         pixelFormat: D2D1_PIXEL_FORMAT {
@@ -158,7 +196,7 @@ pub fn render(lines: &TaskbarLines, scale: f32, ink: [u8; 4]) -> anyhow::Result<
 /// Loads both bundled fonts into a private collection (ADR-0016 point 4). The font files come
 /// from the in-memory loader; the collection is built with the Win10 1809 font-set API, which
 /// needs no custom `IDWriteFontCollectionLoader` implementation.
-fn fonts(dw: &IDWriteFactory5) -> anyhow::Result<IDWriteFontCollection> {
+fn build_collection(dw: &IDWriteFactory5) -> anyhow::Result<IDWriteFontCollection> {
     // SAFETY: the in-memory loader is a DirectWrite factory object with no preconditions.
     let loader: IDWriteInMemoryFontFileLoader = unsafe { dw.CreateInMemoryFontFileLoader()? };
     // SAFETY: the loader outlives both references below; the font data is static.
@@ -443,13 +481,70 @@ mod tests {
     }
 
     #[test]
+    fn render_does_not_leak_font_loaders() {
+        use windows::Win32::System::ProcessStatus::{
+            GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS,
+        };
+        use windows::Win32::System::Threading::GetCurrentProcess;
+
+        // windows-rs 0.62 models PROCESS_MEMORY_COUNTERS without its last field (PrivateUsage),
+        // so define the full layout here and cast to the truncated type.
+        #[repr(C)]
+        #[derive(Default)]
+        struct MemoryCounters {
+            cb: u32,
+            page_fault_count: u32,
+            peak_working_set_size: usize,
+            working_set_size: usize,
+            quota_peak_paged_pool_usage: usize,
+            quota_paged_pool_usage: usize,
+            quota_peak_non_paged_pool_usage: usize,
+            quota_non_paged_pool_usage: usize,
+            pagefile_usage: usize,
+            peak_pagefile_usage: usize,
+            private_usage: usize,
+        }
+
+        fn private_bytes() -> usize {
+            let mut counters = MemoryCounters {
+                cb: std::mem::size_of::<MemoryCounters>() as u32,
+                ..Default::default()
+            };
+            // SAFETY: `counters` has the real PROCESS_MEMORY_COUNTERS layout and `cb` is its full
+            // byte size, so the Win32 function writes every field, including `private_usage`.
+            unsafe {
+                GetProcessMemoryInfo(
+                    GetCurrentProcess(),
+                    std::ptr::from_mut(&mut counters).cast::<PROCESS_MEMORY_COUNTERS>(),
+                    counters.cb,
+                )
+                .expect("GetProcessMemoryInfo");
+            }
+            counters.private_usage
+        }
+
+        // The first render pays the one-time font load; the next 1000 must not add a loader.
+        render(&lines(), 1.0, theme::INK_LIGHT).expect("warm render");
+        let before = private_bytes();
+        for _ in 0..1000 {
+            render(&lines(), 1.0, theme::INK_LIGHT).expect("render");
+        }
+        let after = private_bytes();
+        let growth = after.saturating_sub(before);
+        assert!(
+            growth < 1_000_000,
+            "font loaders leaked: private bytes grew {before} -> {after} ({growth} bytes)"
+        );
+    }
+
+    #[test]
     fn render_shapes_devanagari() {
         // `क्ष` is three code points (क ् ष) but one glyph cluster once shaped; a Latin-only font
         // would keep it as three clusters. The cluster count is DirectWrite's glyph count.
         // SAFETY: DirectWrite is a process-wide COM API; a shared factory is the documented default.
         let dw: IDWriteFactory5 =
             unsafe { DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED).unwrap() };
-        let collection = fonts(&dw).unwrap();
+        let collection = build_collection(&dw).unwrap();
         let fallback = devanagari_fallback(&dw, &collection).unwrap();
         let format =
             text_format(&dw, &collection, DWRITE_FONT_WEIGHT_REGULAR, 1.0, &fallback).unwrap();
