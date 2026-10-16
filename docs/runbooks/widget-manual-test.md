@@ -39,3 +39,13 @@ Copy this file per release/OS and tick. OS: Windows 11 Home Version: (agent run)
 
 ## Accessibility (WR-10)
 - [ ] Full keyboard operation; screen reader (Narrator / VoiceOver / Orca) reads buttons
+
+## Taskbar text (WR-12, Windows 11)
+- [x] Text shows inside the taskbar, left of Start (dark taskbar; window at `[12, 1038, 171x35]`, `taskbar-real.png` in `docs/plan/spike-results/w1b/`; the text content was not visually inspected)
+- [ ] Light and dark taskbar, switch live (only the synthetic `--taskbar-snapshot` PNGs cover both themes; the real taskbar was not switched)
+- [ ] Open 10 apps until the icons reach the text: text hides; close them: text returns
+- [ ] Widgets button on and off; taskbar alignment left and centre
+- [ ] Auto-hide taskbar; full-screen video
+- [ ] `taskkill /f /im explorer.exe` then `start explorer`: text back within 5 s
+- [x] Scale 100 %, 150 %, 200 % (the `--taskbar-snapshot` tool at all three scales; the real taskbar stayed at 100 %)
+- [ ] Left click opens the popup above the text; right click menu works; Quit leaves no process

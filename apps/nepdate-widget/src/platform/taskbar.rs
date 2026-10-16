@@ -72,3 +72,10 @@ impl TaskbarText for Noop {
     fn set_enabled(&self, _on: bool) {}
     fn set_menu_labels(&self, _labels: &MenuLabels) {}
 }
+
+// The `--taskbar-snapshot` tool (W1B-04) renders the text exactly as the controller sends it to
+// `UpdateLayeredWindow`, so it needs the renderer and the ink colour behind the snapshot feature.
+#[cfg(all(windows, feature = "snapshot"))]
+pub use super::windows::render::render as render_taskbar_text;
+#[cfg(all(windows, feature = "snapshot"))]
+pub use super::windows::theme::ink as taskbar_ink;

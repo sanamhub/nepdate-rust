@@ -8,7 +8,7 @@
 
 mod controller;
 pub mod render;
-mod theme;
+pub(crate) mod theme;
 mod uia;
 
 pub use controller::WindowsTaskbarText;

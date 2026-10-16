@@ -56,6 +56,12 @@ struct Cli {
     theme: Option<ThemeChoice>,
     lang: Option<Lang>,
     no_taskbar_text: bool,
+    #[cfg(all(windows, feature = "snapshot"))]
+    taskbar_snapshot: Option<PathBuf>,
+    #[cfg(all(windows, feature = "snapshot"))]
+    taskbar_theme: Option<bool>, // Some(true) = dark taskbar
+    #[cfg(all(windows, feature = "snapshot"))]
+    taskbar_scale: Option<f32>,
 }
 
 impl Cli {
@@ -95,6 +101,38 @@ impl Cli {
                         "en" => Lang::En,
                         "ne" => Lang::Ne,
                         other => anyhow::bail!("--lang must be en or ne, got {other}"),
+                    });
+                }
+                #[cfg(all(windows, feature = "snapshot"))]
+                "--taskbar-snapshot" => {
+                    let path = args
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("--taskbar-snapshot needs a path"))?;
+                    cli.taskbar_snapshot = Some(PathBuf::from(path));
+                }
+                #[cfg(all(windows, feature = "snapshot"))]
+                "--taskbar-theme" => {
+                    let value = args
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("--taskbar-theme needs light or dark"))?;
+                    cli.taskbar_theme = Some(match value.as_str() {
+                        "light" => false,
+                        "dark" => true,
+                        other => {
+                            anyhow::bail!("--taskbar-theme must be light or dark, got {other}")
+                        }
+                    });
+                }
+                #[cfg(all(windows, feature = "snapshot"))]
+                "--scale" => {
+                    let value = args
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("--scale needs 1, 1.5 or 2"))?;
+                    cli.taskbar_scale = Some(match value.as_str() {
+                        "1" => 1.0,
+                        "1.5" => 1.5,
+                        "2" => 2.0,
+                        other => anyhow::bail!("--scale must be 1, 1.5 or 2, got {other}"),
                     });
                 }
                 other => anyhow::bail!("unknown argument: {other}"),
@@ -143,6 +181,18 @@ fn main() -> anyhow::Result<()> {
         };
     }
     let lang = settings.lang();
+
+    // Taskbar snapshot (W1B-04 test tool): render the text and composite it over a taskbar
+    // strip, exactly as the controller sends it to `UpdateLayeredWindow`.
+    #[cfg(all(windows, feature = "snapshot"))]
+    if let Some(path) = cli.taskbar_snapshot.clone() {
+        let now = jiff::Zoned::now();
+        let lines = taskbar_lines(&now, &settings);
+        let dark = cli
+            .taskbar_theme
+            .unwrap_or_else(|| platform::taskbar_scheme::taskbar_is_dark().unwrap_or(false));
+        return write_taskbar_snapshot(&lines, cli.taskbar_scale.unwrap_or(1.0), dark, &path);
+    }
 
     // Keep the popup out of the Windows taskbar (W1-04). The hook runs before winit creates the
     // window, so it has to be selected before any window is constructed.
@@ -441,6 +491,60 @@ fn snapshot<C: ComponentHandle + 'static>(ui: &C, path: &std::path::Path) -> any
         .borrow_mut()
         .take()
         .unwrap_or_else(|| Err(anyhow::anyhow!("snapshot timer never fired")))
+}
+
+/// Renders the taskbar text at `scale` and composites it over a taskbar-coloured strip
+/// (`#F3F3F3` light, `#202020` dark, 48 px scaled high), exactly as the controller sends the text
+/// to `UpdateLayeredWindow` (W1B-04).
+// The strip height and inset are 12 or 48 times a scale of at most a few, so the f32-to-u32 cast
+// only drops the fractional rounding.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+#[cfg(all(windows, feature = "snapshot"))]
+fn write_taskbar_snapshot(
+    lines: &crate::app::taskbar::TaskbarLines,
+    scale: f32,
+    dark: bool,
+    path: &std::path::Path,
+) -> anyhow::Result<()> {
+    use crate::platform::taskbar::{render_taskbar_text, taskbar_ink};
+
+    let rendered = render_taskbar_text(lines, scale, taskbar_ink(dark))?;
+    let strip = (48.0 * scale).round() as u32;
+    let inset = (12.0 * scale).round() as u32;
+    let width = rendered.width + inset * 2;
+    let (blue, green, red) = if dark {
+        (0x20u8, 0x20u8, 0x20u8)
+    } else {
+        (0xF3u8, 0xF3u8, 0xF3u8)
+    };
+    let mut out = vec![0u8; (width * strip * 4) as usize];
+    for pixel in out.as_chunks_mut::<4>().0 {
+        pixel[0] = blue;
+        pixel[1] = green;
+        pixel[2] = red;
+        pixel[3] = 255;
+    }
+    let y_off = (strip - rendered.height) / 2;
+    for y in 0..rendered.height {
+        for x in 0..rendered.width {
+            let src = ((y * rendered.width + x) * 4) as usize;
+            let dst = (((y + y_off) * width + x + inset) * 4) as usize;
+            // Premultiplied source over opaque background: out = src + bg * (1 - a). The sum is
+            // always 0..=255, so the u8 cast only drops the fractional rounding.
+            let alpha = u32::from(rendered.pixels[src + 3]);
+            for channel in 0..3 {
+                let s = u32::from(rendered.pixels[src + channel]);
+                let b = u32::from(out[dst + channel]);
+                out[dst + channel] = (s + b * (255 - alpha) / 255) as u8;
+            }
+        }
+    }
+    let img = image::RgbaImage::from_raw(width, strip, out).ok_or_else(|| {
+        anyhow::anyhow!("taskbar snapshot buffer is {width}x{strip} but the byte count is wrong")
+    })?;
+    img.save_with_format(path, image::ImageFormat::Png)?;
+    println!("wrote {}", path.display());
+    Ok(())
 }
 
 /// Encodes the window's RGBA8 snapshot buffer as a PNG at `path`.
