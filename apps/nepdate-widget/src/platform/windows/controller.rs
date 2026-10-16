@@ -1,8 +1,13 @@
 //! The hidden top-level controller window and the layered child text window (ADR-0016 points 1,
 //! 7, 8). Both live on the main thread; Slint's winit event loop dispatches every message of that
 //! thread, so there is no second message loop. The UI thread never calls UIA.
-// FFI conventions this module cannot avoid: `&x` where `*const T` is expected, and the text, DPI
-// and bitmap dimensions, which are all a few hundred pixels or bytes at most.
+//!
+//! Soundness rule (ADR-0016): never hold a `&mut Controller` across a Win32 call that can send a
+//! message or run a callback. The window procedure borrows the controller with `try_borrow_mut`;
+//! re-entrant messages fall through to `DefWindowProcW` (or are re-posted when they carry state),
+//! and the app callbacks (`on_event`, `on_scheme`) run only in `deliver`, after the borrow is
+//! dropped. Every `borrow_mut` site below says why it cannot re-enter.
+// FFI conventions this module cannot avoid: `&x` where `*const T` is expected.
 #![allow(
     clippy::borrow_as_ptr,
     clippy::ptr_as_ptr,
@@ -20,6 +25,8 @@
 )]
 
 use std::cell::RefCell;
+use std::rc::Rc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
 use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
@@ -34,7 +41,7 @@ use windows::Win32::UI::Shell::{ABE_BOTTOM, ABM_GETTASKBARPOS, APPBARDATA, SHApp
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CS_HREDRAW, CS_VREDRAW, CreatePopupMenu, CreateWindowExW, DefWindowProcW,
     DestroyMenu, DestroyWindow, FindWindowW, GWLP_USERDATA, GetClientRect, GetCursorPos,
-    GetWindowLongPtrW, HCURSOR, HICON, MA_NOACTIVATE, MF_STRING, PostThreadMessageW,
+    GetWindowLongPtrW, HCURSOR, HICON, MA_NOACTIVATE, MF_STRING, PostMessageW, PostThreadMessageW,
     RegisterClassW, RegisterWindowMessageW, SW_HIDE, SW_SHOWNOACTIVATE, SetForegroundWindow,
     SetWindowLongPtrW, ShowWindow, TPM_RETURNCMD, TPM_RIGHTBUTTON, TrackPopupMenuEx, ULW_ALPHA,
     UpdateLayeredWindow, WINDOW_STYLE, WM_APP, WM_DISPLAYCHANGE, WM_DPICHANGED, WM_LBUTTONUP,
@@ -52,13 +59,16 @@ use super::theme;
 use super::uia::{self, UiaState};
 
 /// The controller window class (ADR-0016 point 1).
-const CONTROLLER_CLASS: windows::core::PCWSTR = w!("nepdate-taskbar-controller");
+const CONTROLLER_CLASS: PCWSTR = w!("nepdate-taskbar-controller");
 /// The text window class.
-const TEXT_CLASS: windows::core::PCWSTR = w!("nepdate-taskbar-text");
+const TEXT_CLASS: PCWSTR = w!("nepdate-taskbar-text");
 
 /// Controller messages (uia.rs keeps the same numbers).
 const WM_APP_RECTS: u32 = WM_APP + 1;
 const WM_APP_RESTART: u32 = WM_APP + 3;
+
+/// The `TaskbarCreated` registered message id, read by the window procedure without a borrow.
+static TASKBAR_CREATED: AtomicU32 = AtomicU32::new(0);
 
 /// What is currently shown, so a tick can skip a redraw when nothing changed (ADR-0016 point 6).
 struct Shown {
@@ -72,27 +82,51 @@ struct Shown {
     height: u32,
 }
 
+/// The outcome for the window procedure: either `result` is returned, or the default handler runs.
+enum Outcome {
+    Return(LRESULT),
+    Default,
+}
+
+/// Work the window procedure must do after the controller borrow ends.
+enum Action {
+    None,
+    /// Deliver events and, optionally, the new taskbar scheme to the app callbacks.
+    Deliver {
+        events: Vec<TaskbarEvent>,
+        scheme: Option<bool>,
+    },
+    /// Run the right-click menu (modal) and then deliver the chosen item.
+    Menu {
+        labels: MenuLabels,
+        text_hwnd: HWND,
+        point: POINT,
+    },
+}
+
 struct Controller {
     controller_hwnd: HWND,
     text_hwnd: HWND,
+    /// The `RefCell<Controller>` this controller lives in, stored in `GWLP_USERDATA`.
+    cell: *const RefCell<Controller>,
     lines: TaskbarLines,
     enabled: bool,
     labels: MenuLabels,
     dark: bool,
     uia: Arc<Mutex<UiaState>>,
     worker_tid: u32,
-    taskbar_created_msg: u32,
-    on_event: Box<dyn FnMut(TaskbarEvent)>,
-    on_scheme: Box<dyn FnMut(bool)>,
+    /// `Option` so `deliver` can take the callback out, drop the borrow, call it, and put it back.
+    on_event: Option<Box<dyn FnMut(TaskbarEvent)>>,
+    on_scheme: Option<Box<dyn FnMut(bool)>>,
     shown: Option<Shown>,
     hidden_reason: Option<Hidden>,
 }
 
-/// The Windows taskbar text (ADR-0016). `unsafe` stays inside this module and its siblings.
-/// `RefCell` is the interior mutability the `&self` trait needs; every access is on the main
-/// thread, and the window procedure holds the only raw `&mut` while a message is dispatched.
+/// The Windows taskbar text (ADR-0016). `unsafe` stays inside this module and its siblings. The
+/// controller lives in an `Rc<RefCell<Controller>>`; `GWLP_USERDATA` points at the `RefCell`, so
+/// the window procedure borrows with `try_borrow_mut` instead of fabricating a second `&mut`.
 pub struct WindowsTaskbarText {
-    inner: RefCell<Box<Controller>>,
+    inner: Rc<RefCell<Controller>>,
 }
 
 impl WindowsTaskbarText {
@@ -100,40 +134,47 @@ impl WindowsTaskbarText {
         on_event: impl FnMut(TaskbarEvent) + 'static,
         on_taskbar_scheme: impl FnMut(bool) + 'static,
     ) -> Self {
-        // `Box<Controller>` keeps the controller on the heap, so moving the outer `RefCell` (the
-        // `create` factory boxes this struct into an `Rc`) never moves the controller and the
-        // window procedure's raw pointer stays valid.
-        let mut inner = RefCell::new(Box::new(Controller::new(
-            Box::new(on_event),
-            Box::new(on_taskbar_scheme),
+        let inner = Rc::new(RefCell::new(Controller::new(
+            Some(Box::new(on_event)),
+            Some(Box::new(on_taskbar_scheme)),
         )));
-        let ptr = std::ptr::from_mut(inner.get_mut().as_mut());
-        inner.get_mut().bind(ptr);
-        inner.get_mut().refresh();
+        let cell = Rc::as_ptr(&inner);
+        // These two borrows cannot re-enter: they run before the event loop starts, so no window
+        // message and no callback can fire yet.
+        inner.borrow_mut().bind(cell);
+        inner.borrow_mut().refresh();
         Self { inner }
     }
 }
 
 impl TaskbarText for WindowsTaskbarText {
     fn set_lines(&self, lines: &TaskbarLines) {
+        // Cannot re-enter: the W1 timer runs between window messages, never while the window
+        // procedure holds a borrow, and the refresh under this borrow only sends messages that the
+        // window procedure catches with `try_borrow_mut`.
         self.inner.borrow_mut().set_lines(lines);
     }
 
     fn set_enabled(&self, on: bool) {
+        // Cannot re-enter: called once from `main` before the event loop starts.
         self.inner.borrow_mut().set_enabled(on);
     }
 
     fn set_menu_labels(&self, labels: &MenuLabels) {
+        // Cannot re-enter: called once from `main` before the event loop starts.
         self.inner.borrow_mut().set_menu_labels(labels);
     }
 }
 
 impl Controller {
-    fn new(on_event: Box<dyn FnMut(TaskbarEvent)>, on_scheme: Box<dyn FnMut(bool)>) -> Controller {
+    fn new(
+        on_event: Option<Box<dyn FnMut(TaskbarEvent)>>,
+        on_scheme: Option<Box<dyn FnMut(bool)>>,
+    ) -> Controller {
         // Registration failures leave the taskbar text hidden but the tray icon working; the
         // controller window is still created so the failure mode stays "text hidden, one log".
         register_classes();
-        let controller_hwnd = create_window(CONTROLLER_CLASS, None);
+        let controller_hwnd = create_window(CONTROLLER_CLASS);
         let text_hwnd = create_text_window();
         let uia = Arc::new(Mutex::new(UiaState::default()));
         let worker_tid = match uia::spawn(controller_hwnd, uia.clone()) {
@@ -145,17 +186,18 @@ impl Controller {
             }
         };
         // SAFETY: RegisterWindowMessageW only registers a string-to-id mapping.
-        let taskbar_created_msg = unsafe { RegisterWindowMessageW(w!("TaskbarCreated")) };
+        let created = unsafe { RegisterWindowMessageW(w!("TaskbarCreated")) };
+        TASKBAR_CREATED.store(created, Ordering::Relaxed);
         Controller {
             controller_hwnd,
             text_hwnd,
+            cell: std::ptr::null(),
             lines: TaskbarLines::default(),
             enabled: true,
             labels: MenuLabels::default(),
             dark: taskbar_is_dark().unwrap_or(false),
             uia,
             worker_tid,
-            taskbar_created_msg,
             on_event,
             on_scheme,
             shown: None,
@@ -163,12 +205,15 @@ impl Controller {
         }
     }
 
-    /// Stores `ptr` in both windows' user data so the window procedure can reach this controller.
-    fn bind(&mut self, ptr: *mut Controller) {
-        // SAFETY: the windows exist and `ptr` stays valid for their lifetime.
+    /// Stores the `RefCell` pointer in both windows' user data so the window procedure can reach
+    /// this controller with `try_borrow_mut`.
+    fn bind(&mut self, cell: *const RefCell<Controller>) {
+        self.cell = cell;
+        // SAFETY: the windows exist and `cell` stays valid for their lifetime; it is cleared in
+        // `Controller::drop` before the controller is freed.
         unsafe {
-            SetWindowLongPtrW(self.controller_hwnd, GWLP_USERDATA, ptr as isize);
-            SetWindowLongPtrW(self.text_hwnd, GWLP_USERDATA, ptr as isize);
+            SetWindowLongPtrW(self.controller_hwnd, GWLP_USERDATA, cell as isize);
+            SetWindowLongPtrW(self.text_hwnd, GWLP_USERDATA, cell as isize);
         }
     }
 
@@ -305,7 +350,8 @@ impl Controller {
                 return;
             }
         }
-        // SAFETY: ShowWindow is safe on the window we created.
+        // SAFETY: ShowWindow is safe on the window we created. It may send messages synchronously;
+        // the window procedure catches them with `try_borrow_mut` and falls through.
         unsafe {
             let _ = ShowWindow(self.text_hwnd, SW_SHOWNOACTIVATE);
         }
@@ -335,46 +381,87 @@ impl Controller {
             }
         }
         self.text_hwnd = create_text_window();
-        let ptr: *mut Controller = self;
-        // SAFETY: the new window gets the same stable pointer.
-        unsafe { SetWindowLongPtrW(self.text_hwnd, GWLP_USERDATA, ptr as isize) };
+        // SAFETY: the new window gets the same `RefCell` pointer.
+        unsafe { SetWindowLongPtrW(self.text_hwnd, GWLP_USERDATA, self.cell as isize) };
         self.shown = None;
     }
 
-    /// The window procedure body. `hwnd` tells which of the two windows the message is for.
-    unsafe fn handle(&mut self, hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    /// The window procedure body, run under a `try_borrow_mut`. Returns the LRESULT decision and
+    /// the work to do after the borrow ends. It never calls the app callbacks.
+    fn handle(
+        &mut self,
+        hwnd: HWND,
+        msg: u32,
+        _wparam: WPARAM,
+        lparam: LPARAM,
+    ) -> (Outcome, Action) {
         if hwnd == self.text_hwnd {
-            match msg {
+            return match msg {
                 WM_LBUTTONUP => {
-                    self.on_left_click();
-                    return LRESULT(0);
+                    let anchor = self.shown.as_ref().map_or(
+                        Rect {
+                            left: 0,
+                            top: 0,
+                            right: 0,
+                            bottom: 0,
+                        },
+                        |s| s.rect,
+                    );
+                    (
+                        Outcome::Return(LRESULT(0)),
+                        Action::Deliver {
+                            events: vec![TaskbarEvent::Toggle { anchor }],
+                            scheme: None,
+                        },
+                    )
                 }
                 WM_RBUTTONUP => {
-                    self.on_right_click();
-                    return LRESULT(0);
+                    let mut point = POINT { x: 0, y: 0 };
+                    // SAFETY: `point` is a valid out value; GetCursorPos sends nothing.
+                    unsafe {
+                        let _ = GetCursorPos(&mut point);
+                    }
+                    (
+                        Outcome::Return(LRESULT(0)),
+                        Action::Menu {
+                            labels: self.labels.clone(),
+                            text_hwnd: self.text_hwnd,
+                            point,
+                        },
+                    )
                 }
-                WM_MOUSEACTIVATE => return LRESULT(MA_NOACTIVATE as isize),
-                _ => {}
-            }
-        } else if hwnd == self.controller_hwnd {
+                WM_MOUSEACTIVATE => (
+                    Outcome::Return(LRESULT(MA_NOACTIVATE as isize)),
+                    Action::None,
+                ),
+                _ => (Outcome::Default, Action::None),
+            };
+        }
+        if hwnd == self.controller_hwnd {
             match msg {
                 WM_APP_RECTS | WM_DISPLAYCHANGE | WM_DPICHANGED => {
                     self.refresh();
-                    return LRESULT(0);
+                    return (Outcome::Return(LRESULT(0)), Action::None);
                 }
                 WM_SETTINGCHANGE => {
                     if let Some(name) = setting_name(lparam) {
                         if name == "ImmersiveColorSet" {
                             self.dark = taskbar_is_dark().unwrap_or(false);
-                            (self.on_scheme)(self.dark);
                             self.refresh();
+                            return (
+                                Outcome::Return(LRESULT(0)),
+                                Action::Deliver {
+                                    events: Vec::new(),
+                                    scheme: Some(self.dark),
+                                },
+                            );
                         } else if name == "TraySettings" {
                             self.refresh();
                         }
                     }
-                    return LRESULT(0);
+                    return (Outcome::Return(LRESULT(0)), Action::None);
                 }
-                _ if msg == self.taskbar_created_msg && msg != 0 => {
+                _ if msg == TASKBAR_CREATED.load(Ordering::Relaxed) && msg != 0 => {
                     log::info!("taskbar text: Explorer restarted, recreating the text window");
                     self.recreate_text_window();
                     // SAFETY: posting to our worker thread is always safe.
@@ -387,79 +474,27 @@ impl Controller {
                         );
                     }
                     self.refresh();
-                    return LRESULT(0);
+                    return (Outcome::Return(LRESULT(0)), Action::None);
                 }
                 _ => {}
             }
         }
-        // SAFETY: DefWindowProcW is the documented default for unhandled messages.
-        unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
-    }
-
-    fn on_left_click(&mut self) {
-        let anchor = self.shown.as_ref().map_or(
-            Rect {
-                left: 0,
-                top: 0,
-                right: 0,
-                bottom: 0,
-            },
-            |s| s.rect,
-        );
-        (self.on_event)(TaskbarEvent::Toggle { anchor });
-    }
-
-    fn on_right_click(&mut self) {
-        // SAFETY: the popup menu, cursor query and TrackPopupMenuEx are all read-only; the labels
-        // are our own UTF-16 buffers.
-        unsafe {
-            let Ok(menu) = CreatePopupMenu() else { return };
-            let labels = [
-                &self.labels.open,
-                &self.labels.copy_bs,
-                &self.labels.copy_ad,
-                &self.labels.settings,
-                &self.labels.quit,
-            ];
-            for (index, label) in labels.iter().enumerate() {
-                let text: Vec<u16> = label.encode_utf16().chain(std::iter::once(0)).collect();
-                let _ = AppendMenuW(menu, MF_STRING, index + 1, PCWSTR(text.as_ptr()));
-            }
-            let mut point = POINT { x: 0, y: 0 };
-            if GetCursorPos(&mut point).is_err() {
-                let _ = DestroyMenu(menu);
-                return;
-            }
-            // The text window never activates, so claim the foreground so the menu dismisses on
-            // a click elsewhere (WR-01 AC5 behaviour).
-            let _ = SetForegroundWindow(self.text_hwnd);
-            let command = TrackPopupMenuEx(
-                menu,
-                TPM_RETURNCMD.0 | TPM_RIGHTBUTTON.0,
-                point.x,
-                point.y,
-                self.text_hwnd,
-                None,
-            );
-            let _ = DestroyMenu(menu);
-            let item = match command.0 as u32 {
-                1 => MenuItem::Open,
-                2 => MenuItem::CopyBs,
-                3 => MenuItem::CopyAd,
-                4 => MenuItem::Settings,
-                5 => MenuItem::Quit,
-                _ => return,
-            };
-            (self.on_event)(TaskbarEvent::Menu(item));
-        }
+        (Outcome::Default, Action::None)
     }
 }
 
 impl Drop for Controller {
     fn drop(&mut self) {
-        // SAFETY: the windows are ours; the worker is signalled to quit, never joined, so a
-        // hung Explorer UIA call cannot block app shutdown.
+        // SAFETY: clear the user data first so a late message never derefs this freed controller,
+        // then destroy the windows, then signal the worker (never joined, so a hung Explorer UIA
+        // call cannot block shutdown).
         unsafe {
+            if !self.controller_hwnd.0.is_null() {
+                SetWindowLongPtrW(self.controller_hwnd, GWLP_USERDATA, 0);
+            }
+            if !self.text_hwnd.0.is_null() {
+                SetWindowLongPtrW(self.text_hwnd, GWLP_USERDATA, 0);
+            }
             if !self.text_hwnd.0.is_null() {
                 let _ = DestroyWindow(self.text_hwnd);
             }
@@ -471,21 +506,138 @@ impl Drop for Controller {
     }
 }
 
-/// The window procedure for both windows. The controller pointer lives in `GWLP_USERDATA`.
+/// Runs the app callbacks with no controller borrow held. `Option::take` moves the callbacks out
+/// of the controller first, so a callback that calls back into the taskbar text (for example
+/// `set_lines`) borrows cleanly instead of aliasing.
+fn deliver(cell: &RefCell<Controller>, events: Vec<TaskbarEvent>, scheme: Option<bool>) {
+    if events.is_empty() && scheme.is_none() {
+        return;
+    }
+    let (mut on_event, mut on_scheme) = match cell.try_borrow_mut() {
+        Ok(mut controller) => (controller.on_event.take(), controller.on_scheme.take()),
+        Err(_) => return,
+    };
+    if let (Some(dark), Some(callback)) = (scheme, on_scheme.as_mut()) {
+        callback(dark);
+    }
+    for event in events {
+        if let Some(callback) = on_event.as_mut() {
+            callback(event);
+        }
+    }
+    // The callbacks never drop the `Rc` (Quit only queues the event-loop exit), so `cell` is still
+    // valid here.
+    if let Ok(mut controller) = cell.try_borrow_mut() {
+        controller.on_event = on_event;
+        controller.on_scheme = on_scheme;
+    }
+}
+
+/// Builds and runs the right-click menu (WR-01 AC5 items), with no controller borrow held so the
+/// modal loop can dispatch the timer and other windows. Returns the chosen item.
+unsafe fn run_menu(labels: &MenuLabels, text_hwnd: HWND, point: POINT) -> Option<MenuItem> {
+    // SAFETY: the popup menu is ours and the labels are UTF-16 buffers we own.
+    let menu = unsafe { CreatePopupMenu() }.ok()?;
+    let items = [
+        (MenuItem::Open, &labels.open),
+        (MenuItem::CopyBs, &labels.copy_bs),
+        (MenuItem::CopyAd, &labels.copy_ad),
+        (MenuItem::Settings, &labels.settings),
+        (MenuItem::Quit, &labels.quit),
+    ];
+    for (index, (_, label)) in items.iter().enumerate() {
+        let text: Vec<u16> = label.encode_utf16().chain(std::iter::once(0)).collect();
+        // SAFETY: the menu and the text buffer are valid for this call.
+        let _ = unsafe { AppendMenuW(menu, MF_STRING, index + 1, PCWSTR(text.as_ptr())) };
+    }
+    // The text window never activates, so claim the foreground so the menu dismisses on a click
+    // elsewhere (WR-01 AC5 behaviour).
+    // SAFETY: SetForegroundWindow is safe on our window.
+    let _ = unsafe { SetForegroundWindow(text_hwnd) };
+    // SAFETY: TrackPopupMenuEx blocks and dispatches messages; nothing borrows the controller
+    // here, so re-entrant messages (the timer, other windows) are handled normally.
+    let command = unsafe {
+        TrackPopupMenuEx(
+            menu,
+            TPM_RETURNCMD.0 | TPM_RIGHTBUTTON.0,
+            point.x,
+            point.y,
+            text_hwnd,
+            None,
+        )
+    };
+    // SAFETY: the menu is ours.
+    let _ = unsafe { DestroyMenu(menu) };
+    match command.0 as u32 {
+        1 => Some(MenuItem::Open),
+        2 => Some(MenuItem::CopyBs),
+        3 => Some(MenuItem::CopyAd),
+        4 => Some(MenuItem::Settings),
+        5 => Some(MenuItem::Quit),
+        _ => None,
+    }
+}
+
+/// The window procedure for both windows. The `RefCell<Controller>` pointer lives in
+/// `GWLP_USERDATA`.
 unsafe extern "system" fn wnd_proc(
     hwnd: HWND,
     msg: u32,
     wparam: WPARAM,
     lparam: LPARAM,
 ) -> LRESULT {
-    // SAFETY: the pointer was stored in `bind` and is valid for the window's lifetime.
-    let ptr = unsafe { GetWindowLongPtrW(hwnd, GWLP_USERDATA) } as *mut Controller;
-    if ptr.is_null() {
-        // SAFETY: before `bind` runs (WM_CREATE and friends), fall through to the default.
+    // SAFETY: the pointer was stored in `bind` and cleared in `Controller::drop`; a null pointer
+    // means the message arrived before `bind` or after drop.
+    let cell = unsafe { GetWindowLongPtrW(hwnd, GWLP_USERDATA) } as *const RefCell<Controller>;
+    if cell.is_null() {
+        // SAFETY: before `bind` or after drop, fall through to the default handler.
         return unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) };
     }
-    // SAFETY: `ptr` points at the boxed Controller, never moved.
-    unsafe { (&mut *ptr).handle(hwnd, msg, wparam, lparam) }
+    // SAFETY: `cell` points at the `RefCell<Controller>` inside the `Rc`, heap-allocated and never
+    // moved while the windows live.
+    let cell = unsafe { &*cell };
+    if let Ok(mut controller) = cell.try_borrow_mut() {
+        // The borrow ends before any callback runs, so a callback that calls `set_lines`
+        // borrows cleanly instead of aliasing.
+        let (outcome, action) = controller.handle(hwnd, msg, wparam, lparam);
+        drop(controller);
+        match action {
+            Action::None => {}
+            Action::Deliver { events, scheme } => deliver(cell, events, scheme),
+            Action::Menu {
+                labels,
+                text_hwnd,
+                point,
+            } => {
+                // SAFETY: the menu runs with no borrow held; see `run_menu`.
+                if let Some(item) = unsafe { run_menu(&labels, text_hwnd, point) } {
+                    deliver(cell, vec![TaskbarEvent::Menu(item)], None);
+                }
+            }
+        }
+        match outcome {
+            Outcome::Return(result) => result,
+            Outcome::Default => {
+                // SAFETY: the default handler is safe for any message.
+                unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
+            }
+        }
+    } else {
+        // Re-entry: the controller is already borrowed (a synchronous message sent from
+        // `ShowWindow`/`UpdateLayeredWindow`/`DestroyWindow`, or a callback). Repost the
+        // messages that carry state so nothing is lost; drop the rest.
+        if msg == WM_APP_RECTS
+            || msg == WM_SETTINGCHANGE
+            || (msg != 0 && msg == TASKBAR_CREATED.load(Ordering::Relaxed))
+        {
+            // SAFETY: posting to our own window is always safe.
+            unsafe {
+                let _ = PostMessageW(Some(hwnd), msg, wparam, lparam);
+            }
+        }
+        // SAFETY: the default handler is safe for any message.
+        unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
+    }
 }
 
 /// Registers the two window classes. Failure is logged once and left to the caller's fallback.
@@ -501,7 +653,7 @@ fn register_classes() {
             hIcon: HICON::default(),
             hCursor: HCURSOR::default(),
             hbrBackground: HBRUSH::default(),
-            lpszMenuName: windows::core::PCWSTR(std::ptr::null()),
+            lpszMenuName: PCWSTR(std::ptr::null()),
             lpszClassName: CONTROLLER_CLASS,
         };
         if RegisterClassW(&controller) == 0 {
@@ -518,7 +670,7 @@ fn register_classes() {
 }
 
 /// Creates the hidden controller window.
-fn create_window(class: PCWSTR, _parent: Option<HWND>) -> HWND {
+fn create_window(class: PCWSTR) -> HWND {
     // SAFETY: the class name is static; the window is hidden and never shown.
     unsafe {
         CreateWindowExW(
