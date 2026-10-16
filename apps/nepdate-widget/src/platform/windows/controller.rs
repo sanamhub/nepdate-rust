@@ -28,14 +28,14 @@ use windows::Win32::UI::Shell::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CS_HREDRAW, CS_VREDRAW, CreatePopupMenu, CreateWindowExW, DefWindowProcW,
-    DestroyMenu, DestroyWindow, FindWindowW, GWLP_USERDATA, GetClientRect, GetCursorPos,
-    GetWindowLongPtrW, HCURSOR, HICON, HWND_TOP, MA_NOACTIVATE, MF_STRING, PostMessageW,
-    PostThreadMessageW, RegisterClassW, RegisterWindowMessageW, SW_HIDE, SW_SHOWNOACTIVATE,
-    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos,
-    ShowWindow, TPM_RETURNCMD, TPM_RIGHTBUTTON, TrackPopupMenuEx, ULW_ALPHA, UpdateLayeredWindow,
-    WINDOW_STYLE, WM_APP, WM_DISPLAYCHANGE, WM_DPICHANGED, WM_LBUTTONUP, WM_MOUSEACTIVATE, WM_QUIT,
-    WM_RBUTTONUP, WM_SETTINGCHANGE, WNDCLASSW, WS_CHILD, WS_CLIPSIBLINGS, WS_EX_LAYERED,
-    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    DestroyMenu, DestroyWindow, FindWindowW, GW_HWNDPREV, GWLP_USERDATA, GetClientRect,
+    GetCursorPos, GetWindow, GetWindowLongPtrW, HCURSOR, HICON, HWND_TOP, MA_NOACTIVATE, MF_STRING,
+    PostMessageW, PostThreadMessageW, RegisterClassW, RegisterWindowMessageW, SW_HIDE,
+    SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetForegroundWindow,
+    SetWindowLongPtrW, SetWindowPos, ShowWindow, TPM_RETURNCMD, TPM_RIGHTBUTTON, TrackPopupMenuEx,
+    ULW_ALPHA, UpdateLayeredWindow, WINDOW_STYLE, WM_APP, WM_DISPLAYCHANGE, WM_DPICHANGED,
+    WM_LBUTTONUP, WM_MOUSEACTIVATE, WM_QUIT, WM_RBUTTONUP, WM_SETTINGCHANGE, WNDCLASSW, WS_CHILD,
+    WS_CLIPSIBLINGS, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
 };
 use windows::core::{PCWSTR, w};
 
@@ -319,19 +319,22 @@ impl Controller {
         unsafe {
             let _ = ShowWindow(self.text_hwnd, SW_SHOWNOACTIVATE);
             // The XAML taskbar lives in a sibling `Windows.UI.Composition.DesktopWindowContentBridge`
-            // child of Shell_TrayWnd that covers the whole taskbar, and Explorer raises that bridge
-            // above our text window whenever it redraws, burying the text. Raise our layered child
-            // back to the top of Shell_TrayWnd's children on every show and re-place; the next tick
-            // (or UIA rect change) re-asserts this after Explorer raises the bridge again.
-            let _ = SetWindowPos(
-                self.text_hwnd,
-                Some(HWND_TOP),
-                0,
-                0,
-                0,
-                0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-            );
+            // child of Shell_TrayWnd that covers the whole taskbar. A new child starts below it, so
+            // the text is buried until raised. Raise it whenever a sibling sits above it; each
+            // refresh checks again, so a later re-raise by Explorer is undone on the next tick.
+            let buried =
+                GetWindow(self.text_hwnd, GW_HWNDPREV).is_ok_and(|prev| !prev.is_invalid());
+            if buried {
+                let _ = SetWindowPos(
+                    self.text_hwnd,
+                    Some(HWND_TOP),
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                );
+            }
         }
         if self.hidden_reason.take().is_some() {
             log::info!("taskbar text shown");
