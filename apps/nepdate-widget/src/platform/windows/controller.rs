@@ -369,7 +369,8 @@ impl Controller {
         unsafe {
             let _ = ShowWindow(self.text_hwnd, SW_HIDE);
         }
-        self.shown = None;
+        // Keep the rendered bitmap and `shown` so a hidden refresh never re-renders; the cache is
+        // only cleared when lines, ink or scale change (W1B-05 item 3).
     }
 
     /// Recreates the text window after Explorer restarted (`TaskbarCreated`).

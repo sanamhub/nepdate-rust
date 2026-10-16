@@ -45,7 +45,8 @@ pub const START_ID: &str = "StartButton";
 /// id is unconfirmed; an absent Widgets button means "left bound = `taskbar.left`".
 pub const WIDGETS_ID: &str = "WidgetsButton";
 
-/// What the worker last found, in physical screen coordinates.
+/// What the worker last posted, in physical screen coordinates. The controller reads it and the
+/// handler uses it as the "last posted" value so it posts only on a change.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct UiaState {
     pub start: Option<Rect>,
@@ -87,7 +88,7 @@ fn run(controller: HWND, state: Arc<Mutex<UiaState>>) {
     loop {
         let subscription = subscribe(&automation, controller, &state);
         // Pump until the controller posts a restart or quit message. Dropping the subscription
-        // removes the event handler when it was created.
+        // removes the event handler.
         let restart = pump();
         drop(subscription);
         if !restart {
@@ -99,7 +100,8 @@ fn run(controller: HWND, state: Arc<Mutex<UiaState>>) {
 }
 
 /// Finds the taskbar, Start and Widgets buttons, reports their rectangles and subscribes to the
-/// Start button's `BoundingRectangle` change. Returns the subscription to keep the handler alive.
+/// Start button's `BoundingRectangle` change. Returns the subscription, which removes the handler
+/// when dropped. Re-finding happens here, on the initial run and on every `WM_APP_RESTART`.
 fn subscribe(
     automation: &IUIAutomation,
     controller: HWND,
@@ -109,11 +111,14 @@ fn subscribe(
     let taskbar = unsafe { FindWindowW(w!("Shell_TrayWnd"), None) }.ok()?;
     // SAFETY: ElementFromHandle is a read-only query on the taskbar window.
     let root = unsafe { automation.ElementFromHandle(taskbar) }.ok()?;
-    report(automation, controller, state);
     let start = find(automation, &root, START_ID).ok().flatten()?;
+    let widgets = find(automation, &root, WIDGETS_ID).ok().flatten();
+    // Initial report with the kept elements; posts only if the state changed.
+    report(&start, widgets.as_ref(), controller, state);
     let handler: IUIAutomationPropertyChangedEventHandler = Handler {
-        automation: automation.clone(),
         controller,
+        start: start.clone(),
+        widgets: widgets.clone(),
         state: state.clone(),
     }
     .into();
@@ -129,53 +134,66 @@ fn subscribe(
             )
             .ok()?;
     }
-    Some(Subscription { start, handler })
+    Some(Subscription {
+        automation: automation.clone(),
+        start,
+        handler,
+    })
 }
 
+/// Keeps the automation object and removes the handler when dropped, so a restart does not stack
+/// handlers (W1B-05 item 3).
 struct Subscription {
+    automation: IUIAutomation,
     start: IUIAutomationElement,
     handler: IUIAutomationPropertyChangedEventHandler,
 }
 
 impl Drop for Subscription {
     fn drop(&mut self) {
-        // Best-effort unsubbscribe; the automation object is not stored here, so a removed handler
-        // relies on the COM object's own release. UIA also releases it when the button is gone.
-        let _ = self.handler;
-        let _ = self.start;
+        // SAFETY: removing our own handler is safe; it is best-effort because UIA also releases
+        // the handler when the Start button is destroyed (Explorer restart).
+        unsafe {
+            let _ = self
+                .automation
+                .RemovePropertyChangedEventHandler(&self.start, &self.handler);
+        }
     }
 }
 
-/// Finds the Start and Widgets buttons, copies their rectangles into the shared state and posts a
-/// wake-up to the controller. Runs entirely on the worker thread.
-fn report(automation: &IUIAutomation, controller: HWND, state: &Mutex<UiaState>) {
-    // SAFETY: FindWindowW is a read-only query.
-    let Ok(taskbar) = (unsafe { FindWindowW(w!("Shell_TrayWnd"), None) }) else {
-        return;
-    };
-    // SAFETY: ElementFromHandle is a read-only query on the taskbar window.
-    let Ok(root) = (unsafe { automation.ElementFromHandle(taskbar) }) else {
-        return;
-    };
-    let start = find(automation, &root, START_ID).ok().flatten();
-    let widgets = find(automation, &root, WIDGETS_ID).ok().flatten();
+/// Reads the kept elements' bounding rectangles and posts to the controller only when they
+/// changed from the last posted values. Runs only on the worker thread.
+fn report(
+    start: &IUIAutomationElement,
+    widgets: Option<&IUIAutomationElement>,
+    controller: HWND,
+    state: &Mutex<UiaState>,
+) {
+    let start_rect = bounding_rect(start);
+    let widgets_rect = widgets.and_then(bounding_rect);
+    let mut shared = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if shared.start == start_rect && shared.widgets == widgets_rect {
+        return; // unchanged: do not wake the controller
+    }
+    shared.start = start_rect;
+    shared.widgets = widgets_rect;
+    drop(shared);
+    // SAFETY: the controller window is valid; a posted message is always safe.
+    let _ = unsafe { PostMessageW(Some(controller), WM_APP_RECTS, WPARAM(0), LPARAM(0)) };
+}
+
+/// The element's bounding rectangle in physical screen coordinates.
+fn bounding_rect(element: &IUIAutomationElement) -> Option<Rect> {
     // SAFETY: CurrentBoundingRectangle is a read-only query on the element.
-    let rect = |element: &IUIAutomationElement| unsafe { element.CurrentBoundingRectangle() }.ok();
-    let to_rect = |r: windows::Win32::Foundation::RECT| Rect {
+    let r = unsafe { element.CurrentBoundingRectangle() }.ok()?;
+    Some(Rect {
         left: r.left,
         top: r.top,
         right: r.right,
         bottom: r.bottom,
-    };
-    {
-        let mut shared = state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        shared.start = start.as_ref().and_then(rect).map(to_rect);
-        shared.widgets = widgets.as_ref().and_then(rect).map(to_rect);
-    }
-    // SAFETY: the controller window is valid; a posted message is always safe.
-    let _ = unsafe { PostMessageW(Some(controller), WM_APP_RECTS, WPARAM(0), LPARAM(0)) };
+    })
 }
 
 /// Finds one descendant of `root` by `AutomationId`, or `None`.
@@ -197,11 +215,13 @@ fn find(
     })
 }
 
-/// The property-changed handler: re-reports the rectangles on every Start-button move.
+/// The property-changed handler: reads the kept elements' rectangles and posts only on a change.
+/// It holds no `IUIAutomation`, so there is no reference cycle with the subscription.
 #[implement(IUIAutomationPropertyChangedEventHandler)]
 struct Handler {
-    automation: IUIAutomation,
     controller: HWND,
+    start: IUIAutomationElement,
+    widgets: Option<IUIAutomationElement>,
     state: Arc<Mutex<UiaState>>,
 }
 
@@ -212,7 +232,12 @@ impl IUIAutomationPropertyChangedEventHandler_Impl for Handler_Impl {
         _propertyid: UIA_PROPERTY_ID,
         _newvalue: &VARIANT,
     ) -> windows::core::Result<()> {
-        report(&self.automation, self.controller, &self.state);
+        report(
+            &self.start,
+            self.widgets.as_ref(),
+            self.controller,
+            &self.state,
+        );
         Ok(())
     }
 }
