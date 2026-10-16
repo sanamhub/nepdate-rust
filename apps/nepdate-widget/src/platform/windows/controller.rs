@@ -171,7 +171,10 @@ impl Controller {
         let text_hwnd = create_text_window();
         let uia = Arc::new(Mutex::new(UiaState::default()));
         let worker_tid = match uia::spawn(hwnd, uia.clone()) {
-            Ok(tid) => tid,
+            Ok(tid) => {
+                log::debug!("uia worker thread id {tid}");
+                tid
+            }
             Err(error) => {
                 log::warn!("taskbar text: UIA worker did not start: {error}");
                 // SAFETY: GetCurrentThreadId has no preconditions.
