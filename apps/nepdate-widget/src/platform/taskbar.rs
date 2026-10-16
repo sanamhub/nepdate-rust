@@ -1,8 +1,5 @@
 //! The taskbar text surface (WR-12, ADR-0016). Windows 11 only; a no-op elsewhere. The rest of
 //! the app sees only this trait and these types, never the `unsafe` Win32 in `windows/`.
-// W1B-03 wires this into `main.rs`; until then the binary does not construct these types. Remove
-// this allow when wired.
-#![allow(dead_code)]
 
 use crate::app::taskbar::{Rect, TaskbarLines};
 
@@ -65,8 +62,10 @@ pub fn create(
 }
 
 /// The no-op on macOS and Linux: the tray icon alone shows the date there (ADR-0016).
+#[cfg(not(windows))]
 struct Noop;
 
+#[cfg(not(windows))]
 impl TaskbarText for Noop {
     fn set_lines(&self, _lines: &TaskbarLines) {}
     fn set_enabled(&self, _on: bool) {}

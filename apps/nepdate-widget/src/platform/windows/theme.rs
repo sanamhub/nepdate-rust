@@ -1,9 +1,6 @@
 //! The two `ink` colours for the taskbar text (ADR-0016 point 5, WR-12 AC2). The taskbar scheme
 //! itself comes from `platform::taskbar_scheme` (windows-registry, no process spawn); this module
 //! only holds the colours, kept equal to the design table by the test below.
-// W1B-03 wires `ink` into the render path; until then the binary does not call it. Remove this
-// allow when wired.
-#![allow(dead_code)]
 
 /// The `ink` token for a light taskbar (`#211C17`), premultiplied alpha 1.
 pub const INK_LIGHT: [u8; 4] = [0x21, 0x1C, 0x17, 0xFF];

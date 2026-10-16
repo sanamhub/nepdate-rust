@@ -429,6 +429,16 @@ mod tests {
     use crate::platform::windows::theme;
     use windows::Win32::Graphics::DirectWrite::DWRITE_CLUSTER_METRICS;
 
+    /// Serializes the render tests: each one registers a ~13 MB font loader in the process on its
+    /// thread, so the process-wide memory test would see another thread's one-time load as a leak.
+    static RENDER_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn render_guard() -> std::sync::MutexGuard<'static, ()> {
+        RENDER_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
     fn lines() -> TaskbarLines {
         TaskbarLines {
             line1: "Thursday | 1:50 PM".to_owned(),
@@ -438,6 +448,7 @@ mod tests {
 
     #[test]
     fn render_is_premultiplied_and_hit_testable() {
+        let _guard = render_guard();
         let rendered = render(&lines(), 1.0, theme::INK_LIGHT).expect("render");
         assert!(rendered.width > 0 && rendered.height > 0);
         assert_eq!(
@@ -461,6 +472,7 @@ mod tests {
 
     #[test]
     fn render_width_is_reasonable() {
+        let _guard = render_guard();
         let rendered = render(&lines(), 1.0, theme::INK_LIGHT).expect("render");
         // The two English lines are around 170 px wide; a much smaller width means the Latin
         // glyphs did not shape.
@@ -474,6 +486,7 @@ mod tests {
 
     #[test]
     fn render_twice_is_stable() {
+        let _guard = render_guard();
         let first = render(&lines(), 1.0, theme::INK_LIGHT).expect("render");
         let second = render(&lines(), 1.0, theme::INK_LIGHT).expect("render");
         assert_eq!(first.width, second.width, "render width not stable");
@@ -523,6 +536,7 @@ mod tests {
             counters.private_usage
         }
 
+        let _guard = render_guard();
         // The first render pays the one-time font load; the next 1000 must not add a loader.
         render(&lines(), 1.0, theme::INK_LIGHT).expect("warm render");
         let before = private_bytes();
@@ -539,6 +553,7 @@ mod tests {
 
     #[test]
     fn render_shapes_devanagari() {
+        let _guard = render_guard();
         // `क्ष` is three code points (क ् ष) but one glyph cluster once shaped; a Latin-only font
         // would keep it as three clusters. The cluster count is DirectWrite's glyph count.
         // SAFETY: DirectWrite is a process-wide COM API; a shared factory is the documented default.

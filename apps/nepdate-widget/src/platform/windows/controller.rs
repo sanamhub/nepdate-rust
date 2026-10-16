@@ -8,21 +8,7 @@
 //! and the app callbacks (`on_event`, `on_scheme`) run only in `deliver`, after the borrow is
 //! dropped. Every `borrow_mut` site below says why it cannot re-enter.
 // FFI conventions this module cannot avoid: `&x` where `*const T` is expected.
-#![allow(
-    clippy::borrow_as_ptr,
-    clippy::ptr_as_ptr,
-    clippy::cast_possible_truncation,
-    clippy::cast_possible_wrap,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::float_cmp,
-    clippy::too_many_lines,
-    clippy::struct_field_names,
-    clippy::unnecessary_cast,
-    clippy::needless_pass_by_value,
-    clippy::if_not_else,
-    clippy::single_match
-)]
+#![allow(clippy::borrow_as_ptr, clippy::ptr_as_ptr)]
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -105,7 +91,7 @@ enum Action {
 }
 
 struct Controller {
-    controller_hwnd: HWND,
+    hwnd: HWND,
     text_hwnd: HWND,
     /// The `RefCell<Controller>` this controller lives in, stored in `GWLP_USERDATA`.
     cell: *const RefCell<Controller>,
@@ -174,10 +160,10 @@ impl Controller {
         // Registration failures leave the taskbar text hidden but the tray icon working; the
         // controller window is still created so the failure mode stays "text hidden, one log".
         register_classes();
-        let controller_hwnd = create_window(CONTROLLER_CLASS);
+        let hwnd = create_window(CONTROLLER_CLASS);
         let text_hwnd = create_text_window();
         let uia = Arc::new(Mutex::new(UiaState::default()));
-        let worker_tid = match uia::spawn(controller_hwnd, uia.clone()) {
+        let worker_tid = match uia::spawn(hwnd, uia.clone()) {
             Ok(tid) => tid,
             Err(error) => {
                 log::warn!("taskbar text: UIA worker did not start: {error}");
@@ -189,7 +175,7 @@ impl Controller {
         let created = unsafe { RegisterWindowMessageW(w!("TaskbarCreated")) };
         TASKBAR_CREATED.store(created, Ordering::Relaxed);
         Controller {
-            controller_hwnd,
+            hwnd,
             text_hwnd,
             cell: std::ptr::null(),
             lines: TaskbarLines::default(),
@@ -212,7 +198,7 @@ impl Controller {
         // SAFETY: the windows exist and `cell` stays valid for their lifetime; it is cleared in
         // `Controller::drop` before the controller is freed.
         unsafe {
-            SetWindowLongPtrW(self.controller_hwnd, GWLP_USERDATA, cell as isize);
+            SetWindowLongPtrW(self.hwnd, GWLP_USERDATA, cell as isize);
             SetWindowLongPtrW(self.text_hwnd, GWLP_USERDATA, cell as isize);
         }
     }
@@ -240,6 +226,9 @@ impl Controller {
     /// The single refresh path: re-reads the scheme, DPI and UIA rectangles, re-renders and
     /// re-places only when something changed (ADR-0016 point 6), and hides with one log line
     /// otherwise (point 8).
+    // The scale comparison is exact (both values came from the same DPI / 96) and the text size is
+    // a few hundred pixels, so the i32 casts never wrap.
+    #[allow(clippy::float_cmp, clippy::cast_possible_wrap)]
     fn refresh(&mut self) {
         if !self.enabled {
             self.hide(Hidden::Disabled);
@@ -249,46 +238,10 @@ impl Controller {
         self.dark = taskbar_is_dark().unwrap_or(false);
         let ink = theme::ink(self.dark);
 
-        // SAFETY: FindWindowW and SHAppBarMessage are read-only queries; a missing taskbar is a
-        // normal Windows 10 or Explorer-restart state, handled below.
-        let Ok(taskbar) = (unsafe { FindWindowW(w!("Shell_TrayWnd"), None) }) else {
-            self.hide(Hidden::NoStartButton);
+        let Some((layout, origin)) = self.read_layout() else {
             return;
         };
-        let edge = taskbar_edge(taskbar);
-        // SAFETY: GetDpiForWindow is a read-only query.
-        let scale = unsafe { GetDpiForWindow(taskbar) } as f32 / 96.0;
-        let Some(origin) = client_origin(taskbar) else {
-            self.hide(Hidden::NotBottom);
-            return;
-        };
-        let Some(client) = client_rect(taskbar) else {
-            self.hide(Hidden::NotBottom);
-            return;
-        };
-        let uia = self
-            .uia
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let to_client = |r: Rect| Rect {
-            left: r.left - origin.x,
-            top: r.top - origin.y,
-            right: r.right - origin.x,
-            bottom: r.bottom - origin.y,
-        };
-        let layout = TaskbarLayout {
-            taskbar: Rect {
-                left: 0,
-                top: 0,
-                right: client.right,
-                bottom: client.bottom,
-            },
-            edge,
-            start: uia.start.map(to_client),
-            widgets: uia.widgets.map(to_client),
-            scale,
-        };
-        drop(uia);
+        let scale = layout.scale;
 
         // Re-render only when the lines, ink or scale changed.
         let needs_render = self
@@ -360,6 +313,55 @@ impl Controller {
         }
     }
 
+    /// Reads the taskbar geometry, DPI and UIA rectangles into a layout, hiding the text on
+    /// failure. Returns the layout and the taskbar's client origin in screen coordinates.
+    // The DPI is a small u32 (96, 144, 192, ...), so the f32 cast only loses integer precision far
+    // below any screen coordinate range.
+    #[allow(clippy::cast_precision_loss)]
+    fn read_layout(&mut self) -> Option<(TaskbarLayout, POINT)> {
+        // SAFETY: FindWindowW and SHAppBarMessage are read-only queries; a missing taskbar is a
+        // normal Windows 10 or Explorer-restart state, handled below.
+        let Ok(taskbar) = (unsafe { FindWindowW(w!("Shell_TrayWnd"), None) }) else {
+            self.hide(Hidden::NoStartButton);
+            return None;
+        };
+        let edge = taskbar_edge(taskbar);
+        // SAFETY: GetDpiForWindow is a read-only query.
+        let scale = unsafe { GetDpiForWindow(taskbar) } as f32 / 96.0;
+        let Some(origin) = client_origin(taskbar) else {
+            self.hide(Hidden::NotBottom);
+            return None;
+        };
+        let Some(client) = client_rect(taskbar) else {
+            self.hide(Hidden::NotBottom);
+            return None;
+        };
+        let uia = self
+            .uia
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let to_client = |r: Rect| Rect {
+            left: r.left - origin.x,
+            top: r.top - origin.y,
+            right: r.right - origin.x,
+            bottom: r.bottom - origin.y,
+        };
+        let layout = TaskbarLayout {
+            taskbar: Rect {
+                left: 0,
+                top: 0,
+                right: client.right,
+                bottom: client.bottom,
+            },
+            edge,
+            start: uia.start.map(to_client),
+            widgets: uia.widgets.map(to_client),
+            scale,
+        };
+        drop(uia);
+        Some((layout, origin))
+    }
+
     fn hide(&mut self, reason: Hidden) {
         if self.hidden_reason != Some(reason) {
             log::info!("taskbar text hidden: {reason:?}");
@@ -389,6 +391,8 @@ impl Controller {
 
     /// The window procedure body, run under a `try_borrow_mut`. Returns the LRESULT decision and
     /// the work to do after the borrow ends. It never calls the app callbacks.
+    // MA_NOACTIVATE is a small u32; the isize cast never wraps on either 32- or 64-bit targets.
+    #[allow(clippy::cast_possible_wrap)]
     fn handle(
         &mut self,
         hwnd: HWND,
@@ -438,7 +442,7 @@ impl Controller {
                 _ => (Outcome::Default, Action::None),
             };
         }
-        if hwnd == self.controller_hwnd {
+        if hwnd == self.hwnd {
             match msg {
                 WM_APP_RECTS | WM_DISPLAYCHANGE | WM_DPICHANGED => {
                     self.refresh();
@@ -490,8 +494,8 @@ impl Drop for Controller {
         // then destroy the windows, then signal the worker (never joined, so a hung Explorer UIA
         // call cannot block shutdown).
         unsafe {
-            if !self.controller_hwnd.0.is_null() {
-                SetWindowLongPtrW(self.controller_hwnd, GWLP_USERDATA, 0);
+            if !self.hwnd.0.is_null() {
+                SetWindowLongPtrW(self.hwnd, GWLP_USERDATA, 0);
             }
             if !self.text_hwnd.0.is_null() {
                 SetWindowLongPtrW(self.text_hwnd, GWLP_USERDATA, 0);
@@ -499,8 +503,8 @@ impl Drop for Controller {
             if !self.text_hwnd.0.is_null() {
                 let _ = DestroyWindow(self.text_hwnd);
             }
-            if !self.controller_hwnd.0.is_null() {
-                let _ = DestroyWindow(self.controller_hwnd);
+            if !self.hwnd.0.is_null() {
+                let _ = DestroyWindow(self.hwnd);
             }
             let _ = PostThreadMessageW(self.worker_tid, WM_QUIT, WPARAM(0), LPARAM(0));
         }
@@ -536,6 +540,8 @@ fn deliver(cell: &RefCell<Controller>, events: Vec<TaskbarEvent>, scheme: Option
 
 /// Builds and runs the right-click menu (WR-01 AC5 items), with no controller borrow held so the
 /// modal loop can dispatch the timer and other windows. Returns the chosen item.
+// The command id is 0..=5, so the BOOL-to-u32 cast never sees a negative value.
+#[allow(clippy::cast_sign_loss)]
 unsafe fn run_menu(labels: &MenuLabels, text_hwnd: HWND, point: POINT) -> Option<MenuItem> {
     // SAFETY: the popup menu is ours and the labels are UTF-16 buffers we own.
     let menu = unsafe { CreatePopupMenu() }.ok()?;
@@ -718,6 +724,8 @@ fn create_text_window() -> HWND {
 }
 
 /// The taskbar's docked edge via `SHAppBarMessage` (ADR-0016 point 2).
+// The struct size is a few hundred bytes, so the usize-to-u32 cast never truncates.
+#[allow(clippy::cast_possible_truncation)]
 fn taskbar_edge(taskbar: HWND) -> Edge {
     let mut data = APPBARDATA {
         cbSize: std::mem::size_of::<APPBARDATA>() as u32,
@@ -775,6 +783,9 @@ fn setting_name(lparam: LPARAM) -> Option<String> {
 }
 
 /// Pushes the rendered pixels to the layered window with `UpdateLayeredWindow` (ADR-0016 point 4).
+// The text size is a few hundred pixels and the blend flags are the two small AC_SRC_* constants,
+// so the i32 and u8 casts never wrap or truncate.
+#[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
 fn update_window(
     hwnd: HWND,
     pixels: &[u8],
@@ -825,11 +836,20 @@ fn update_window(
 /// A 32-bit top-down DIB with `pixels` copied into it, plus its DC and the previously selected
 /// bitmap.
 // SAFETY: the caller restores and deletes the objects (see `update_window`).
+// The DIB size is a few hundred pixels and the header size a few dozen bytes, so the i32 and u32
+// casts never wrap or truncate.
+#[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
 unsafe fn dib_with_pixels(
     pixels: &[u8],
     width: u32,
     height: u32,
 ) -> anyhow::Result<(HDC, HBITMAP, HGDIOBJ)> {
+    let expected = width as usize * height as usize * 4;
+    anyhow::ensure!(
+        pixels.len() == expected,
+        "pixel buffer is {} bytes but the DIB is {width}x{height} ({expected} bytes)",
+        pixels.len()
+    );
     // SAFETY: the screen DC is released right after the compatible DC is created.
     let screen = unsafe { GetDC(None) };
     // SAFETY: `screen` is a valid DC and the compatible DC is released below.
@@ -855,7 +875,7 @@ unsafe fn dib_with_pixels(
     let mut bits: *mut std::ffi::c_void = std::ptr::null_mut();
     // SAFETY: `info` describes the DIB; `bits` receives the pixel memory.
     let bitmap = unsafe { CreateDIBSection(Some(hdc), &info, DIB_RGB_COLORS, &mut bits, None, 0)? };
-    // SAFETY: `bits` is exactly `pixels.len()` bytes.
+    // SAFETY: `bits` is exactly `pixels.len()` bytes (checked above).
     unsafe { std::ptr::copy_nonoverlapping(pixels.as_ptr(), bits.cast::<u8>(), pixels.len()) };
     // SAFETY: selecting the DIB makes it the DC's current bitmap.
     let old = unsafe { SelectObject(hdc, HGDIOBJ(bitmap.0)) };
