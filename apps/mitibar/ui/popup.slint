@@ -1,6 +1,7 @@
 // The popup window (WR-02): borderless, always-on-top, fixed 360x440. It shows today's header
 // and the clock lines, hides on Escape and on focus loss (WR-02 AC2).
 import { AppInfo } from "app-info.slint";
+import { DayDetail, DayDetailData } from "day-detail.slint";
 import { MonthGrid, CellData } from "month-grid.slint";
 import { Theme } from "theme.slint";
 
@@ -37,6 +38,10 @@ export component PopupWindow inherits Window {
     in property <string> holiday-name: "";
     in property <int> holiday-days: -1;
 
+    // Day detail (W2-03): an overlay inside the popup, never a new OS window (WR-04 AC1).
+    in property <DayDetailData> detail;
+    in-out property <bool> detail-visible: false;
+
     // Fired by the tray menu, the taskbar menu and the grid (W2-02).
     callback day-clicked(int);
     callback prev-month();
@@ -45,6 +50,10 @@ export component PopupWindow inherits Window {
     callback month-picked(int);
     callback year-picked(int);
     callback wheel(int);
+    // Fired by the day detail (W2-03).
+    callback detail-closed();
+    callback copy-detail-bs();
+    callback copy-detail-ad();
 
     // Forward the window focus to the FocusScope so it receives key events and its focus-lost
     // fires when the popup is deactivated (WR-02 AC2).
@@ -62,6 +71,12 @@ export component PopupWindow inherits Window {
         }
         key-pressed(event) => {
             if (event.text == Key.Escape) {
+                // WR-04 AC3: Escape closes the detail first, then the popup.
+                if (root.detail-visible) {
+                    root.detail-visible = false;
+                    root.detail-closed();
+                    return accept;
+                }
                 root.hidden();
                 root.hide();
                 return accept;
@@ -113,6 +128,28 @@ export component PopupWindow inherits Window {
                 month-picked(index) => { root.month-picked(index); }
                 year-picked(year) => { root.year-picked(year); }
                 wheel(delta) => { root.wheel(delta); }
+            }
+        }
+
+        // Day detail overlay (WR-04): the scrim closes only the detail; the card sits above it.
+        if root.detail-visible: Rectangle {
+            x: 0;
+            y: 0;
+            width: 100%;
+            height: 100%;
+            background: #40000000;
+            TouchArea {
+                clicked => {
+                    root.detail-visible = false;
+                    root.detail-closed();
+                }
+            }
+            DayDetail {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                data: root.detail;
+                copy-bs => { root.copy-detail-bs(); }
+                copy-ad => { root.copy-detail-ad(); }
             }
         }
     }

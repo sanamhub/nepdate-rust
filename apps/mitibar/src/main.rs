@@ -42,6 +42,8 @@ struct AppState {
     popup_hidden_at: Option<std::time::Instant>,
     /// The month the grid shows (WR-03 AC6); W2-06 resets it when the date changed while hidden.
     viewed_month: (u16, Month),
+    /// The open day detail, if any (WR-04); cleared on hide and navigation.
+    detail: Option<month_view::DayDetail>,
 }
 
 /// A tray click within this long after focus loss hid the popup was the click that took the focus
@@ -211,6 +213,7 @@ fn main() -> anyhow::Result<()> {
         settings,
         popup_hidden_at: None,
         viewed_month: (today.year(), today.month()),
+        detail: None,
     }));
     // The `--no-taskbar-text` flag turns WR-12 off for this run (W3 builds the settings UI).
     if cli.no_taskbar_text {
@@ -387,6 +390,7 @@ fn update_popup(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>) {
     ui_bridge::set_month(&popup, &view, lang);
     let holiday = holidays::next_holiday(today, lang);
     ui_bridge::set_next_holiday(&popup, holiday.as_ref());
+    ui_bridge::set_detail(&popup, s.detail.as_ref());
 }
 
 /// The local BS date, or `MIN` if the system clock is outside 1901..=2199.
@@ -403,6 +407,7 @@ fn set_month(
     month: Month,
 ) {
     state.borrow_mut().viewed_month = (year, month);
+    state.borrow_mut().detail = None;
     update_popup(state, popup_weak);
 }
 
@@ -420,7 +425,32 @@ fn change_month(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>, d
 fn wire_popup(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>) {
     popup.on_hidden({
         let state = state.clone();
-        move || state.borrow_mut().popup_hidden_at = Some(std::time::Instant::now())
+        move || {
+            let mut state = state.borrow_mut();
+            state.popup_hidden_at = Some(std::time::Instant::now());
+            state.detail = None;
+        }
+    });
+
+    // W2-03: a day opens the inline detail; Escape or the scrim clears it. The copy buttons use
+    // the same clipboard path as the tray.
+    popup.on_day_clicked({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move |index| open_detail(&state, &popup_weak, index)
+    });
+    popup.on_detail_closed({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move || clear_detail(&state, &popup_weak)
+    });
+    popup.on_copy_detail_bs({
+        let state = state.clone();
+        move || copy_detail(&state, true)
+    });
+    popup.on_copy_detail_ad({
+        let state = state.clone();
+        move || copy_detail(&state, false)
     });
 
     popup.on_prev_month({
@@ -479,6 +509,41 @@ fn wire_popup(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, popup_weak: &W
             change_month(&state, &popup_weak, if delta > 0 { 1 } else { -1 });
         }
     });
+}
+
+/// Opens the detail for a grid cell, if it is a real day (W2-03).
+fn open_detail(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>, index: i32) {
+    let (year, month, lang) = {
+        let state = state.borrow();
+        (
+            state.viewed_month.0,
+            state.viewed_month.1,
+            state.settings.lang(),
+        )
+    };
+    let Some(date) = month_view::date_at(year, month, index) else {
+        return;
+    };
+    state.borrow_mut().detail = Some(month_view::day_detail(date, lang));
+    update_popup(state, popup_weak);
+}
+
+/// Clears the detail without changing the month (WR-04 AC3).
+fn clear_detail(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>) {
+    state.borrow_mut().detail = None;
+    if let Some(popup) = popup_weak.upgrade() {
+        ui_bridge::set_detail(&popup, None);
+    }
+}
+
+/// Copies the detail's BS or AD date (WR-04 AC2).
+fn copy_detail(state: &Rc<RefCell<AppState>>, bs: bool) {
+    let state = state.borrow();
+    let Some(detail) = state.detail.as_ref() else {
+        return;
+    };
+    let text = if bs { &detail.copy_bs } else { &detail.copy_ad };
+    let _ = platform::clipboard::set_text(text);
 }
 
 /// Refreshes the tray title (macOS), day icon (Windows/Linux) and tooltip.

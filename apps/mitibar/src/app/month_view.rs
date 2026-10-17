@@ -1,7 +1,7 @@
 //! Month grid model: the title and the cells the grid renders (WR-03). Pure Rust, no Slint and no
 //! OS calls (ADR-0015); patro data comes only through `nepdate_patro::info` (W2-01, W2-04).
 
-use nepdate::{Lang, Month, NepaliDate, Weekday};
+use nepdate::{DateOrder, Lang, LongDate, Month, NepaliDate, Separator, Weekday};
 use nepdate_patro as patro;
 
 /// English AD month abbreviations. The AD side of a title stays Latin in both languages
@@ -181,6 +181,63 @@ pub fn step_month(year: u16, month: Month, delta: i32) -> Option<(u16, Month)> {
             }
         }
         std::cmp::Ordering::Equal => None,
+    }
+}
+
+/// Maps a grid index back to its date, or `None` for a padding cell (W2-03). The index is the
+/// `cells` position the repeater hands to `day-clicked`.
+#[must_use]
+pub fn date_at(year: u16, month: Month, index: i32) -> Option<NepaliDate> {
+    let first = NepaliDate::new(year, month.number(), 1).ok()?;
+    let lead = i32::from(first.weekday().index_from_sunday());
+    let day = index.checked_sub(lead)?.checked_add(1)?;
+    if day < 1 || day > i32::from(first.month_length()) {
+        return None;
+    }
+    let day = u8::try_from(day).ok()?;
+    NepaliDate::new(year, month.number(), day).ok()
+}
+
+/// The day detail (WR-04): the long BS and AD dates, weekday, tithi, holiday flag and events,
+/// plus the two clipboard strings (WR-04 AC2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DayDetail {
+    pub bs_long: String,
+    pub ad_long: String,
+    pub weekday: String,
+    pub tithi: Option<&'static str>,
+    pub is_holiday: bool,
+    pub events: Vec<&'static str>,
+    pub copy_bs: String,
+    pub copy_ad: String,
+}
+
+/// Builds the day detail for `date`. Outside the patro coverage the tithi and events are empty
+/// and the holiday flag is false (WR-03 AC4), and nothing panics.
+#[must_use]
+pub fn day_detail(date: NepaliDate, lang: Lang) -> DayDetail {
+    let info = patro::info(date);
+    let ad: jiff::civil::Date = date.into();
+    DayDetail {
+        bs_long: date
+            .long(
+                LongDate {
+                    weekday: false,
+                    year: true,
+                    pad: false,
+                },
+                lang,
+            )
+            .to_string(),
+        ad_long: ad.strftime("%B %-d, %Y").to_string(),
+        weekday: date.weekday().name(lang).to_owned(),
+        tithi: info.tithi().map(|t| t.name(lang)),
+        is_holiday: info.is_public_holiday(),
+        events: info.events().map(|e| e.name(lang)).collect(),
+        copy_bs: date
+            .short(DateOrder::Ymd, Separator::Slash, true, lang)
+            .to_string(),
+        copy_ad: date.to_gregorian().to_string(),
     }
 }
 
@@ -370,5 +427,66 @@ mod tests {
             Some((2082, Month::Baishakh))
         );
         assert_eq!(step_month(2081, Month::Ashoj, 0), None);
+    }
+
+    #[test]
+    fn date_at_maps_the_grid_index() {
+        let first = date(2083, 6, 1);
+        let lead = i32::from(first.weekday().index_from_sunday());
+        let last = date(2083, 6, first.month_length());
+        assert_eq!(date_at(2083, Month::Ashoj, lead), Some(first));
+        assert_eq!(date_at(2083, Month::Ashoj, lead - 1), None);
+        assert_eq!(
+            date_at(
+                2083,
+                Month::Ashoj,
+                lead + i32::from(first.month_length()) - 1
+            ),
+            Some(last)
+        );
+        assert_eq!(
+            date_at(2083, Month::Ashoj, lead + i32::from(first.month_length())),
+            None
+        );
+    }
+
+    #[test]
+    fn wr04_ac1_day_detail_en() {
+        let detail = day_detail(date(2081, 1, 1), Lang::En);
+        assert_eq!(detail.bs_long, "Baishakh 1, 2081");
+        assert_eq!(detail.ad_long, "April 13, 2024");
+        assert_eq!(detail.weekday, "Saturday");
+        assert_eq!(detail.tithi, Some("Panchami"));
+        assert!(detail.is_holiday);
+        assert_eq!(
+            detail.events,
+            ["New Year", "Mesh Sankranti", "Bisket Jatra"]
+        );
+    }
+
+    #[test]
+    fn wr04_ac1_day_detail_ne() {
+        let detail = day_detail(date(2081, 1, 1), Lang::Ne);
+        assert_eq!(detail.bs_long, "बैशाख १, २०८१");
+        assert_eq!(detail.weekday, "शनिवार");
+        assert_eq!(detail.tithi, Some("पञ्चमी"));
+        assert_eq!(detail.events.first(), Some(&"नयाँ वर्ष"));
+        // The AD long date stays Latin (the design keeps AD dates in Latin).
+        assert_eq!(detail.ad_long, "April 13, 2024");
+    }
+
+    #[test]
+    fn wr04_ac2_copy_formats() {
+        let detail = day_detail(date(2081, 1, 1), Lang::En);
+        assert_eq!(detail.copy_bs, "2081/01/01");
+        assert_eq!(detail.copy_ad, "2024-04-13");
+    }
+
+    #[test]
+    fn wr04_ac1_day_detail_outside_coverage() {
+        let detail = day_detail(date(2090, 1, 1), Lang::En);
+        assert_eq!(detail.tithi, None);
+        assert!(!detail.is_holiday);
+        assert!(detail.events.is_empty());
     }
 }

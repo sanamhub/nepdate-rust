@@ -1,0 +1,84 @@
+// The day detail (WR-04): an inline card inside the popup, never a new OS window. `app::DayDetail`
+// provides the text; `ui_bridge::set_detail` fills it. The scrim and the close-on-outside-click
+// live in `popup.slint`.
+
+import { Theme } from "theme.slint";
+import { Button } from "std-widgets.slint";
+
+export struct DayDetailData {
+    bs-long: string,
+    ad-long: string,
+    weekday: string,
+    tithi: string,
+    is-holiday: bool,
+    events: [string],
+    copy-bs: string,
+    copy-ad: string,
+}
+
+export component DayDetail inherits Rectangle {
+    in property <DayDetailData> data;
+    callback copy-bs();
+    callback copy-ad();
+
+    width: 280px;
+    height: 320px;
+    background: Theme.surface-raised;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: Theme.hairline;
+
+    // Swallow clicks on the card so they do not reach the scrim behind it.
+    TouchArea {}
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 6px;
+        alignment: start;
+
+        Text { text: data.bs-long; color: Theme.ink; font-size: 16px; }
+        Text { text: data.weekday; color: Theme.ink-muted; font-size: 12px; }
+        Text { text: data.ad-long; color: Theme.ink-muted; font-size: 12px; }
+
+        Rectangle { height: 1px; background: Theme.hairline; }
+
+        HorizontalLayout {
+            visible: data.tithi != "";
+            spacing: 8px;
+            Text { text: @tr("Tithi"); color: Theme.ink-muted; font-size: 12px; width: 48px; }
+            Text { text: data.tithi; color: Theme.ink; font-size: 12px; }
+        }
+        Text {
+            text: @tr("Public holiday");
+            color: Theme.sindoor;
+            font-size: 12px;
+            visible: data.is-holiday;
+        }
+
+        Text {
+            text: @tr("Events");
+            color: Theme.ink-muted;
+            font-size: 12px;
+            visible: data.events.length > 0;
+        }
+        Flickable {
+            height: data.events.length > 0 ? 120px : 0px;
+            content-width: self.width;
+            VerticalLayout {
+                spacing: 2px;
+                for event in data.events: Text {
+                    text: event;
+                    color: Theme.ink;
+                    font-size: 12px;
+                    wrap: word-wrap;
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            Button { text: @tr("Copy BS"); clicked => { root.copy-bs(); } }
+            Button { text: @tr("Copy AD"); clicked => { root.copy-ad(); } }
+        }
+    }
+}

@@ -56,3 +56,18 @@ msgstr "अर्को बिदा: भोलि {0}"
 
 msgid "Next holiday: {0} in {1} days"
 msgstr "अर्को बिदा: {1} दिनमा {0}"
+
+msgid "Tithi"
+msgstr "तिथि"
+
+msgid "Events"
+msgstr "कार्यक्रम"
+
+msgid "Public holiday"
+msgstr "सार्वजनिक बिदा"
+
+msgid "Copy BS"
+msgstr "वि.सं. प्रतिलिपि"
+
+msgid "Copy AD"
+msgstr "ई.सं. प्रतिलिपि"

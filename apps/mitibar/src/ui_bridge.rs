@@ -7,9 +7,9 @@ use slint::ComponentHandle;
 
 use crate::app::clock::Header;
 use crate::app::holidays::NextHoliday;
-use crate::app::month_view::{Cell, MonthView};
+use crate::app::month_view::{Cell, DayDetail, MonthView};
 use crate::platform::taskbar::MenuLabels;
-use crate::{AppInfo, CellData, MenuText, PopupClockLine, PopupWindow};
+use crate::{AppInfo, CellData, DayDetailData, MenuText, PopupClockLine, PopupWindow};
 
 /// Where to open the popup (W1-04).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -147,6 +147,28 @@ pub fn set_next_holiday(popup: &PopupWindow, holiday: Option<&NextHoliday>) {
     });
     popup.set_holiday_name(name.into());
     popup.set_holiday_days(days);
+}
+
+/// Fills the day detail overlay (W2-03, WR-04). `None` hides it and leaves the last text in
+/// place; the popup is only shown with a complete detail.
+pub fn set_detail(popup: &PopupWindow, detail: Option<&DayDetail>) {
+    let Some(detail) = detail else {
+        popup.set_detail_visible(false);
+        return;
+    };
+    let events: Vec<slint::SharedString> =
+        detail.events.iter().map(|event| (*event).into()).collect();
+    popup.set_detail(DayDetailData {
+        bs_long: detail.bs_long.as_str().into(),
+        ad_long: detail.ad_long.as_str().into(),
+        weekday: detail.weekday.as_str().into(),
+        tithi: detail.tithi.unwrap_or_default().into(),
+        is_holiday: detail.is_holiday,
+        events: slint::ModelRc::new(slint::VecModel::from(events)),
+        copy_bs: detail.copy_bs.as_str().into(),
+        copy_ad: detail.copy_ad.as_str().into(),
+    });
+    popup.set_detail_visible(true);
 }
 
 /// Maps the `theme` setting of WR-06 onto the `ThemeChoice` of `ui/theme.slint`.
@@ -329,7 +351,9 @@ mod tests {
         }
     }
 
-    /// A process can set one platform, so both tests share it.
+    /// A process can set one platform, so this single component test is the only test that
+    /// creates one. Slint's platform is also tied to the thread that set it, so splitting the
+    /// assertions over tests would fail under `cargo test` (one process, many threads).
     static PLATFORM: std::sync::Once = std::sync::Once::new();
 
     fn init_platform() {
@@ -339,27 +363,22 @@ mod tests {
     }
 
     #[test]
-    fn app_name_is_one_value_in_rust_and_slint() {
+    fn popup_bridge_maps_the_name_month_and_detail() {
         use crate::app::APP_NAME;
+        use crate::app::month_view::{day_detail, month_view};
+        use nepdate::{Lang, Month, NepaliDate};
+        use slint::Model;
 
         assert_eq!(APP_NAME, "MitiBar");
         init_platform();
         let popup = crate::PopupWindow::new().expect("popup component");
+
         set_app_name(&popup);
         assert_eq!(
             popup.global::<crate::AppInfo>().get_app_name().as_str(),
             APP_NAME
         );
-    }
 
-    #[test]
-    fn month_bridge_maps_the_grid() {
-        use crate::app::month_view::month_view;
-        use nepdate::{Lang, Month, NepaliDate};
-        use slint::Model;
-
-        init_platform();
-        let popup = crate::PopupWindow::new().expect("popup component");
         let today = NepaliDate::new(2083, 6, 1).expect("date");
         let view = month_view(2083, Month::Ashoj, today, Lang::En);
         set_month(&popup, &view, Lang::En);
@@ -374,5 +393,13 @@ mod tests {
         assert_eq!(first.bs_day.as_str(), "1");
         assert_eq!(first.ad_month.as_str(), "");
         assert_eq!(popup.get_month_names().row_count(), 12);
+
+        let detail = day_detail(NepaliDate::new(2081, 1, 1).expect("date"), Lang::En);
+        set_detail(&popup, Some(&detail));
+        assert!(popup.get_detail_visible());
+        assert_eq!(popup.get_detail().bs_long.as_str(), "Baishakh 1, 2081");
+        assert_eq!(popup.get_detail().events.row_count(), 3);
+        set_detail(&popup, None);
+        assert!(!popup.get_detail_visible());
     }
 }
