@@ -1,7 +1,7 @@
 //! Compiles the `.slint` files into Rust before the crate compiles (learn/08 §2).
 //! A typo in the markup is a compile error here, with the file and line.
 //!
-//! Bundles the Nepali translations from `i18n/ne/LC_MESSAGES/nepdate-widget.po` (ADR-0008 A.3).
+//! Bundles the Nepali translations from `i18n/ne/LC_MESSAGES/mitibar.po` (ADR-0008 A.3).
 //! The default translation context is disabled so `@tr("...")` uses the plain `msgid`, matching
 //! the `.po` file written by hand.
 //!

@@ -1,4 +1,4 @@
-//! Logging to `dirs::data_local_dir()/nepdate-widget/nepdate-widget.log`, size-rotated at 1 MB
+//! Logging to `dirs::data_local_dir()/mitibar/mitibar.log`, size-rotated at 1 MB
 //! keeping 2 files (WR-09 AC4), plus the panic hook that logs message and location (WR-09 AC5).
 
 use std::path::Path;
@@ -6,7 +6,7 @@ use std::path::Path;
 use anyhow::Context;
 use simplelog::{Config, LevelFilter, WriteLogger};
 
-const LOG_FILE: &str = "nepdate-widget.log";
+const LOG_FILE: &str = "mitibar.log";
 const MAX_BYTES: u64 = 1_000_000;
 
 /// Installs the panic hook and the file logger. Called once at startup; best-effort, so a
@@ -17,7 +17,7 @@ pub fn init() -> anyhow::Result<()> {
 
     let dir = dirs::data_local_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("nepdate-widget");
+        .join("mitibar");
     std::fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
     rotate_if_needed(&dir);
 
@@ -28,7 +28,7 @@ pub fn init() -> anyhow::Result<()> {
         .open(&path)
         .with_context(|| format!("open {}", path.display()))?;
     WriteLogger::init(LevelFilter::Info, Config::default(), file).context("init logger")?;
-    log::info!("nepdate-widget logging to {}", path.display());
+    log::info!("mitibar logging to {}", path.display());
     Ok(())
 }
 

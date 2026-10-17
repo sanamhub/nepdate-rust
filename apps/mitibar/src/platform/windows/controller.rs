@@ -48,9 +48,9 @@ use super::theme;
 use super::uia::{self, UiaState};
 
 /// The controller window class (ADR-0016 point 1).
-const CONTROLLER_CLASS: PCWSTR = w!("nepdate-taskbar-controller");
+const CONTROLLER_CLASS: PCWSTR = w!("mitibar-taskbar-controller");
 /// The text window class.
-const TEXT_CLASS: PCWSTR = w!("nepdate-taskbar-text");
+const TEXT_CLASS: PCWSTR = w!("mitibar-taskbar-text");
 
 /// Controller messages (uia.rs keeps the same numbers).
 const WM_APP_RECTS: u32 = WM_APP + 1;
