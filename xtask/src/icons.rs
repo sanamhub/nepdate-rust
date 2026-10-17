@@ -1,6 +1,6 @@
 //! `cargo xtask icons [--check]` (W1-03): pre-renders the tray day-number icons, 1 to 32, for each
 //! digit set (en, ne) and each taskbar scheme (light, dark), as 32x32 PNGs under
-//! `apps/nepdate-widget/ui/tray/<lang>/<scheme>/`, and writes `ui/tray-icons.slint`, the image
+//! `apps/mitibar/ui/tray/<lang>/<scheme>/`, and writes `ui/tray-icons.slint`, the image
 //! arrays the tray indexes. One SVG template is rasterised per icon with the bundled Noto fonts
 //! through `resvg`; the shipped binary does no rasterising. `--check` renders everything in memory
 //! and fails if any committed file differs, so the icons and the arrays can't drift from this code.
@@ -9,10 +9,10 @@ use anyhow::{Context, Result, bail};
 
 const SIZE: u32 = 32;
 const DAYS: u32 = 32;
-const FONT_EN: &str = "apps/nepdate-widget/ui/fonts/NotoSans-Variable.ttf";
-const FONT_NE: &str = "apps/nepdate-widget/ui/fonts/NotoSansDevanagari-Variable.ttf";
-const OUT_DIR: &str = "apps/nepdate-widget/ui/tray";
-const SLINT_OUT: &str = "apps/nepdate-widget/ui/tray-icons.slint";
+const FONT_EN: &str = "apps/mitibar/ui/fonts/NotoSans-Variable.ttf";
+const FONT_NE: &str = "apps/mitibar/ui/fonts/NotoSansDevanagari-Variable.ttf";
+const OUT_DIR: &str = "apps/mitibar/ui/tray";
+const SLINT_OUT: &str = "apps/mitibar/ui/tray-icons.slint";
 
 /// Ink per taskbar scheme: the `ink` token of docs/plan/widget-design.md for that scheme, so the
 /// digits contrast with a light or a dark taskbar the way the popup text contrasts with its

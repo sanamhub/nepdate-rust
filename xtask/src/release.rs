@@ -1,6 +1,6 @@
 //! `cargo xtask release-check <package> <version>` and `cargo xtask changelog <package> <version>`
 //! (L6-04, ADR-0012). `<package>` is `nepdate` (both library crates, released together) or
-//! `nepdate-widget`. The checks work on file contents, so the tests use small strings.
+//! `mitibar` (ADR-0017). The checks work on file contents, so the tests use small strings.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -42,12 +42,8 @@ fn packages(package: &str) -> Result<Vec<Package>> {
             Package::read(&root, "nepdate", "crates/nepdate")?,
             Package::read(&root, "nepdate-patro", "crates/nepdate-patro")?,
         ]),
-        "nepdate-widget" => Ok(vec![Package::read(
-            &root,
-            "nepdate-widget",
-            "apps/nepdate-widget",
-        )?]),
-        other => bail!("unknown package `{other}`: expected nepdate or nepdate-widget"),
+        "mitibar" => Ok(vec![Package::read(&root, "mitibar", "apps/mitibar")?]),
+        other => bail!("unknown package `{other}`: expected nepdate or mitibar"),
     }
 }
 
@@ -137,20 +133,15 @@ fn notes(package: &str, packages: &[Package], version: &str) -> Result<String> {
         }
         out.push('\n');
     }
-    // ADR-0012 tag names: nepdate-vX.Y.Z and widget-vX.Y.Z.
-    let tag_prefix = if package == "nepdate-widget" {
-        "widget"
-    } else {
-        package
-    };
-    let tag = format!("{tag_prefix}-v{version}");
-    if package == "nepdate-widget" {
+    // ADR-0012 tag names: `nepdate-vX.Y.Z` and `mitibar-vX.Y.Z` (ADR-0017 §2).
+    let tag = format!("{package}-v{version}");
+    if package == "mitibar" {
         let _ = write!(
             out,
             "### Install\n\nDownload the installer for your system from the assets below.\n\n\
              ### Verification\n\nCheck the download against `SHA256SUMS`, or its build \
              provenance with `gh attestation verify <file> --repo sanamhub/nepdate-rust`.\n\n\
-             Full changelog: {REPO}/blob/{tag}/apps/nepdate-widget/CHANGELOG.md\n"
+             Full changelog: {REPO}/blob/{tag}/apps/mitibar/CHANGELOG.md\n"
         );
     } else {
         let mut install = String::new();
@@ -401,5 +392,18 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn widget_notes_use_the_mitibar_tag() {
+        let packages = [Package {
+            name: "mitibar",
+            manifest: manifest("0.1.0", None),
+            changelog: CHANGELOG.into(),
+        }];
+        let text = notes("mitibar", &packages, "0.1.0").unwrap_or_default();
+        assert!(text.contains("/blob/mitibar-v0.1.0/apps/mitibar/CHANGELOG.md"));
+        assert!(text.contains("### Install"));
+        assert!(!text.contains("widget-v"));
     }
 }

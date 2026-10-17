@@ -26,7 +26,7 @@ fn main() {
 
         // `Windows10` covers 10 and 11 (embed-manifest models them as one entry). The defaults
         // already select per-monitor-v2 DPI and the UTF-8 code page (ADR-0016).
-        let manifest = new_manifest("nepdate-widget").supported_os(Windows8..=Windows10);
+        let manifest = new_manifest("mitibar").supported_os(Windows8..=Windows10);
         embed_manifest(manifest).expect("embed manifest");
     }
     println!("cargo:rerun-if-changed=build.rs");

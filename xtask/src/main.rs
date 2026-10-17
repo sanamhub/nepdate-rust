@@ -131,7 +131,7 @@ const STEPS: &[Step] = &[
     // W1B-00: the snapshot feature stays off by default; this build keeps its code compiling.
     step(
         "cargo",
-        &["build", "-p", "nepdate-widget", "--features", "snapshot"],
+        &["build", "-p", "mitibar", "--features", "snapshot"],
     ),
     Step {
         program: "cargo",

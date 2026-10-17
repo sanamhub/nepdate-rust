@@ -81,7 +81,7 @@ mod tests {
     /// (ADR-0008 A.3), so this test fails the build of a half-filled `.po` file.
     #[test]
     fn po_file_has_no_empty_translations() {
-        let po = include_str!("../../i18n/ne/LC_MESSAGES/nepdate-widget.po");
+        let po = include_str!("../../i18n/ne/LC_MESSAGES/mitibar.po");
         let mut header_seen = false;
         for entry in po.split("\n\n") {
             let Some(msgstr) = entry.lines().find(|l| l.starts_with("msgstr ")) else {

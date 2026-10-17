@@ -2903,6 +2903,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "mitibar"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "arboard",
+ "dirs",
+ "embed-manifest",
+ "image",
+ "jiff",
+ "log",
+ "nepdate",
+ "simplelog",
+ "slint",
+ "slint-build",
+ "windows",
+ "windows-core",
+ "windows-numerics",
+ "windows-registry",
+]
+
+[[package]]
 name = "moxcms"
 version = "0.7.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3058,27 +3079,6 @@ dependencies = [
  "chrono",
  "jiff",
  "nepdate",
-]
-
-[[package]]
-name = "nepdate-widget"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "arboard",
- "dirs",
- "embed-manifest",
- "image",
- "jiff",
- "log",
- "nepdate",
- "simplelog",
- "slint",
- "slint-build",
- "windows",
- "windows-core",
- "windows-numerics",
- "windows-registry",
 ]
 
 [[package]]
