@@ -27,9 +27,9 @@ use std::rc::Rc;
 use nepdate::{DateOrder, Lang, LongDate, NepaliDate, Separator};
 use slint::{ComponentHandle, Weak};
 
-use crate::app::clock;
 use crate::app::settings::Settings;
 use crate::app::taskbar::taskbar_lines;
+use crate::app::{APP_NAME, clock};
 use crate::platform::taskbar::{MenuItem, TaskbarEvent, TaskbarText};
 use crate::platform::tray::{SlintTray, Tray, TrayEvent};
 
@@ -213,6 +213,8 @@ fn main() -> anyhow::Result<()> {
         state.borrow_mut().settings.taskbar_text = false;
     }
     let popup = PopupWindow::new()?;
+    // The popup title (Alt+Tab) and every later window title share this one value (ADR-0017).
+    ui_bridge::set_app_name(&popup);
     theme::apply(
         &popup,
         cli.theme
@@ -396,7 +398,7 @@ fn update_tray(state: &Rc<RefCell<AppState>>, tray: &Rc<SlintTray>) {
         tray.set_dark_taskbar(dark);
     }
     tray.set_tooltip(&format!(
-        "{} · {}",
+        "{APP_NAME}\n{} · {}",
         bs.long(
             LongDate {
                 weekday: false,
