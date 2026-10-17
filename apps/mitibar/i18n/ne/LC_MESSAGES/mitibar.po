@@ -23,3 +23,36 @@ msgstr "बन्द गर्नुहोस्"
 
 msgid "Local"
 msgstr "स्थानीय"
+
+msgid "Previous month"
+msgstr "अघिल्लो महिना"
+
+msgid "Next month"
+msgstr "अर्को महिना"
+
+msgid "Month"
+msgstr "महिना"
+
+msgid "Year"
+msgstr "वर्ष"
+
+msgid "Today"
+msgstr "आज"
+
+msgid "Public holiday today"
+msgstr "आज सार्वजनिक बिदा"
+
+msgid "Public holiday tomorrow"
+msgstr "भोलि सार्वजनिक बिदा"
+
+msgid "Public holiday in {0} days"
+msgstr "{0} दिनमा सार्वजनिक बिदा"
+
+msgid "Next holiday: {0} today"
+msgstr "अर्को बिदा: आज {0}"
+
+msgid "Next holiday: {0} tomorrow"
+msgstr "अर्को बिदा: भोलि {0}"
+
+msgid "Next holiday: {0} in {1} days"
+msgstr "अर्को बिदा: {1} दिनमा {0}"

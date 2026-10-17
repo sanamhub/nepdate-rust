@@ -2,11 +2,14 @@
 //! converts between the two. W1 adds the popup placement (W1-04); W1B wires `PopupAnchor::Above`
 //! for the taskbar text (W1B-03).
 
+use nepdate::{Lang, Month, NepaliDate, Weekday};
 use slint::ComponentHandle;
 
 use crate::app::clock::Header;
+use crate::app::holidays::NextHoliday;
+use crate::app::month_view::{Cell, MonthView};
 use crate::platform::taskbar::MenuLabels;
-use crate::{AppInfo, MenuText, PopupClockLine, PopupWindow};
+use crate::{AppInfo, CellData, MenuText, PopupClockLine, PopupWindow};
 
 /// Where to open the popup (W1-04).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,6 +69,84 @@ pub fn set_app_name(popup: &PopupWindow) {
     popup
         .global::<AppInfo>()
         .set_app_name(crate::app::APP_NAME.into());
+}
+
+/// Fills the grid from `app::MonthView` (W2-02, WR-03). The language is passed separately because
+/// the view keeps names, not the language.
+pub fn set_month(popup: &PopupWindow, view: &MonthView, lang: Lang) {
+    let cells: Vec<CellData> = view
+        .cells
+        .iter()
+        .map(|cell| cell_data(cell, lang))
+        .collect();
+    popup.set_cells(slint::ModelRc::new(slint::VecModel::from(cells)));
+    let headers: Vec<slint::SharedString> = view
+        .weekday_headers
+        .iter()
+        .map(|header| (*header).into())
+        .collect();
+    popup.set_weekday_headers(slint::ModelRc::new(slint::VecModel::from(headers)));
+    let months: Vec<slint::SharedString> = Month::ALL
+        .iter()
+        .map(|month| month.name(lang).into())
+        .collect();
+    popup.set_month_names(slint::ModelRc::new(slint::VecModel::from(months)));
+    popup.set_month_index(i32::from(view.month.number()) - 1);
+    popup.set_year(i32::from(view.year));
+    popup.set_month_title(view.title.as_str().into());
+    popup.set_can_prev(view.can_prev);
+    popup.set_can_next(view.can_next);
+}
+
+/// One `Cell` to one `CellData` (WR-03 AC3). The model's single `is_holiday_tint` covers
+/// Saturday and public holidays; this split keeps the two design colours apart.
+fn cell_data(cell: &Cell, lang: Lang) -> CellData {
+    let is_saturday = cell
+        .date
+        .is_some_and(|date| date.weekday() == Weekday::Saturday);
+    CellData {
+        bs_day: cell.bs_day.as_str().into(),
+        ad_day: cell.ad_day.as_str().into(),
+        ad_month: cell.ad_month_marker.unwrap_or_default().into(),
+        is_today: cell.is_today,
+        is_holiday: cell.is_holiday_tint && !is_saturday,
+        is_saturday,
+        tithi: cell.tithi.unwrap_or_default().into(),
+        has_events: cell.has_events,
+        is_padding: cell.date.is_none(),
+        accessible_label: cell
+            .date
+            .map_or_else(String::new, |date| cell_label(date, lang))
+            .into(),
+    }
+}
+
+/// The accessible name of a day cell: ISO BS and AD dates, the weekday and the tithi, all data.
+/// The holiday suffix is a `@tr` string added in the markup.
+fn cell_label(date: NepaliDate, lang: Lang) -> String {
+    let mut label = format!(
+        "{} {} {}",
+        date,
+        date.to_gregorian(),
+        date.weekday().name(lang)
+    );
+    if let Some(tithi) = nepdate_patro::info(date).tithi() {
+        label.push(' ');
+        label.push_str(tithi.name(lang));
+    }
+    label
+}
+
+/// Fills the WR-03 AC8 line. `None` hides it; the sentence itself is built in `.slint`.
+pub fn set_next_holiday(popup: &PopupWindow, holiday: Option<&NextHoliday>) {
+    let (name, days) = holiday.map_or(("", -1), |holiday| {
+        (
+            holiday.name.unwrap_or_default(),
+            i32::try_from(holiday.days_away).unwrap_or(-1),
+        )
+    });
+    popup.set_holiday_name(name.into());
+    popup.set_holiday_days(days);
 }
 
 /// Maps the `theme` setting of WR-06 onto the `ThemeChoice` of `ui/theme.slint`.
@@ -232,8 +313,8 @@ mod tests {
         assert_eq!(above_position(anchor, (360, 440), area), (1560, 60));
     }
 
-    /// A platform that builds a component without a display, for the one test that reads a Slint
-    /// global back. The software renderer is a default feature (ADR-0010).
+    /// A platform that builds a component without a display, for the tests that read a Slint
+    /// model or global back. The software renderer is a default feature (ADR-0010).
     struct TestPlatform;
 
     impl slint::platform::Platform for TestPlatform {
@@ -248,18 +329,50 @@ mod tests {
         }
     }
 
+    /// A process can set one platform, so both tests share it.
+    static PLATFORM: std::sync::Once = std::sync::Once::new();
+
+    fn init_platform() {
+        PLATFORM.call_once(|| {
+            let _ = slint::platform::set_platform(Box::new(TestPlatform));
+        });
+    }
+
     #[test]
     fn app_name_is_one_value_in_rust_and_slint() {
         use crate::app::APP_NAME;
 
         assert_eq!(APP_NAME, "MitiBar");
-        // A process can set one platform, and no other test creates a component.
-        let _ = slint::platform::set_platform(Box::new(TestPlatform));
+        init_platform();
         let popup = crate::PopupWindow::new().expect("popup component");
         set_app_name(&popup);
         assert_eq!(
             popup.global::<crate::AppInfo>().get_app_name().as_str(),
             APP_NAME
         );
+    }
+
+    #[test]
+    fn month_bridge_maps_the_grid() {
+        use crate::app::month_view::month_view;
+        use nepdate::{Lang, Month, NepaliDate};
+        use slint::Model;
+
+        init_platform();
+        let popup = crate::PopupWindow::new().expect("popup component");
+        let today = NepaliDate::new(2083, 6, 1).expect("date");
+        let view = month_view(2083, Month::Ashoj, today, Lang::En);
+        set_month(&popup, &view, Lang::En);
+        assert_eq!(
+            popup.get_month_title().as_str(),
+            "Ashoj 2083 · Sep/Oct 2026"
+        );
+        assert_eq!(popup.get_month_index(), 5);
+        assert_eq!(popup.get_year(), 2083);
+        assert_eq!(popup.get_cells().row_count(), view.cells.len());
+        let first = popup.get_cells().row_data(4).expect("Ashoj 1");
+        assert_eq!(first.bs_day.as_str(), "1");
+        assert_eq!(first.ad_month.as_str(), "");
+        assert_eq!(popup.get_month_names().row_count(), 12);
     }
 }

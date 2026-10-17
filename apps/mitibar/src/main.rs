@@ -24,22 +24,24 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use nepdate::{DateOrder, Lang, LongDate, NepaliDate, Separator};
+use nepdate::{DateOrder, Lang, LongDate, Month, NepaliDate, Separator};
 use slint::{ComponentHandle, Weak};
 
 use crate::app::settings::Settings;
 use crate::app::taskbar::taskbar_lines;
-use crate::app::{APP_NAME, clock};
+use crate::app::{APP_NAME, clock, holidays, month_view};
 use crate::platform::taskbar::{MenuItem, TaskbarEvent, TaskbarText};
 use crate::platform::tray::{SlintTray, Tray, TrayEvent};
 
 slint::include_modules!();
 
-/// The shared state (ADR-0015): settings now, the viewed month and selection from W2 on.
+/// The shared state (ADR-0015): settings, the viewed month and the popup's last hide.
 struct AppState {
     settings: Settings,
     /// When focus loss last hid the popup; see `handle_tray_event`.
     popup_hidden_at: Option<std::time::Instant>,
+    /// The month the grid shows (WR-03 AC6); W2-06 resets it when the date changed while hidden.
+    viewed_month: (u16, Month),
 }
 
 /// A tray click within this long after focus loss hid the popup was the click that took the focus
@@ -204,9 +206,11 @@ fn main() -> anyhow::Result<()> {
             .select()?;
     }
 
+    let today = today_local();
     let state = Rc::new(RefCell::new(AppState {
         settings,
         popup_hidden_at: None,
+        viewed_month: (today.year(), today.month()),
     }));
     // The `--no-taskbar-text` flag turns WR-12 off for this run (W3 builds the settings UI).
     if cli.no_taskbar_text {
@@ -240,10 +244,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     let popup_weak = popup.as_weak();
-    popup.on_hidden_by_focus_loss({
-        let state = state.clone();
-        move || state.borrow_mut().popup_hidden_at = Some(std::time::Instant::now())
-    });
+    wire_popup(&popup, &state, &popup_weak);
 
     // Tray (W1-03): WR-01 events delivered back here.
     let tray = Rc::new(SlintTray::new(lang, {
@@ -365,17 +366,119 @@ fn copy_ad() {
     }
 }
 
-/// Refreshes the popup header and clock lines from the local date and time.
+/// Refreshes the popup header, clocks and month grid from the local date and viewed month.
 fn update_popup(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>) {
     let Some(popup) = popup_weak.upgrade() else {
         return;
     };
     let s = state.borrow();
     let now = jiff::Zoned::now();
-    let header = clock::header(&now, s.settings.lang());
+    let lang = s.settings.lang();
+    let header = clock::header(&now, lang);
     let lines = clock::clock_lines(&now, &s.settings);
     ui_bridge::set_header(&popup, &header);
     ui_bridge::set_clocks(&popup, &lines);
+
+    let today = NepaliDate::try_from(now.date()).unwrap_or(NepaliDate::MIN);
+    let (year, month) = s.viewed_month;
+    let started = std::time::Instant::now();
+    let view = month_view::month_view(year, month, today, lang);
+    log::debug!("month view {} built in {:?}", view.title, started.elapsed());
+    ui_bridge::set_month(&popup, &view, lang);
+    let holiday = holidays::next_holiday(today, lang);
+    ui_bridge::set_next_holiday(&popup, holiday.as_ref());
+}
+
+/// The local BS date, or `MIN` if the system clock is outside 1901..=2199.
+fn today_local() -> NepaliDate {
+    let now = jiff::Zoned::now();
+    NepaliDate::try_from(now.date()).unwrap_or(NepaliDate::MIN)
+}
+
+/// Sets the viewed month and repaints the popup.
+fn set_month(
+    state: &Rc<RefCell<AppState>>,
+    popup_weak: &Weak<PopupWindow>,
+    year: u16,
+    month: Month,
+) {
+    state.borrow_mut().viewed_month = (year, month);
+    update_popup(state, popup_weak);
+}
+
+/// Moves the viewed month by `delta`, stopping at the range edges (WR-03 AC6).
+fn change_month(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>, delta: i32) {
+    let (year, month) = state.borrow().viewed_month;
+    let Some((year, month)) = month_view::step_month(year, month, delta) else {
+        return;
+    };
+    set_month(state, popup_weak, year, month);
+}
+
+/// Wires the popup's hide notification (WR-02 AC2) and month navigation (W2-02). Kept out of
+/// `main` so the composition root stays readable.
+fn wire_popup(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>) {
+    popup.on_hidden({
+        let state = state.clone();
+        move || state.borrow_mut().popup_hidden_at = Some(std::time::Instant::now())
+    });
+
+    popup.on_prev_month({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move || change_month(&state, &popup_weak, -1)
+    });
+    popup.on_next_month({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move || change_month(&state, &popup_weak, 1)
+    });
+    popup.on_today({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move || {
+            let today = today_local();
+            set_month(&state, &popup_weak, today.year(), today.month());
+        }
+    });
+    popup.on_month_picked({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move |index| {
+            let Some(month) = u8::try_from(index + 1)
+                .ok()
+                .and_then(|number| Month::try_from(number).ok())
+            else {
+                return;
+            };
+            let year = state.borrow().viewed_month.0;
+            set_month(&state, &popup_weak, year, month);
+        }
+    });
+    popup.on_year_picked({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move |year| {
+            let Ok(year) = u16::try_from(year) else {
+                return;
+            };
+            if !(1901..=2199).contains(&year) {
+                return;
+            }
+            let month = state.borrow().viewed_month.1;
+            set_month(&state, &popup_weak, year, month);
+        }
+    });
+    popup.on_wheel({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move |delta| {
+            if delta == 0 {
+                return;
+            }
+            change_month(&state, &popup_weak, if delta > 0 { 1 } else { -1 });
+        }
+    });
 }
 
 /// Refreshes the tray title (macOS), day icon (Windows/Linux) and tooltip.

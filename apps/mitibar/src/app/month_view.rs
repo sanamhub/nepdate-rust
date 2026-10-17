@@ -1,8 +1,5 @@
 //! Month grid model: the title and the cells the grid renders (WR-03). Pure Rust, no Slint and no
 //! OS calls (ADR-0015); patro data comes only through `nepdate_patro::info` (W2-01, W2-04).
-// W2-01 is pure and unit-tested; W2-02 and W2-03 wire these items into the UI. Remove this allow
-// once they are wired.
-#![allow(dead_code)]
 
 use nepdate::{Lang, Month, NepaliDate, Weekday};
 use nepdate_patro as patro;
@@ -156,6 +153,35 @@ fn ad_month_name(month: u8) -> &'static str {
         .get(usize::from(month).wrapping_sub(1))
         .copied()
         .unwrap_or("")
+}
+
+/// Steps one month forward (`delta > 0`) or back (`delta < 0`), stopping at 1901 Baishakh and
+/// 2199 Chaitra (WR-03 AC6). `None` means "no move", not an error.
+#[must_use]
+pub fn step_month(year: u16, month: Month, delta: i32) -> Option<(u16, Month)> {
+    match delta.cmp(&0) {
+        std::cmp::Ordering::Less => {
+            if year == 1901 && month == Month::Baishakh {
+                return None;
+            }
+            if month == Month::Baishakh {
+                Some((year - 1, Month::Chaitra))
+            } else {
+                Some((year, month.prev()))
+            }
+        }
+        std::cmp::Ordering::Greater => {
+            if year == 2199 && month == Month::Chaitra {
+                return None;
+            }
+            if month == Month::Chaitra {
+                Some((year + 1, Month::Baishakh))
+            } else {
+                Some((year, month.next()))
+            }
+        }
+        std::cmp::Ordering::Equal => None,
+    }
 }
 
 #[cfg(test)]
@@ -321,5 +347,28 @@ mod tests {
         let view = month_view(1900, Month::Baishakh, date(1901, 1, 1), Lang::En);
         assert!(view.cells.is_empty());
         assert!(!view.can_prev && !view.can_next);
+    }
+
+    #[test]
+    fn wr03_ac6_step_month_stops_at_the_edges() {
+        assert_eq!(step_month(1901, Month::Baishakh, -1), None);
+        assert_eq!(
+            step_month(1901, Month::Baishakh, 1),
+            Some((1901, Month::Jestha))
+        );
+        assert_eq!(step_month(2199, Month::Chaitra, 1), None);
+        assert_eq!(
+            step_month(2199, Month::Chaitra, -1),
+            Some((2199, Month::Falgun))
+        );
+        assert_eq!(
+            step_month(2081, Month::Baishakh, -1),
+            Some((2080, Month::Chaitra))
+        );
+        assert_eq!(
+            step_month(2081, Month::Chaitra, 1),
+            Some((2082, Month::Baishakh))
+        );
+        assert_eq!(step_month(2081, Month::Ashoj, 0), None);
     }
 }

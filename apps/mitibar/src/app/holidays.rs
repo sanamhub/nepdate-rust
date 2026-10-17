@@ -1,7 +1,5 @@
 //! Next-holiday search within the patro data (WR-03 AC8). Pure Rust, no Slint and no OS calls
 //! (ADR-0015); the sentence around the result is built in `.slint` with `@tr`.
-// W2-04 is pure and unit-tested; W2-02 wires it into the popup. Remove this allow once wired.
-#![allow(dead_code)]
 
 use nepdate::{Lang, NepaliDate};
 use nepdate_patro as patro;
