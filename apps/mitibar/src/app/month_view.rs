@@ -198,6 +198,21 @@ pub fn date_at(year: u16, month: Month, index: i32) -> Option<NepaliDate> {
     NepaliDate::new(year, month.number(), day).ok()
 }
 
+/// The month to show on reopen (WR-02 AC2): the last viewed month while the date is unchanged,
+/// today's month when the date moved on while the popup was hidden.
+#[must_use]
+pub fn month_on_show(
+    viewed: (u16, Month),
+    hidden_on: NepaliDate,
+    today: NepaliDate,
+) -> (u16, Month) {
+    if today == hidden_on {
+        viewed
+    } else {
+        (today.year(), today.month())
+    }
+}
+
 /// The day detail (WR-04): the long BS and AD dates, weekday, tithi, holiday flag and events,
 /// plus the two clipboard strings (WR-04 AC2).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -488,5 +503,16 @@ mod tests {
         assert_eq!(detail.tithi, None);
         assert!(!detail.is_holiday);
         assert!(detail.events.is_empty());
+    }
+
+    #[test]
+    fn wr02_ac2_reopen_keeps_or_resets_the_month() {
+        let viewed = (2080, Month::Chaitra);
+        let hidden_on = date(2081, 1, 5);
+        assert_eq!(month_on_show(viewed, hidden_on, hidden_on), viewed);
+        assert_eq!(
+            month_on_show(viewed, hidden_on, date(2081, 1, 6)),
+            (2081, Month::Baishakh)
+        );
     }
 }

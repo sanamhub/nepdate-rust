@@ -40,8 +40,11 @@ struct AppState {
     settings: Settings,
     /// When focus loss last hid the popup; see `handle_tray_event`.
     popup_hidden_at: Option<std::time::Instant>,
-    /// The month the grid shows (WR-03 AC6); W2-06 resets it when the date changed while hidden.
+    /// The month the grid shows (WR-03 AC6).
     viewed_month: (u16, Month),
+    /// The local BS date when the popup last hid; a different date on reopen resets the month
+    /// (WR-02 AC2, W2-06).
+    hidden_on: NepaliDate,
     /// The open day detail, if any (WR-04); cleared on hide and navigation.
     detail: Option<month_view::DayDetail>,
 }
@@ -213,6 +216,7 @@ fn main() -> anyhow::Result<()> {
         settings,
         popup_hidden_at: None,
         viewed_month: (today.year(), today.month()),
+        hidden_on: today,
         detail: None,
     }));
     // The `--no-taskbar-text` flag turns WR-12 off for this run (W3 builds the settings UI).
@@ -302,8 +306,10 @@ fn handle_tray_event(
                 .popup_hidden_at
                 .is_some_and(|at| at.elapsed() < REOPEN_GUARD);
             if popup.window().is_visible() {
+                record_hidden(state);
                 let _ = popup.hide();
             } else if !just_hidden {
+                prepare_show(state);
                 update_popup(state, popup_weak);
                 let _ = ui_bridge::show_popup_at(&popup, ui_bridge::PopupAnchor::TrayCorner);
             }
@@ -330,8 +336,10 @@ fn handle_taskbar_event(
                 return;
             };
             if popup.window().is_visible() {
+                record_hidden(state);
                 let _ = popup.hide();
             } else {
+                prepare_show(state);
                 update_popup(state, popup_weak);
                 let _ =
                     ui_bridge::show_popup_at(&popup, ui_bridge::PopupAnchor::Above(anchor.into()));
@@ -399,6 +407,25 @@ fn today_local() -> NepaliDate {
     NepaliDate::try_from(now.date()).unwrap_or(NepaliDate::MIN)
 }
 
+/// Records that the popup hid on today's BS date, so a reopen on a later date resets the month
+/// (WR-02 AC2, W2-06). Only the focus-loss path sets `popup_hidden_at`, which guards the reopen.
+fn record_hidden(state: &Rc<RefCell<AppState>>) {
+    let today = today_local();
+    let mut state = state.borrow_mut();
+    state.hidden_on = today;
+    state.detail = None;
+}
+
+/// Prepares the popup for a show: keep the viewed month while the date is unchanged, otherwise
+/// jump to today's month (WR-02 AC2, W2-06), and start with the detail closed.
+fn prepare_show(state: &Rc<RefCell<AppState>>) {
+    let today = today_local();
+    let mut state = state.borrow_mut();
+    state.viewed_month = month_view::month_on_show(state.viewed_month, state.hidden_on, today);
+    state.hidden_on = today;
+    state.detail = None;
+}
+
 /// Sets the viewed month and repaints the popup.
 fn set_month(
     state: &Rc<RefCell<AppState>>,
@@ -428,6 +455,7 @@ fn wire_popup(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, popup_weak: &W
         move || {
             let mut state = state.borrow_mut();
             state.popup_hidden_at = Some(std::time::Instant::now());
+            state.hidden_on = today_local();
             state.detail = None;
         }
     });
