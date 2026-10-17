@@ -68,11 +68,11 @@ NepDate on the benchmark's fixed dates.
 
 ## Names
 
-`nepdate`, `nepdate-patro` and `nepdate-widget` were all free on crates.io on 2026-10-08
-(the API returns "not found" for each). L0's human checklist checks again before publishing. But khumnath already uses "nepdate" for a
-GPL-3.0 Qt desktop widget (`github.com/khumnath/nepdate`) and the `nepdate-cli` crate, so a crate
-called `nepdate-widget` would read as that project. The widget is `publish = false` anyway; the
-human decides its product name before W4 (ADR-0012).
+`nepdate`, `nepdate-patro` and `mitibar` were all free on crates.io on 2026-10-17
+(the API returns "not found" for each; ADR-0017). L0's human checklist checks again before
+publishing. khumnath already uses "nepdate" for a GPL-3.0 Qt desktop widget
+(`github.com/khumnath/nepdate`) and the `nepdate-cli` crate, so the desktop app does not share
+that name: it is MitiBar (ADR-0017). The app is `publish = false` anyway.
 
 ## Sources
 

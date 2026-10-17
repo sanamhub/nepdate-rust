@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the `nepdate-widget` app. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+All notable changes to MitiBar. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
@@ -15,3 +15,7 @@ All notable changes to the `nepdate-widget` app. Format: [Keep a Changelog](http
 - `--popup --snapshot <png> --theme light|dark --lang en|ne` to render the popup for the W1 spike; `cargo xtask icons` pre-renders the tray day icons.
 - Taskbar text (W1B, Windows 11): two lines of date and time inside the taskbar, left of the Start button, in the free area, redrawn only on change; left click toggles the popup above the text, right click opens the WR-01 AC5 menu. Hidden with one log line on Windows 10, a non-bottom or left-aligned taskbar, or when it does not fit. `--no-taskbar-text` disables it.
 - `--taskbar-snapshot <png> --taskbar-theme light|dark --lang en|ne --scale 1|1.5|2` (snapshot feature) renders the taskbar text over a taskbar-coloured strip for the W1B spike.
+
+### Changed
+
+- Renamed the app to MitiBar (ADR-0017): the tray tooltip's first line, the popup window title and the binary are MitiBar, and the crate, folders, gettext domain, window classes and release tag use `mitibar`.

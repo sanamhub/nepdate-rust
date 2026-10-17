@@ -41,7 +41,7 @@ Slint attribution (`AboutSlint`, required by the Royalty-free license, ADR-0013)
 
 ### W3-05 Autostart (`src/platform/autostart.rs`)
 `auto-launch` 0.6 (`AutoLaunchBuilder::new().set_app_name(..).set_app_path(..).build()?`, then
-`enable()`/`disable()`/`is_enabled()`). App name `nepdate-widget`, path = `std::env::current_exe()`.
+`enable()`/`disable()`/`is_enabled()`). App name `mitibar`, path = `std::env::current_exe()`.
 macOS: `MacOSLaunchMode::SMAppService` when running from a `.app` bundle (macOS 13+), and the
 LaunchAgent mode otherwise (e.g. `cargo run`).
 Enable/disable follows `launch_at_login`. At startup, if enabled but the registered path differs
@@ -50,7 +50,7 @@ because of autostart.
 
 ### W3-06 Single instance (`src/platform/single_instance.rs`)
 A local socket (`interprocess` 2.x: `ListenerOptions::new().name(n).create_sync()`,
-`Stream::connect(n)`). Name `nepdate-widget-<username-hash>.sock` via `GenericNamespaced` when
+`Stream::connect(n)`). Name `mitibar-<username-hash>.sock` via `GenericNamespaced` when
 `GenericNamespaced::is_supported()` (Windows, Linux). Otherwise (macOS) use `GenericFilePath` in the
 data-local dir. The
 first instance listens on a background thread and forwards "open" to the UI thread with
@@ -58,7 +58,7 @@ first instance listens on a background thread and forwards "open" to the UI thre
 (WR-09 AC1). If the connection fails but the socket exists (stale), take over.
 
 ## Definition of Done
-Global DoD + milestone M4 (runs on all 3 OSes from `cargo run -p nepdate-widget --release`).
+Global DoD + milestone M4 (runs on all 3 OSes from `cargo run -p mitibar --release`).
 
 ## Human review checklist
 - [ ] Corrupt `settings.toml` by hand (delete a quote). Start the app. What happens? Check the log.
@@ -76,4 +76,4 @@ The implementation agent stops here for review. The reviewer checks:
       logs a warning.
 - [ ] Autostart and single instance work on all 3 OSes (manual checklist ticked); a stale socket
       is taken over.
-- [ ] Milestone M4: `cargo run -p nepdate-widget --release` works on Windows, macOS and Linux.
+- [ ] Milestone M4: `cargo run -p mitibar --release` works on Windows, macOS and Linux.

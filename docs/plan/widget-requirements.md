@@ -1,4 +1,4 @@
-# nepdate-widget: Functional requirements (v0.1)
+# MitiBar: Functional requirements (v0.1)
 
 Source of truth for the widget (ADR-0008). NepDateWidget may be read for reference, but
 only what is listed here gets built. Every requirement has an ID
@@ -17,8 +17,8 @@ Glossary: **BS** = Bikram Sambat (Nepali) date. **AD** = Gregorian date.
 - AC2: Windows/Linux icon image shows today's BS day number (Devanagari digits when
   language = ne, ASCII otherwise), regenerated when the date changes.
   macOS shows a text title instead, e.g. `८ असोज` / `8 Ashoj`.
-- AC3: Tooltip (where the OS supports it): BS long date + AD date, e.g.
-  `Ashoj 8, 2083 · 2026-09-24`.
+- AC3: Tooltip (where the OS supports it): `MitiBar` on the first line, then the BS long date and
+  AD date on the second, e.g. `Ashoj 8, 2083 · 2026-09-24`.
 - AC4: Left-click (Windows/Linux) toggles the popup. On macOS, clicking opens the menu,
   whose first item is "Open".
 - AC5: Menu items, in order: Open · Copy today (BS) · Copy today (AD) · Settings · Quit.
@@ -28,10 +28,10 @@ Glossary: **BS** = Bikram Sambat (Nepali) date. **AD** = Gregorian date.
 
 ## WR-02 Popup window
 
-- AC1: Borderless and non-resizable, with a fixed logical size (default 360×440). It opens at the
-  primary monitor's tray corner (Windows bottom-right above the taskbar, macOS top-right below the
-  menu bar, Linux X11 top-right; Wayland: compositor placement), fully on-screen, and doesn't show
-  in the Windows taskbar.
+- AC1: Borderless and non-resizable, with a fixed logical size (default 360×440). The window
+  title is `MitiBar` (shown in Alt+Tab). It opens at the primary monitor's tray corner (Windows
+  bottom-right above the taskbar, macOS top-right below the menu bar, Linux X11 top-right;
+  Wayland: compositor placement), fully on-screen, and doesn't show in the Windows taskbar.
 - AC2: Closes (hides) on focus loss or Escape. Re-opening shows the last viewed month,
   except when the date changed while hidden: then it shows today's month.
 - AC3: Header shows the BS long date, weekday, AD date, local time and the extra zone
@@ -86,9 +86,9 @@ Glossary: **BS** = Bikram Sambat (Nepali) date. **AD** = Gregorian date.
 
 ## WR-06 Settings
 
-Stored per user at `dirs::config_dir()/nepdate-widget/settings.toml`: Windows
-`%APPDATA%\nepdate-widget\`, macOS `~/Library/Application Support/nepdate-widget/`, Linux
-`$XDG_CONFIG_HOME/nepdate-widget/` (usually `~/.config/nepdate-widget/`).
+Stored per user at `dirs::config_dir()/mitibar/settings.toml`: Windows
+`%APPDATA%\mitibar\`, macOS `~/Library/Application Support/mitibar/`, Linux
+`$XDG_CONFIG_HOME/mitibar/` (usually `~/.config/mitibar/`).
 
 | Key | Type | Default |
 |---|---|---|
@@ -132,7 +132,7 @@ Not in v0.1 (ADR-0008 §B). ID kept so later IDs don't change.
 - AC2: Launch at login toggles a per-user login item (Windows `HKCU\...\Run`, macOS
   Login Items / LaunchAgent, Linux `~/.config/autostart/*.desktop`). No admin rights.
 - AC3: Quit from the menu exits in < 1 s and leaves no background process.
-- AC4: Logs go to `dirs::data_local_dir()/nepdate-widget/`, `nepdate-widget.log`, rotated at 1 MB, keeping 2
+- AC4: Logs go to `dirs::data_local_dir()/mitibar/`, `mitibar.log`, rotated at 1 MB, keeping 2
   files. No personal data is logged.
 - AC5: Crash: a panic hook logs the panic message and location before exit.
 

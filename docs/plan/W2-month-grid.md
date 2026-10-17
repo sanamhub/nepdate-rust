@@ -8,9 +8,9 @@ Read first: `shared/spec/PATRO.md`, `docs/API.md` (crate `nepdate-patro`), ADR-0
 Human reads: `docs/learn/10-models-and-callbacks.md`.
 
 ### W2-00 Dependencies
-In `apps/nepdate-widget/Cargo.toml`: `nepdate = { path = "../../crates/nepdate", features = ["jiff"] }`
+In `apps/mitibar/Cargo.toml`: `nepdate = { path = "../../crates/nepdate", features = ["jiff"] }`
 and `nepdate-patro = { path = "../../crates/nepdate-patro" }` (ADR-0011, ADR-0015).
-AC: `cargo build -p nepdate-widget` succeeds, and `crates/nepdate/Cargo.toml` is unchanged.
+AC: `cargo build -p mitibar` succeeds, and `crates/nepdate/Cargo.toml` is unchanged.
 
 ## Tasks
 
@@ -63,7 +63,7 @@ In `AppState`: `viewed_month: (u16, Month)` and `hidden_on: NepaliDate`. On show
 `hidden_on`, reset `viewed_month` to today's month.
 
 ## Definition of Done
-Global DoD. `app/` coverage ≥ 80 % (`cargo llvm-cov -p nepdate-widget` filtered to `src/app`).
+Global DoD. `app/` coverage ≥ 80 % (`cargo llvm-cov -p mitibar` filtered to `src/app`).
 Performance: WR-03 AC9. Measure month switching with `log::debug!` timings in a release
 build and note the number in the PR.
 

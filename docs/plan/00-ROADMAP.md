@@ -59,7 +59,7 @@ are part of the tasks listed.
 3. No new public API beyond `docs/API.md`. No new dependency beyond the ADRs.
 4. No `unwrap()`/`expect()`/`panic!` in library code paths (tests/examples OK).
 5. The package's `CHANGELOG.md` (`crates/nepdate/`, `crates/nepdate-patro/` or
-   `apps/nepdate-widget/`) `[Unreleased]` updated for user-visible changes.
+   `apps/mitibar/`) `[Unreleased]` updated for user-visible changes.
 6. Prose follows `.claude/skills/writing-style/SKILL.md`.
 7. PR description: task IDs, what changed, how it was tested, and "What to look at
    first" for the reviewer (2–3 bullet points, beginner-friendly).

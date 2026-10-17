@@ -1,7 +1,7 @@
 # Contributing
 
 Thanks for helping. This repository holds the Rust `nepdate` and `nepdate-patro` libraries and the
-`nepdate-widget` desktop app.
+MitiBar desktop app.
 
 ## Before you start
 
