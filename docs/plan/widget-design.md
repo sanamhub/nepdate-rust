@@ -1,6 +1,6 @@
 # Widget design tokens (W0)
 
-Design decisions for `apps/nepdate-widget`, made in W0 before the first `.slint` file and used
+Design decisions for `apps/mitibar`, made in W0 before the first `.slint` file and used
 by W1 to W4. Loaded via the `frontend-design` skill. Requirements: ADR-0008 and
 `docs/plan/widget-requirements.md`. Fonts: ADR-0010. License: ADR-0013.
 

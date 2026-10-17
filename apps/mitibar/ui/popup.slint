@@ -1,5 +1,6 @@
 // The popup window (WR-02): borderless, always-on-top, fixed 360x440. It shows today's header
 // and the clock lines, hides on Escape and on focus loss (WR-02 AC2).
+import { AppInfo } from "app-info.slint";
 import { Theme } from "theme.slint";
 
 export struct PopupClockLine {
@@ -10,6 +11,7 @@ export struct PopupClockLine {
 }
 
 export component PopupWindow inherits Window {
+    title: AppInfo.app-name;
     no-frame: true;
     always-on-top: true;
     width: 360px;

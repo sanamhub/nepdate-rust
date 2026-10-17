@@ -1,0 +1,5 @@
+// The display name a person reads (ADR-0017). `ui_bridge::set_app_name` fills it from
+// `app::APP_NAME`; no other `.slint` file holds a copy, so every window title shares one value.
+export global AppInfo {
+    in property <string> app-name: "";
+}

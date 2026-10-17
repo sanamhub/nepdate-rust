@@ -24,7 +24,8 @@ don't redesign it.** The human reviewer is learning Rust, so clarity beats cleve
 Never use the C# NepDate docs (README/llms.txt) as a source: they are known to be wrong
 (`shared/spec/PARITY.md` §1). The C# code and the golden vectors are the reference. NepDateWidget may be read
 for widget behaviour and wording, but only `docs/plan/widget-requirements.md` decides what is
-built (ADR-0008).
+built (ADR-0008). The desktop app is MitiBar: display name `MitiBar`, identifiers `mitibar`
+(ADR-0017). Raju Prasai's app stays `NepDateWidget`.
 
 ## 2. Hard rules
 

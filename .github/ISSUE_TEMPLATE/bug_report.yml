@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in nepdate, nepdate-patro or nepdate-widget doesn't work as documented.
+description: Something in nepdate, nepdate-patro or MitiBar doesn't work as documented.
 labels: [bug]
 body:
   - type: textarea

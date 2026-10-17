@@ -1,7 +1,7 @@
 [package]
-name = "nepdate-widget"
+name = "mitibar"
 version = "0.0.0"
-description = "Tray calendar widget for the nepdate crate"
+description = "MitiBar, a tray calendar widget for the nepdate crate"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

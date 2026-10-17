@@ -11,6 +11,6 @@ Project-specific notes:
   `crates/nepdate-patro` (tithi, holidays, events; hub ADR-0004). Other languages
   have their own repositories; shared data and spec come from the hub `sanamhub/nepdate` into
   `shared/`, which is read-only here (ADR-0003).
-- Widget = `apps/nepdate-widget`. NepDateWidget is a reference, used with its author's
-  permission; scope is fixed by ADR-0008.
+- Desktop app = `apps/mitibar` (display name MitiBar, identifiers `mitibar`; ADR-0017).
+  NepDateWidget is a reference, used with its author's permission; scope is fixed by ADR-0008.
 - Org "Clean Architecture" default is applied as module layers inside the widget crate (ADR-0015).

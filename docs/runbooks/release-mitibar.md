@@ -1,4 +1,4 @@
-# Runbook: release `nepdate-widget`
+# Runbook: release MitiBar
 
 Skeleton, completed in task W4-06. Decided in ADR-0012.
 
@@ -6,8 +6,8 @@ Skeleton, completed in task W4-06. Decided in ADR-0012.
 
 1. CI green on all 3 OSes. `docs/runbooks/widget-manual-test.md` completed on Windows, macOS
    and Linux for this version (attach the ticked copy to the release PR).
-2. Version bump in `apps/nepdate-widget/Cargo.toml`, a `## [X.Y.Z] - YYYY-MM-DD` section in
-   `apps/nepdate-widget/CHANGELOG.md`, and `cargo xtask release-check nepdate-widget X.Y.Z`
+2. Version bump in `apps/mitibar/Cargo.toml`, a `## [X.Y.Z] - YYYY-MM-DD` section in
+   `apps/mitibar/CHANGELOG.md`, and `cargo xtask release-check mitibar X.Y.Z`
    passes.
 3. `cargo xtask data-status` passes: tithi and holiday data reach at least 183 days ahead.
    If not, follow the hub's [data-update runbook](https://github.com/sanamhub/nepdate/blob/main/docs/runbooks/data-update.md) first.
@@ -16,11 +16,11 @@ Skeleton, completed in task W4-06. Decided in ADR-0012.
 ## Releasing
 
 ```bash
-git tag widget-vX.Y.Z
-git push origin widget-vX.Y.Z
+git tag mitibar-vX.Y.Z
+git push origin mitibar-vX.Y.Z
 ```
 
-`release-widget.yml` runs `preflight`, builds and packages on the 3 OSes (signing only
+`release-mitibar.yml` runs `preflight`, builds and packages on the 3 OSes (signing only
 where the signing variable is set), then waits for the `production` approval and creates a
 **draft** GitHub Release with the changelog section, `SHA256SUMS`, the SBOM and
 attestations.

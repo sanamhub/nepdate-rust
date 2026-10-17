@@ -4,7 +4,7 @@
 
 `dirs::config_dir()` / `dirs::data_local_dir()` return the right base folder per OS
 (`%APPDATA%`, `~/Library/Application Support`, `$XDG_CONFIG_HOME`). We append
-`nepdate-widget/`. Never hard-code paths.
+`mitibar/`. Never hard-code paths.
 
 ## 2. Atomic writes
 

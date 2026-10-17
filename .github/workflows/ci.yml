@@ -56,8 +56,8 @@ jobs:
           toolchain: "1.98"
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@63fed3e2fecf6f7b51dc6f043341b79ef82a9ae7 # v2.9.2
-      - run: cargo clippy -p nepdate-widget -- -D warnings
-      - run: cargo test -p nepdate-widget
+      - run: cargo clippy -p mitibar -- -D warnings
+      - run: cargo test -p mitibar
 
   # W0-03 follow-up: reproducible light and dark spike screenshots, written by the app itself
   # (Slint's Window::take_snapshot), uploaded for the human to look at. Ubuntu renders under
@@ -83,20 +83,20 @@ jobs:
       - uses: Swatinem/rust-cache@63fed3e2fecf6f7b51dc6f043341b79ef82a9ae7 # v2.9.2
       - name: Render light snapshot (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: xvfb-run -a -s "-screen 0 1280x1024x24" cargo run -p nepdate-widget --features snapshot -- --font-test --snapshot snapshot-light.png --theme light
+        run: xvfb-run -a -s "-screen 0 1280x1024x24" cargo run -p mitibar --features snapshot -- --font-test --snapshot snapshot-light.png --theme light
         env:
           LIBGL_ALWAYS_SOFTWARE: "1"
       - name: Render dark snapshot (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: xvfb-run -a -s "-screen 0 1280x1024x24" cargo run -p nepdate-widget --features snapshot -- --font-test --snapshot snapshot-dark.png --theme dark
+        run: xvfb-run -a -s "-screen 0 1280x1024x24" cargo run -p mitibar --features snapshot -- --font-test --snapshot snapshot-dark.png --theme dark
         env:
           LIBGL_ALWAYS_SOFTWARE: "1"
       - name: Render light snapshot (macOS, Windows)
         if: matrix.os != 'ubuntu-latest'
-        run: cargo run -p nepdate-widget --features snapshot -- --font-test --snapshot snapshot-light.png --theme light
+        run: cargo run -p mitibar --features snapshot -- --font-test --snapshot snapshot-light.png --theme light
       - name: Render dark snapshot (macOS, Windows)
         if: matrix.os != 'ubuntu-latest'
-        run: cargo run -p nepdate-widget --features snapshot -- --font-test --snapshot snapshot-dark.png --theme dark
+        run: cargo run -p mitibar --features snapshot -- --font-test --snapshot snapshot-dark.png --theme dark
       - name: Render taskbar snapshots (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
@@ -104,7 +104,7 @@ jobs:
           foreach ($theme in @('light','dark')) {
             foreach ($lang in @('en','ne')) {
               foreach ($scale in @('1','1.5','2')) {
-                cargo run -p nepdate-widget --features snapshot -- --taskbar-snapshot "taskbar-$theme-$lang-$scale.png" --taskbar-theme $theme --lang $lang --scale $scale
+                cargo run -p mitibar --features snapshot -- --taskbar-snapshot "taskbar-$theme-$lang-$scale.png" --taskbar-theme $theme --lang $lang --scale $scale
               }
             }
           }

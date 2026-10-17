@@ -9,7 +9,7 @@
   (≈ a `.sln`, but builds are shared and faster).
 
 Our workspace: `crates/nepdate` (lib), `xtask` (bin, dev tool), later `crates/nepdate-patro`
-(lib, depends on `nepdate`) and `apps/nepdate-widget` (bin).
+(lib, depends on `nepdate`) and `apps/mitibar` (bin).
 
 ## 2. Anatomy of `Cargo.toml`
 

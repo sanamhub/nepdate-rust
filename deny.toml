@@ -19,6 +19,9 @@ ignore = [
     "RUSTSEC-2026-0192", # ttf-parser unmaintained, no safe upgrade
     "RUSTSEC-2026-0194", # quick-xml quadratic run time (DoS), fixed in 0.41, pinned to 0.38
     "RUSTSEC-2026-0195", # quick-xml unbounded namespace allocation, fixed in 0.41
+    "RUSTSEC-2026-0370", # zvariant unmaintained, no safe upgrade
+    "RUSTSEC-2026-0371", # zbus_names unmaintained, no safe upgrade
+    "RUSTSEC-2026-0372", # zvariant_derive unmaintained, no safe upgrade
 ]
 
 [licenses]

@@ -6,7 +6,7 @@ use slint::ComponentHandle;
 
 use crate::app::clock::Header;
 use crate::platform::taskbar::MenuLabels;
-use crate::{MenuText, PopupClockLine, PopupWindow};
+use crate::{AppInfo, MenuText, PopupClockLine, PopupWindow};
 
 /// Where to open the popup (W1-04).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,6 +58,14 @@ pub fn set_clocks(popup: &PopupWindow, lines: &[crate::app::clock::ClockLine]) {
         })
         .collect();
     popup.set_clocks(slint::ModelRc::new(slint::VecModel::from(model)));
+}
+
+/// Sets the one Slint copy of the display name from `app::APP_NAME` (ADR-0017). Called once per
+/// window before it is shown, so the popup title and any later window title read one value.
+pub fn set_app_name(popup: &PopupWindow) {
+    popup
+        .global::<AppInfo>()
+        .set_app_name(crate::app::APP_NAME.into());
 }
 
 /// Maps the `theme` setting of WR-06 onto the `ThemeChoice` of `ui/theme.slint`.
@@ -222,5 +230,36 @@ mod tests {
         // Anchor near the right and top edges: clamped to the right.
         let anchor = rect(1900, 500, 1950, 550);
         assert_eq!(above_position(anchor, (360, 440), area), (1560, 60));
+    }
+
+    /// A platform that builds a component without a display, for the one test that reads a Slint
+    /// global back. The software renderer is a default feature (ADR-0010).
+    struct TestPlatform;
+
+    impl slint::platform::Platform for TestPlatform {
+        fn create_window_adapter(
+            &self,
+        ) -> Result<std::rc::Rc<dyn slint::platform::WindowAdapter>, slint::PlatformError> {
+            Ok(
+                slint::platform::software_renderer::MinimalSoftwareWindow::new(
+                    slint::platform::software_renderer::RepaintBufferType::ReusedBuffer,
+                ),
+            )
+        }
+    }
+
+    #[test]
+    fn app_name_is_one_value_in_rust_and_slint() {
+        use crate::app::APP_NAME;
+
+        assert_eq!(APP_NAME, "MitiBar");
+        // A process can set one platform, and no other test creates a component.
+        let _ = slint::platform::set_platform(Box::new(TestPlatform));
+        let popup = crate::PopupWindow::new().expect("popup component");
+        set_app_name(&popup);
+        assert_eq!(
+            popup.global::<crate::AppInfo>().get_app_name().as_str(),
+            APP_NAME
+        );
     }
 }

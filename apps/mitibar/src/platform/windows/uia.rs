@@ -59,7 +59,7 @@ pub fn spawn(controller: HWND, state: Arc<Mutex<UiaState>>) -> anyhow::Result<u3
     // The raw HWND pointer is not `Send`; carry its bits and rebuild it on the worker thread.
     let controller_bits = controller.0 as usize;
     std::thread::Builder::new()
-        .name("nepdate-taskbar-uia".into())
+        .name("mitibar-taskbar-uia".into())
         .spawn(move || {
             // SAFETY: GetCurrentThreadId has no preconditions.
             let tid = unsafe { GetCurrentThreadId() };

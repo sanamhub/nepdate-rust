@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-The latest release of each package: `nepdate`, `nepdate-patro` and `nepdate-widget`. Older
+The latest release of each package: `nepdate`, `nepdate-patro` and `mitibar`. Older
 versions get no fixes.
 
 ## Reporting a vulnerability

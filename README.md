@@ -1,6 +1,6 @@
 # nepdate-rust
 
-Bikram Sambat (Nepali calendar) for Rust, plus a tiny cross-platform desktop widget.
+Bikram Sambat (Nepali calendar) for Rust, plus MitiBar, a tiny cross-platform desktop app.
 Part of the NepDate family: shared data and spec live in the hub
 [`sanamhub/nepdate`](https://github.com/sanamhub/nepdate); other languages have their own
 repositories.
@@ -9,8 +9,13 @@ repositories.
 |---|---|---|
 | `nepdate` crate | `crates/nepdate` | `no_std`, zero-dependency BS↔AD conversion, formatting (English/Nepali), parsing, arithmetic, fiscal year |
 | `nepdate-patro` crate | `crates/nepdate-patro` | the patro (पात्रो, the Nepali almanac): tithi, public holidays and events per BS day, on top of `nepdate`. Separate so the core carries no patro data. Same version as `nepdate`, released together |
-| `nepdate-widget` | `apps/nepdate-widget` | tray / menu-bar app (Windows, macOS, Linux): today's BS date, month calendar, converter, clock with time zone |
+| MitiBar | `apps/mitibar` | tray / taskbar app (Windows, macOS, Linux): today's BS date, month calendar, converter, clock with time zone |
 | Shared data and spec | `shared/` | read-only copy of the hub's `data/` and `spec/`, updated by a weekly PR. Read only at dev time |
+
+**MitiBar**, "the eighth day of the week", is the desktop app. The name joins *miti* (date) and
+the *-bar* of Nepali weekday names (Sombar, Mangalbar), because the date lives in the taskbar.
+Its identifiers (crate, binary, folders) are lower case `mitibar`; see
+[ADR-0017](docs/adr/0017-desktop-app-name-mitibar.md).
 
 **Status:** L0 to L4 done (workspace, core types, BS↔AD conversion, arithmetic, fiscal year, ranges, formatting and parsing); L5 (crate `nepdate-patro`, features `serde`, `jiff`, `chrono`) ready for review; next: phase L6.
 
@@ -50,7 +55,7 @@ docs/runbooks/   release and manual-test procedures
 
 - Calendar data and algorithm from [NepDate](https://github.com/RajuPrasai/NepDate) by Raju
   Prasai and contributors, MIT. See [shared/data/NOTICE](shared/data/NOTICE).
-- The widget follows [NepDateWidget](https://github.com/RajuPrasai/NepDateWidget), with its
+- MitiBar follows [NepDateWidget](https://github.com/RajuPrasai/NepDateWidget), with its
   author's permission ([docs/legal](docs/legal/README.md)).
 - This repository: MIT ([ADR-0013](docs/adr/0013-licensing.md)).
 - Not affiliated with the Government of Nepal. Holiday data is informational.
