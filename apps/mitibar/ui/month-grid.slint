@@ -31,63 +31,81 @@ component DayCell inherits Rectangle {
     border-width: data.is-today ? 2px : 0px;
     border-color: Theme.sindoor;
 
-    TouchArea {
-        clicked => { root.clicked(root.index); }
-    }
-
-    // AD day, small, top-right; the short AD month on the 1st of a new AD month (WR-03 AC2).
-    HorizontalLayout {
-        x: 0;
-        y: 0;
-        width: 100%;
-        alignment: end;
-        spacing: 2px;
-        Text { text: data.ad-day; color: Theme.ink-muted; font-size: 8px; }
-        Text {
-            text: data.ad-month;
-            color: Theme.ink-muted;
-            font-size: 8px;
-            visible: data.ad-month != "";
-        }
-    }
-
-    // Event dot, top-left (WR-03 AC4).
-    Rectangle {
-        x: 3px;
-        y: 3px;
-        width: 4px;
-        height: 4px;
-        border-radius: 2px;
-        background: Theme.marigold;
-        visible: data.has-events;
-    }
-
-    // BS day and tithi, centred in a column so the cell width does the alignment (WR-03 AC2,
-    // AC4). 12 px is the Devanagari minimum (widget-design.md §4), so long tithi names elide
-    // here and the day detail shows the full one.
-    VerticalLayout {
-        x: 0;
-        y: 0;
+    fs := FocusScope {
         width: 100%;
         height: 100%;
-        alignment: center;
-        spacing: 0;
-        Text {
-            width: 100%;
-            text: data.bs-day;
-            color: data.is-holiday ? Theme.sindoor : data.is-saturday ? Theme.saturday : Theme.ink;
-            font-size: 14px;
-            horizontal-alignment: center;
-            vertical-alignment: center;
+        enabled: !data.is-padding;
+        focus-on-tab-navigation: !data.is-padding;
+        accessible-role: button;
+        accessible-label: data.accessible-label;
+
+        // Enter or Space opens the day detail (WR-10 AC2). Tab order is the repeater order.
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == " ") {
+                root.clicked(root.index);
+                return accept;
+            }
+            reject
         }
-        Text {
+
+        TouchArea {
+            clicked => { root.clicked(root.index); }
+        }
+
+        // AD day, small, top-right; the short AD month on the 1st of a new AD month (WR-03 AC2).
+        HorizontalLayout {
+            x: 0;
+            y: 0;
             width: 100%;
-            text: data.tithi;
-            color: Theme.ink-muted;
-            font-size: 12px;
-            horizontal-alignment: center;
-            overflow: elide;
-            visible: data.tithi != "";
+            alignment: end;
+            spacing: 2px;
+            Text { text: data.ad-day; color: Theme.ink-muted; font-size: 8px; }
+            Text {
+                text: data.ad-month;
+                color: Theme.ink-muted;
+                font-size: 8px;
+                visible: data.ad-month != "";
+            }
+        }
+
+        // Event dot, top-left (WR-03 AC4).
+        Rectangle {
+            x: 3px;
+            y: 3px;
+            width: 4px;
+            height: 4px;
+            border-radius: 2px;
+            background: Theme.marigold;
+            visible: data.has-events;
+        }
+
+        // BS day and tithi, centred in a column so the cell width does the alignment (WR-03 AC2,
+        // AC4). 12 px is the Devanagari minimum (widget-design.md §4), so long tithi names elide
+        // here and the day detail shows the full one.
+        VerticalLayout {
+            x: 0;
+            y: 0;
+            width: 100%;
+            height: 100%;
+            alignment: center;
+            spacing: 0;
+            Text {
+                width: 100%;
+                text: data.bs-day;
+                color: data.is-holiday ? Theme.sindoor : data.is-saturday ? Theme.saturday : Theme.ink;
+                font-size: 14px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            Text {
+                width: 100%;
+                text: data.tithi;
+                color: Theme.ink-muted;
+                font-size: 12px;
+                horizontal-alignment: center;
+                overflow: elide;
+                visible: data.tithi != "";
+            }
         }
     }
 }
@@ -120,6 +138,7 @@ export component MonthGrid inherits Rectangle {
             spacing: 4px;
             Button {
                 text: "<";
+                accessible-label: @tr("Previous month");
                 enabled: root.can-prev;
                 clicked => { root.prev-month(); }
             }
@@ -133,18 +152,20 @@ export component MonthGrid inherits Rectangle {
             }
             Button {
                 text: ">";
+                accessible-label: @tr("Next month");
                 enabled: root.can-next;
                 clicked => { root.next-month(); }
             }
         }
 
-        // Month and year pickers plus Today (WR-03 AC6). The pickers keep their range;
+        // Month and year pickers plus Today (WR-03 AC6, WR-10 AC2). The pickers keep their range;
         // the prev/next buttons are the controls that disable at the range edges.
         HorizontalLayout {
             spacing: 4px;
             ComboBox {
                 model: root.month-names;
                 current-index <=> root.month-index;
+                accessible-label: @tr("Month");
                 horizontal-stretch: 1;
                 selected(_value) => { root.month-picked(root.month-index); }
             }
@@ -152,11 +173,13 @@ export component MonthGrid inherits Rectangle {
                 minimum: 1901;
                 maximum: 2199;
                 value <=> root.year;
+                accessible-label: @tr("Year");
                 horizontal-stretch: 1;
                 edited(value) => { root.year-picked(value); }
             }
             Button {
                 text: @tr("Today");
+                accessible-label: @tr("Today");
                 clicked => { root.today(); }
             }
         }

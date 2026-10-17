@@ -335,6 +335,21 @@ mod tests {
         assert_eq!(above_position(anchor, (360, 440), area), (1560, 60));
     }
 
+    #[test]
+    fn day_cell_label_has_the_dates_weekday_and_tithi() {
+        use nepdate::{Lang, NepaliDate};
+
+        let date = NepaliDate::new(2081, 1, 1).expect("date");
+        assert_eq!(
+            cell_label(date, Lang::En),
+            "2081/01/01 2024-04-13 Saturday Panchami"
+        );
+        assert_eq!(
+            cell_label(date, Lang::Ne),
+            "2081/01/01 2024-04-13 शनिवार पञ्चमी"
+        );
+    }
+
     /// A platform that builds a component without a display, for the tests that read a Slint
     /// model or global back. The software renderer is a default feature (ADR-0010).
     struct TestPlatform;

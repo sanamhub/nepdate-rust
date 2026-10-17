@@ -81,6 +81,19 @@ export component PopupWindow inherits Window {
                 root.hide();
                 return accept;
             }
+            // WR-10 AC2: the grid shortcuts work wherever the focus is inside the popup.
+            if (event.text == Key.PageUp) {
+                grid.prev-month();
+                return accept;
+            }
+            if (event.text == Key.PageDown) {
+                grid.next-month();
+                return accept;
+            }
+            if (event.text == Key.Home) {
+                grid.today();
+                return accept;
+            }
             reject
         }
 
