@@ -248,6 +248,20 @@ impl Cli {
         }
         Ok(cli)
     }
+
+    /// Whether this run is a review/snapshot tool, which must not touch the user's login item or
+    /// settings file.
+    fn is_snapshot_tool(&self) -> bool {
+        #[cfg(feature = "snapshot")]
+        if self.popup {
+            return true;
+        }
+        #[cfg(all(windows, feature = "snapshot"))]
+        if self.taskbar_snapshot.is_some() {
+            return true;
+        }
+        false
+    }
 }
 
 /// The settings for this run: the per-user file, or the defaults for a snapshot tool so a
@@ -303,6 +317,10 @@ fn main() -> anyhow::Result<()> {
     // The `--no-taskbar-text` flag turns WR-12 off for this run (W3 builds the settings UI).
     if cli.no_taskbar_text {
         settings.taskbar_text = false;
+    }
+    // WR-09 AC2: match the login item to the setting. A snapshot never touches it.
+    if !cli.is_snapshot_tool() {
+        platform::autostart::apply(settings.launch_at_login);
     }
     let lang = settings.lang();
 
@@ -872,6 +890,7 @@ fn wire_settings(
         let save_timer = save_timer.clone();
         move |value| {
             state.borrow_mut().settings.launch_at_login = value;
+            platform::autostart::apply(value);
             schedule_save(&save_timer, &state);
         }
     });
