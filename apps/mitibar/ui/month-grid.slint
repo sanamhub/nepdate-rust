@@ -23,11 +23,13 @@ export struct CellData {
 component DayCell inherits Rectangle {
     in property <CellData> data;
     in property <int> index;
+    /// The AD day's size: 13 px for Latin, 12 px for Devanagari (widget-design §3/§4).
+    in property <length> ad-day-size: 13px;
     callback clicked(int);
 
     horizontal-stretch: 1;
-    // Two text lines plus the superscript: the AD line (10 px), the BS numeral (17 px) and the
-    // tithi (13 px). The old 31 px cell let both lines overflow into the next row (W2 review).
+    // Two lines on the 4 px grid: 4 px padding, a 20 px numeral line and a 16 px tithi line,
+    // 44 px in total. The grid gap is 2 px (see the GridLayout comment), so a 6-row month fits.
     height: 44px;
     border-radius: 4px;
     border-width: data.is-today ? 2px : 0px;
@@ -54,62 +56,49 @@ component DayCell inherits Rectangle {
             clicked => { root.clicked(root.index); }
         }
 
-        // AD day and month marker, small, top-right. They sit on their own line above the BS
-        // numeral, so the marker can never cover the numeral (W2 review, WR-03 AC2).
-        HorizontalLayout {
-            x: 3px;
-            y: 2px;
-            width: parent.width - 6px;
-            height: 10px;
-            alignment: end;
-            spacing: 1px;
-            Text {
-                text: data.ad-day;
-                color: Theme.ink-muted;
-                font-size: 8px;
-                vertical-alignment: center;
-            }
-            Text {
-                text: data.ad-month;
-                color: Theme.ink-muted;
-                font-size: 8px;
-                vertical-alignment: center;
-                visible: data.ad-month != "";
-            }
-        }
-
-        // Event dot, top-left (WR-03 AC4).
+        // Event dot, top-left, above the numeral's ink (WR-03 AC4). One logical pixel down from
+        // the ring's inner edge keeps it off the 2 px today ring.
         Rectangle {
-            x: 3px;
+            x: 4px;
             y: 3px;
             width: 4px;
             height: 4px;
             border-radius: 2px;
             background: Theme.marigold;
-            visible: data.has-events;
+            visible: data.has_events;
         }
 
-        // BS day on its own line, centred in the cell (WR-03 AC2). The AD superscript above is
-        // a separate line, so this numeral is never crowded.
+        // Line 1: the BS day at the left (16 px) and the AD day at the right (13 px Latin,
+        // 12 px Devanagari). On an AD 1st the short AD month replaces the day (WR-03 AC2).
         Text {
-            x: 2px;
-            y: 12px;
-            width: parent.width - 4px;
-            height: 17px;
+            x: 4px;
+            y: 4px;
+            width: parent.width - 8px;
+            height: 20px;
             text: data.bs-day;
             color: data.is-holiday ? Theme.sindoor : data.is-saturday ? Theme.saturday : Theme.ink;
-            font-size: 14px;
-            horizontal-alignment: center;
+            font-size: 16px;
+            horizontal-alignment: left;
+            vertical-alignment: center;
+        }
+        Text {
+            x: 4px;
+            y: 4px;
+            width: parent.width - 8px;
+            height: 20px;
+            text: data.ad-month != "" ? data.ad-month : data.ad-day;
+            color: Theme.ink-muted;
+            font-size: data.ad-month != "" ? 11px : root.ad-day-size;
+            horizontal-alignment: right;
             vertical-alignment: center;
         }
 
-        // Tithi on the third line; 12 px is the Devanagari minimum (widget-design.md §4), so long
-        // names elide here and the day detail shows the full one (WR-03 AC4).
+        // Line 2: the tithi, full cell width, 12 px (the Devanagari minimum), elided when long.
         Text {
-            x: 2px;
-            y: 29px;
-            width: parent.width - 4px;
-            height: 13px;
+            x: 4px;
+            y: 24px;
+            width: parent.width - 8px;
+            height: 16px;
             text: data.tithi;
             color: Theme.ink-muted;
             font-size: 12px;
@@ -132,6 +121,8 @@ export component MonthGrid inherits Rectangle {
     in property <bool> can-next: false;
     in property <string> holiday-name: "";
     in property <int> holiday-days: -1;
+    /// 13 px for Latin, 12 px for Devanagari, set once from the language (WR-03 AC2).
+    in property <length> ad-day-size: 13px;
 
     callback day-clicked(int);
     callback prev-month();
@@ -220,10 +211,13 @@ export component MonthGrid inherits Rectangle {
                 reject
             }
             GridLayout {
-                spacing: 3px;
+                // 2 px, not 4: at 360 px, 4 px padding and a 4 px gap left the 11 px "Nov"
+                // marker touching the 16 px numeral at 1x. 2 px keeps 2 px clear.
+                spacing: 2px;
                 for cell[i] in root.cells: DayCell {
                     data: cell;
                     index: i;
+                    ad-day-size: root.ad-day-size;
                     row: i / 7;
                     col: mod(i, 7);
                     clicked(index) => { root.day-clicked(index); }

@@ -38,6 +38,8 @@ export component PopupWindow inherits Window {
     in property <bool> can-next: false;
     in property <string> holiday-name: "";
     in property <int> holiday-days: -1;
+    /// 13 px for Latin, 12 px for Devanagari (WR-03 AC2), set by `ui_bridge::set_month`.
+    in property <length> ad-day-size: 13px;
 
     // Day detail (W2-03): an overlay inside the popup, never a new OS window (WR-04 AC1).
     in property <DayDetailData> detail;
@@ -134,6 +136,7 @@ export component PopupWindow inherits Window {
                 can-next: root.can-next;
                 holiday-name: root.holiday-name;
                 holiday-days: root.holiday-days;
+                ad-day-size: root.ad-day-size;
 
                 day-clicked(index) => { root.day-clicked(index); }
                 prev-month => { root.prev-month(); }

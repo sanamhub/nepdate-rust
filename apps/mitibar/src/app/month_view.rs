@@ -37,8 +37,8 @@ pub struct Cell {
     pub bs_day: String,
     /// The AD day of month in `lang`'s digits (WR-03 AC2).
     pub ad_day: String,
-    /// Set on every cell whose AD date is the 1st, including the first cell of a BS month that
-    /// starts on an AD 1st (WR-03 AC2).
+    /// Set on every cell whose AD date is the 1st. The UI shows this short month name in place of
+    /// the AD day, so day 1 is implied (WR-03 AC2).
     pub ad_month_marker: Option<&'static str>,
     pub is_today: bool,
     /// The date falls on a Saturday (WR-03 AC3).
@@ -87,8 +87,8 @@ pub fn month_view(year: u16, month: Month, today: NepaliDate, lang: Lang) -> Mon
             date: Some(date),
             bs_day: lang.digits(u32::from(day), 1).to_string(),
             ad_day: lang.digits(u32::from(ad.day()), 1).to_string(),
-            // WR-03 AC2: every AD 1st carries the short month, including the first cell of a BS
-            // month that starts on an AD 1st (W2 review). A 32-day month can contain two.
+            // WR-03 AC2: every AD 1st carries the short month; the UI shows it in place of the
+            // AD day. A 32-day month can contain two.
             ad_month_marker: ad_marker(ad),
             is_today: date == today,
             is_saturday: date.weekday() == Weekday::Saturday,
@@ -159,8 +159,8 @@ fn ad_month_name(month: u8) -> &'static str {
         .unwrap_or("")
 }
 
-/// The short AD month for a cell whose AD date is the 1st, `None` otherwise (WR-03 AC2). The rule
-/// does not depend on the cell's position, so a BS month that starts on an AD 1st is covered too.
+/// The short AD month for a cell whose AD date is the 1st, `None` otherwise (WR-03 AC2). The UI
+/// shows it in place of the day number; the rule does not depend on the cell's position.
 fn ad_marker(ad: GregorianDate) -> Option<&'static str> {
     (ad.day() == 1).then_some(ad_month_name(ad.month()))
 }
@@ -336,8 +336,9 @@ mod tests {
     }
 
     #[test]
-    fn wr03_ac2_ad_marker_on_every_first() {
+    fn wr03_ac2_ad_month_marker_on_every_first() {
         // The rule itself: an AD 1st carries the short month, whatever its position in the grid.
+        // The UI shows it in place of the day number, so day 1 is implied.
         assert_eq!(
             ad_marker(GregorianDate::new(2024, 4, 1).expect("AD date")),
             Some("Apr")

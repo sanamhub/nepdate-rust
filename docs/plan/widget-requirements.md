@@ -44,9 +44,8 @@ Glossary: **BS** = Bikram Sambat (Nepali) date. **AD** = Gregorian date.
 - AC1: Shows one BS month as a 7-column grid, Sunday first. Leading and trailing cells
   outside the month are blank. The grid has 5 or 6 rows as needed
   (`ceil((first_weekday + month_length) / 7)`).
-- AC2: Each cell shows the BS day (large) and the AD day of month (small). When the
-  AD month changes within the BS month, the AD cell for day 1 of that AD month also
-  shows the short AD month name.
+- AC2: Each cell shows the BS day (large) and the AD day of month (small). On the cell for
+  day 1 of an AD month, the short AD month name replaces the AD day number.
 - AC3: Today's cell is outlined. Saturday cells and public holidays (from `nepdate-patro`)
   use the holiday colour.
 - AC4: When patro data exists: tithi shown small under the day; a dot marks days with

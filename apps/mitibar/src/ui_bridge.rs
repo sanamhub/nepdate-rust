@@ -96,6 +96,9 @@ pub fn set_month(popup: &PopupWindow, view: &MonthView, lang: Lang) {
     popup.set_month_title(view.title.as_str().into());
     popup.set_can_prev(view.can_prev);
     popup.set_can_next(view.can_next);
+    // The AD day is body size (13 px); Devanagari needs 12 px minimum and is narrower at 12 px
+    // (widget-design §3/§4). The UI only needs the size, not the language.
+    popup.set_ad_day_size(if lang == Lang::Ne { 12.0 } else { 13.0 });
 }
 
 /// One `Cell` to one `CellData` (WR-03 AC3). The model keeps Saturday and public holidays
