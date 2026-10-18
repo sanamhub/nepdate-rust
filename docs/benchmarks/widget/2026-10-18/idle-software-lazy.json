@@ -1,0 +1,135 @@
+{
+  "all_cpu_load": {
+    "before_mean_percent": 7.78827752566892,
+    "during_mean_percent": 6.331759862100738,
+    "max_percent": 8.236882716049383,
+    "min_percent": 3.3629686896018556
+  },
+  "arch": "x86_64",
+  "command": "cargo xtask widget-idle --minutes 1",
+  "cpu_percent_of_one_core": 0.33498651839438554,
+  "date": "2026-10-18",
+  "loaded": false,
+  "machine": "SANAM",
+  "minutes": 1,
+  "os": "Microsoft Windows 11 Home 10.0.26300",
+  "private_bytes": 36360192,
+  "process_cpu_seconds": 0.203125,
+  "profile": "release-widget",
+  "sample_seconds": 5,
+  "samples": [
+    {
+      "all_cpu_load_percent": 7.126436781609195,
+      "private_bytes": 36380672,
+      "process_cpu_seconds": 0.21875,
+      "seconds": 5.0,
+      "threads": 16,
+      "working_set_bytes": 63070208
+    },
+    {
+      "all_cpu_load_percent": 6.050647593272762,
+      "private_bytes": 36384768,
+      "process_cpu_seconds": 0.234375,
+      "seconds": 10.0,
+      "threads": 16,
+      "working_set_bytes": 63074304
+    },
+    {
+      "all_cpu_load_percent": 4.286268425135765,
+      "private_bytes": 36417536,
+      "process_cpu_seconds": 0.25,
+      "seconds": 15.0,
+      "threads": 16,
+      "working_set_bytes": 63102976
+    },
+    {
+      "all_cpu_load_percent": 7.634470792365529,
+      "private_bytes": 36417536,
+      "process_cpu_seconds": 0.28125,
+      "seconds": 20.0,
+      "threads": 16,
+      "working_set_bytes": 63102976
+    },
+    {
+      "all_cpu_load_percent": 6.328623959744532,
+      "private_bytes": 36429824,
+      "process_cpu_seconds": 0.28125,
+      "seconds": 25.0,
+      "threads": 16,
+      "working_set_bytes": 63115264
+    },
+    {
+      "all_cpu_load_percent": 7.3794305636257995,
+      "private_bytes": 36442112,
+      "process_cpu_seconds": 0.328125,
+      "seconds": 30.0,
+      "threads": 16,
+      "working_set_bytes": 63127552
+    },
+    {
+      "all_cpu_load_percent": 7.943563973714728,
+      "private_bytes": 36442112,
+      "process_cpu_seconds": 0.328125,
+      "seconds": 35.0,
+      "threads": 16,
+      "working_set_bytes": 63127552
+    },
+    {
+      "all_cpu_load_percent": 3.5451375435877566,
+      "private_bytes": 36442112,
+      "process_cpu_seconds": 0.328125,
+      "seconds": 40.0,
+      "threads": 16,
+      "working_set_bytes": 63127552
+    },
+    {
+      "all_cpu_load_percent": 8.236882716049383,
+      "private_bytes": 36311040,
+      "process_cpu_seconds": 0.34375,
+      "seconds": 45.0,
+      "threads": 12,
+      "working_set_bytes": 63082496
+    },
+    {
+      "all_cpu_load_percent": 6.462848297213622,
+      "private_bytes": 36376576,
+      "process_cpu_seconds": 0.359375,
+      "seconds": 50.0,
+      "threads": 12,
+      "working_set_bytes": 63143936
+    },
+    {
+      "all_cpu_load_percent": 3.3629686896018556,
+      "private_bytes": 36347904,
+      "process_cpu_seconds": 0.359375,
+      "seconds": 55.0,
+      "threads": 11,
+      "working_set_bytes": 63127552
+    },
+    {
+      "all_cpu_load_percent": 7.623839009287926,
+      "private_bytes": 36360192,
+      "process_cpu_seconds": 0.40625,
+      "seconds": 60.0,
+      "threads": 11,
+      "working_set_bytes": 63152128
+    }
+  ],
+  "settings": {
+    "clock_24h": false,
+    "extra_time_zone": "Asia/Kathmandu",
+    "language": "en",
+    "launch_at_login": false,
+    "show_seconds": false,
+    "taskbar_text": true,
+    "theme": "system"
+  },
+  "threads": 11,
+  "verdicts": {
+    "cpu": "PASS",
+    "working_set": "MISS"
+  },
+  "wall_seconds": 60.6367686,
+  "warmup_seconds": 15,
+  "working_set_bytes": 63152128
+}

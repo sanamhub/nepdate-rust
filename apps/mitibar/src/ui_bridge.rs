@@ -11,10 +11,8 @@ use crate::app::format;
 use crate::app::holidays::NextHoliday;
 use crate::app::month_view::{Cell, DayDetail, MonthView};
 use crate::app::settings::Settings;
-use crate::platform::taskbar::MenuLabels;
 use crate::{
-    AppInfo, CellData, ConverterData, DayDetailData, MenuText, PopupClockLine, PopupWindow,
-    SettingsData,
+    AppInfo, CellData, ConverterData, DayDetailData, PopupClockLine, PopupWindow, SettingsData,
 };
 
 /// Where to open the popup (W1-04).
@@ -272,19 +270,6 @@ pub fn theme_choice(theme: &str) -> crate::ThemeChoice {
         "light" => crate::ThemeChoice::Light,
         "dark" => crate::ThemeChoice::Dark,
         _ => crate::ThemeChoice::System,
-    }
-}
-
-/// The WR-01 AC5 menu labels, read from the translated `MenuText` global (W1B-03). The taskbar
-/// text's right-click menu and the tray menu read the same `@tr` strings.
-pub fn menu_labels(popup: &PopupWindow) -> MenuLabels {
-    let menu = popup.global::<MenuText>();
-    MenuLabels {
-        open: menu.get_open().to_string(),
-        copy_bs: menu.get_copy_bs().to_string(),
-        copy_ad: menu.get_copy_ad().to_string(),
-        settings: menu.get_settings().to_string(),
-        quit: menu.get_quit().to_string(),
     }
 }
 
@@ -554,5 +539,15 @@ mod tests {
         assert_eq!(popup.get_detail().events.row_count(), 3);
         set_detail(&popup, None);
         assert!(!popup.get_detail_visible());
+    }
+
+    /// W5-03: the settings panel's zone list is a few hundred short strings, not a memory cause.
+    #[test]
+    fn the_time_zone_list_is_small() {
+        let zones = all_time_zones();
+        let bytes: usize = zones.iter().map(String::capacity).sum();
+        eprintln!("time zones: {} names, {} bytes", zones.len(), bytes);
+        assert!(zones.len() > 100);
+        assert!(bytes < 1_000_000, "{bytes} bytes");
     }
 }

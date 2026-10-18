@@ -1,118 +1,118 @@
 {
   "all_cpu_load": {
-    "before_mean_percent": 55.34726062847191,
-    "during_mean_percent": 53.942490318667126,
-    "max_percent": 70.94907407407408,
-    "min_percent": 19.468167701863354
+    "before_mean_percent": 7.2668764184897086,
+    "during_mean_percent": 7.211956915483255,
+    "max_percent": 11.18421052631579,
+    "min_percent": 3.5471990695871294
   },
   "arch": "x86_64",
   "command": "cargo xtask widget-idle --minutes 1",
-  "cpu_percent_of_one_core": 1.3918010843135842,
+  "cpu_percent_of_one_core": 0.8246870367949395,
   "date": "2026-10-18",
-  "loaded": true,
+  "loaded": false,
   "machine": "SANAM",
   "minutes": 1,
   "os": "Microsoft Windows 11 Home 10.0.26300",
-  "private_bytes": 86515712,
-  "process_cpu_seconds": 0.84375,
+  "private_bytes": 64794624,
+  "process_cpu_seconds": 0.5,
   "profile": "release-widget",
   "sample_seconds": 5,
   "samples": [
     {
-      "all_cpu_load_percent": 43.85400907715582,
-      "private_bytes": 86601728,
-      "process_cpu_seconds": 0.6875,
+      "all_cpu_load_percent": 10.183767228177642,
+      "private_bytes": 64839680,
+      "process_cpu_seconds": 0.234375,
       "seconds": 5.0,
-      "threads": 20,
-      "working_set_bytes": 137846784
+      "threads": 18,
+      "working_set_bytes": 118239232
     },
     {
-      "all_cpu_load_percent": 46.368932038834956,
-      "private_bytes": 86601728,
-      "process_cpu_seconds": 0.703125,
+      "all_cpu_load_percent": 6.450366937041328,
+      "private_bytes": 64839680,
+      "process_cpu_seconds": 0.234375,
       "seconds": 10.0,
-      "threads": 20,
-      "working_set_bytes": 137850880
+      "threads": 18,
+      "working_set_bytes": 118239232
     },
     {
-      "all_cpu_load_percent": 53.34626576139671,
-      "private_bytes": 86601728,
-      "process_cpu_seconds": 0.765625,
+      "all_cpu_load_percent": 8.64938080495356,
+      "private_bytes": 64839680,
+      "process_cpu_seconds": 0.328125,
       "seconds": 15.0,
-      "threads": 20,
-      "working_set_bytes": 137846784
+      "threads": 18,
+      "working_set_bytes": 118226944
     },
     {
-      "all_cpu_load_percent": 60.681114551083596,
-      "private_bytes": 86601728,
-      "process_cpu_seconds": 0.875,
+      "all_cpu_load_percent": 6.65505900561037,
+      "private_bytes": 64909312,
+      "process_cpu_seconds": 0.390625,
       "seconds": 20.0,
-      "threads": 20,
-      "working_set_bytes": 137846784
+      "threads": 19,
+      "working_set_bytes": 118415360
     },
     {
-      "all_cpu_load_percent": 65.03846153846153,
-      "private_bytes": 86601728,
-      "process_cpu_seconds": 0.9375,
+      "all_cpu_load_percent": 6.5735892961023845,
+      "private_bytes": 64909312,
+      "process_cpu_seconds": 0.484375,
       "seconds": 25.0,
-      "threads": 20,
-      "working_set_bytes": 137846784
+      "threads": 19,
+      "working_set_bytes": 118415360
     },
     {
-      "all_cpu_load_percent": 60.681114551083596,
-      "private_bytes": 86601728,
-      "process_cpu_seconds": 1.015625,
+      "all_cpu_load_percent": 6.454106280193236,
+      "private_bytes": 64909312,
+      "process_cpu_seconds": 0.5,
       "seconds": 30.0,
-      "threads": 20,
-      "working_set_bytes": 137846784
+      "threads": 19,
+      "working_set_bytes": 118415360
     },
     {
-      "all_cpu_load_percent": 70.94907407407408,
-      "private_bytes": 86601728,
-      "process_cpu_seconds": 1.078125,
+      "all_cpu_load_percent": 3.5471990695871294,
+      "private_bytes": 64909312,
+      "process_cpu_seconds": 0.53125,
       "seconds": 35.0,
-      "threads": 20,
-      "working_set_bytes": 137846784
+      "threads": 19,
+      "working_set_bytes": 118415360
     },
     {
-      "all_cpu_load_percent": 60.3328173374613,
-      "private_bytes": 86601728,
-      "process_cpu_seconds": 1.125,
+      "all_cpu_load_percent": 4.758220502901354,
+      "private_bytes": 64909312,
+      "process_cpu_seconds": 0.53125,
       "seconds": 40.0,
-      "threads": 20,
-      "working_set_bytes": 137846784
+      "threads": 19,
+      "working_set_bytes": 118415360
     },
     {
-      "all_cpu_load_percent": 50.15527950310559,
-      "private_bytes": 86515712,
-      "process_cpu_seconds": 1.28125,
+      "all_cpu_load_percent": 4.132869833912708,
+      "private_bytes": 64770048,
+      "process_cpu_seconds": 0.609375,
       "seconds": 45.0,
-      "threads": 16,
-      "working_set_bytes": 137859072
+      "threads": 15,
+      "working_set_bytes": 118366208
     },
     {
-      "all_cpu_load_percent": 66.60879629629629,
-      "private_bytes": 86515712,
-      "process_cpu_seconds": 1.375,
+      "all_cpu_load_percent": 11.18421052631579,
+      "private_bytes": 64770048,
+      "process_cpu_seconds": 0.65625,
       "seconds": 50.0,
-      "threads": 16,
-      "working_set_bytes": 137859072
+      "threads": 15,
+      "working_set_bytes": 118366208
     },
     {
-      "all_cpu_load_percent": 49.825851393188856,
-      "private_bytes": 86515712,
-      "process_cpu_seconds": 1.453125,
+      "all_cpu_load_percent": 10.04062681369704,
+      "private_bytes": 64794624,
+      "process_cpu_seconds": 0.671875,
       "seconds": 55.0,
-      "threads": 16,
-      "working_set_bytes": 137859072
+      "threads": 15,
+      "working_set_bytes": 118407168
     },
     {
-      "all_cpu_load_percent": 19.468167701863354,
-      "private_bytes": 86515712,
-      "process_cpu_seconds": 1.453125,
+      "all_cpu_load_percent": 7.914086687306502,
+      "private_bytes": 64794624,
+      "process_cpu_seconds": 0.703125,
       "seconds": 60.0,
-      "threads": 16,
-      "working_set_bytes": 137859072
+      "threads": 15,
+      "working_set_bytes": 118407168
     }
   ],
   "settings": {
@@ -124,12 +124,12 @@
     "taskbar_text": true,
     "theme": "system"
   },
-  "threads": 16,
+  "threads": 15,
   "verdicts": {
-    "cpu": "LOADED (no verdict)",
-    "working_set": "LOADED (no verdict)"
+    "cpu": "MISS",
+    "working_set": "MISS"
   },
-  "wall_seconds": 60.6228871,
+  "wall_seconds": 60.6290602,
   "warmup_seconds": 15,
-  "working_set_bytes": 137859072
+  "working_set_bytes": 118407168
 }

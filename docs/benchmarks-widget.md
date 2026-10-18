@@ -146,3 +146,43 @@ The `--wake-probe 120` run (snapshot build, popup never opened, seconds hidden) 
 `seconds=120` and `wakes=2`: two minute ticks and no second-launch wake, against the AC of at
 most 2. The second-launch interaction test hides the popup, installs the handler and runs the
 wake path; it shows the popup again. The probe left no process and no `mitibar` Run value.
+
+## W5-03 where the private bytes go (2026-10-18)
+
+The measurements below use the same Windows x64 machine and the `release-widget` build. The
+1-minute rows use `cargo xtask widget-idle --minutes 1`; the 20-second rows are a manual
+`Get-Process` sample after 20 s. Private bytes and working set do not depend on the all-CPU load;
+CPU does, so each row carries its load.
+
+| Run | Private | Working set | CPU, % of one core | Threads | All-CPU load |
+|---|---|---|---|---|---|
+| femtovg, popup created at start (W5-01 commit, baseline) | 82.80 MB | 131.79 MB | 0.413 | 16 | before 12.6 %, during 14.4 % (max 46.0) |
+| femtovg, popup created on first open (W5-03) | 61.79 MB | 112.92 MB | 0.825 | 15 | before 7.3 %, during 7.2 % (3.5 to 11.2) |
+| femtovg, popup on first open, `--no-taskbar-text` (20 s) | 58.30 MB | 106.05 MB | not sampled | 16 | not sampled |
+| software renderer, popup on first open | 34.68 MB | 60.23 MB | 0.335 | 11 | before 7.8 %, during 6.3 % (3.4 to 8.2) |
+| femtovg, popup at start, `--no-taskbar-text` (W4 review) | 77.0 MB | 113.2 MB | 1.87 | 20 | 23 % |
+| software renderer, popup at start (W4 review) | 34.8 MB | 57.8 MB | 0.88 | 17 | 12 % |
+
+What each number shows:
+
+- **The popup created at start is a real cause.** Creating it on first open saves 21.01 MB
+  private (82.80 to 61.79) and 18.87 MB working set (131.79 to 112.92) on the same machine. It
+  is the W5-03 code change. The GL driver is still loaded at start even without the popup, so
+  this is not the whole gap.
+- **The femtovg renderer is the remaining large cause.** With the popup on first open, the
+  software renderer saves another 27.11 MB private (61.79 to 34.68) and 52.69 MB working set
+  (112.92 to 60.23), and cuts CPU from 0.825 % to 0.335 %. ADR-0010 chose femtovg; switching
+  renderers or changing the ADR-0008 §C target needs a new ADR, so W5-03 did not change either.
+- **The taskbar text costs about 3.49 MB private and 6.87 MB working set** in the lazy build
+  (61.79 to 58.30, 112.92 to 106.05). Direct2D and DirectWrite resources, not a periodic timer.
+- **The bundled fonts are 1,284,988 bytes on disk** (Noto Sans 971,808 and Noto Sans Devanagari
+  313,180, both variable). They cannot account for a 20 MB gap by file size; the renderer's font
+  and glyph caches are counted in the renderer rows above. W5-03 did not remove a bundled font.
+- **The time-zone list is 598 names and 8,504 bytes** by `String::capacity` (test
+  `the_time_zone_list_is_small`). It is not a cause.
+
+After the lazy-popup change, the quiet femtovg row is still a raw miss: 112.92 MB working set
+against 40 MB, and 0.825 % of one core against "about 0 %". The software row would meet the CPU
+target and the 40 MB private figure, but its 60.23 MB working set still misses the RSS target.
+The W5-06 quiet 5-minute run is the final W5-01 row; it does not change these verdicts unless
+the machine is quiet enough.

@@ -38,8 +38,9 @@ fn app(today: NepaliDate) -> (PopupWindow, Rc<RefCell<AppState>>, Rc<FakeClipboa
     )));
     let popup = PopupWindow::new().expect("popup component");
     let weak = popup.as_weak();
+    state.borrow_mut().popup = weak.clone();
     wire_popup(&popup, &state, &weak);
-    update_popup(&state, &weak);
+    update_popup(&state);
     popup.show().expect("show popup");
     popup.invoke_focus();
     (popup, state, clipboard)
@@ -58,10 +59,10 @@ fn element(popup: &PopupWindow, label: &str) -> ElementHandle {
 }
 
 /// Sets the month without going through the UI, then repaints.
-fn show_month(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, year: u16, month: Month) {
+fn show_month(state: &Rc<RefCell<AppState>>, year: u16, month: Month) {
     state.borrow_mut().viewed_month = (year, month);
     state.borrow_mut().detail = None;
-    update_popup(state, &popup.as_weak());
+    update_popup(state);
 }
 
 /// The accessible label of the cell whose BS day is `day` in the shown month.
@@ -96,7 +97,7 @@ fn previous_next_and_today_follow_the_range_edges() {
     click(&popup, "Previous month");
     assert!(popup.get_month_title().starts_with("Baishakh 2081"));
 
-    show_month(&popup, &state, 1901, Month::Baishakh);
+    show_month(&state, 1901, Month::Baishakh);
     assert_eq!(
         element(&popup, "Previous month").accessible_enabled(),
         Some(false)
@@ -107,7 +108,7 @@ fn previous_next_and_today_follow_the_range_edges() {
         "Baishakh 1901 · Apr/May 1844"
     );
 
-    show_month(&popup, &state, 2199, Month::Chaitra);
+    show_month(&state, 2199, Month::Chaitra);
     assert_eq!(
         element(&popup, "Next month").accessible_enabled(),
         Some(false)
@@ -309,7 +310,7 @@ fn a_settings_switch_applies_at_once_and_saves_after_300_ms() {
     let path = dir.path().join("settings.toml");
     state.borrow_mut().settings_path = Some(path.clone());
     let save_timer = Rc::new(slint::Timer::default());
-    wire_settings(&popup, &state, &popup.as_weak(), &save_timer);
+    wire_settings(&popup, &state, &save_timer);
     crate::refresh_settings(&popup, &state);
     popup.set_settings_visible(true);
     assert!(!state.borrow().settings.clock_24h);
@@ -326,11 +327,32 @@ fn a_settings_switch_applies_at_once_and_saves_after_300_ms() {
 }
 
 #[test]
+fn the_popup_is_created_on_first_open_not_at_startup() {
+    crate::test_support::init_platform();
+    let today = NepaliDate::new(2081, 1, 1).expect("date");
+    let state = Rc::new(RefCell::new(AppState::new(
+        Settings::default(),
+        today,
+        Some(today),
+        Rc::new(FakeClipboard::default()),
+    )));
+    let slot: crate::PopupSlot = Rc::new(RefCell::new(None));
+    let popup = crate::ensure_popup(&slot, &state).expect("popup");
+    assert!(!popup.window().is_visible(), "created hidden");
+    assert!(slot.borrow().is_some(), "the slot owns the strong handle");
+    assert!(
+        state.borrow().popup.upgrade().is_some(),
+        "state has the weak handle"
+    );
+}
+
+#[test]
 fn wr09_ac1_second_launch_opens_the_first_instance_popup() {
     let (popup, state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
     popup.hide().expect("hide");
     assert!(!popup.window().is_visible());
-    crate::install_open_request(&state, &popup.as_weak());
+    let slot = Rc::new(RefCell::new(Some(popup.clone_strong())));
+    crate::install_open_request(&slot, &state);
     crate::run_open_request();
     assert!(
         popup.window().is_visible(),

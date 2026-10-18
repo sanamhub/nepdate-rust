@@ -8,6 +8,7 @@
 use nepdate::Lang;
 
 use crate::TrayComponent;
+use crate::platform::taskbar::MenuLabels;
 
 /// Events the tray delivers to the app.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,6 +66,18 @@ impl SlintTray {
             component.on_quit(move || (events.borrow_mut())(TrayEvent::Quit));
         }
         Ok(SlintTray { component })
+    }
+
+    /// The translated WR-01 AC5 labels, for the taskbar text's right-click menu (W5-03). The
+    /// popup may not exist yet; the tray component always does.
+    pub fn menu_labels(&self) -> MenuLabels {
+        MenuLabels {
+            open: self.component.get_menu_open().to_string(),
+            copy_bs: self.component.get_menu_copy_bs().to_string(),
+            copy_ad: self.component.get_menu_copy_ad().to_string(),
+            settings: self.component.get_menu_settings().to_string(),
+            quit: self.component.get_menu_quit().to_string(),
+        }
     }
 }
 
