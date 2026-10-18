@@ -13,9 +13,10 @@ shared and was busy, so every runtime number carries the all-CPU load beside it.
 | Build | `cargo build -p mitibar --profile release-widget` (`opt-level = "s"`, fat LTO, `panic = "abort"`, stripped) |
 | Load sample | `Win32_PerfFormattedData_PerfOS_Processor` `_Total.PercentProcessorTime` |
 
-`LOADED` means the all-CPU average during the row is above 20 %. A loaded row is reported but
-**not judged**: a quiet re-run is needed before it can pass or fail. Binary size is not a timing
-measurement and is judged even on a loaded machine.
+`LOADED` means the all-CPU average during the row is above 20 % in the W4 table below; the W5
+rows use the family rule of 15 % (mean before the row or any sample during it). A loaded row is
+reported but **not judged**: a quiet re-run is needed before it can pass or fail. Binary size is
+not a timing measurement and is judged even on a loaded machine.
 
 The cold-start number is the `tray ready in ...` line that `main` logs from the start of `main`
 to the first `update_tray` call. Each run was a fresh process with the popup closed and settings
@@ -119,8 +120,46 @@ Baseline before W5-03 (1-minute run, 2026-10-18 21:47, the same build as W4):
 | Idle CPU | 1.392 % of one core (0.844 CPU s in 60.6 s) | same | LOADED, no verdict |
 | Threads | 16 | same | reported |
 
-The four W5-01 unit tests cover the 14.9 % / 15.0 % / single-15 % rule, the RSS and CPU
+The three W5-01 unit tests cover the 14.9 % / 15.0 % / single-15 % rule, the RSS and CPU
 verdict table, and the `--minutes` default and zero rejection.
+
+### Final W5-06 run (5 minutes, 2026-10-18 22:47)
+
+The machine was not quiet: the mean before the row was 30.6 % and the mean during it 34.7 %
+(5.0 to 72.5). The row is LOADED and gets no verdict, as the family rule says.
+
+| Metric | Measured | All-CPU load | Verdict |
+|---|---|---|---|
+| Private bytes | 61.66 MB (64,651,264 bytes) | before 30.6 %, during 34.7 % (5.0 to 72.5) | LOADED, no verdict |
+| Working set (RSS) | 108.47 MB (113,741,824 bytes) | same | LOADED, no verdict; raw miss against 40 MB |
+| Idle CPU | 1.455 % of one core (4.422 CPU s in 303.9 s) | same | LOADED, no verdict; raw miss against about 0 % |
+| Threads | 15 | same | reported |
+
+An earlier 5-minute attempt at 22:35 was also LOADED: private 90.78 MB, working set 151.11 MB,
+CPU 2.279 % of one core, before 7.4 % and during 20.9 % (5.6 to 64.8). The private figure is
+27 MB above the second run, so the first run is reported but not used as a cause. A 3-minute
+quiet sample with taskbar text on stayed flat at 64.6 MB private, so the growth did not
+reproduce there; the two 5-minute rows differ by load state.
+
+### W5-06 cold starts
+
+Five fresh processes with the temporary settings file, the popup never opened, seconds hidden.
+The load is the all-CPU sample immediately before and after the run, the W4-05 method; no sample
+was taken inside the startup interval itself. A row is LOADED when either sample is 15 % or more.
+
+| Run | Tray-ready | Load before | Load after | Verdict |
+|---|---|---|---|---|
+| 1 | 142.9 ms | 48 % | 7 % | LOADED, no verdict |
+| 2 | 121.5 ms | 40 % | 20 % | LOADED, no verdict |
+| 3 | 92.2 ms | 11 % | 26 % | LOADED, no verdict |
+| 4 | 88.7 ms | 2 % | 10 % | before/after quiet, below 500 ms |
+| 5 | 87.8 ms | 3 % | 2 % | before/after quiet, below 500 ms |
+
+Median 92.2 ms, against the W4 median of 164.0 ms. The lazy popup removed the window and GL
+context creation from the startup path, which is the likely reason; the quiet rows are below
+500 ms and the loaded rows get no verdict. The machine never stayed quiet for a 5-minute idle
+row during the phase, so W5-06 commits the LOADED numbers and stops; it did not wait or
+estimate.
 
 ## W5-02 idle wake-ups (2026-10-18)
 
@@ -184,5 +223,7 @@ What each number shows:
 After the lazy-popup change, the quiet femtovg row is still a raw miss: 112.92 MB working set
 against 40 MB, and 0.825 % of one core against "about 0 %". The software row would meet the CPU
 target and the 40 MB private figure, but its 60.23 MB working set still misses the RSS target.
-The W5-06 quiet 5-minute run is the final W5-01 row; it does not change these verdicts unless
-the machine is quiet enough.
+The final W5-06 5-minute run was LOADED (30.6 % before, 34.7 % during): 61.66 MB private,
+108.47 MB working set, 1.455 % of one core. It gets no verdict, and it does not change the
+conclusion that the femtovg working set misses 40 MB and the software renderer still misses it
+at 60.23 MB. A renderer or target decision needs a new ADR before code.
