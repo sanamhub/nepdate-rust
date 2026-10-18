@@ -10,6 +10,10 @@
 //! during it, excluding the measured process's own CPU time, is 15 % or more. A loaded row is
 //! reported and gets no verdict.
 
+// The counters are byte counts and 100 ns ticks from Win32. An f64 has 52 bits of mantissa, so a
+// value above 4 PB or 142 years would round; that is far outside a five-minute process sample.
+#![allow(clippy::cast_precision_loss)]
+
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -514,8 +518,10 @@ mod win {
         }
 
         pub(super) fn snapshot(&self, pid: u32) -> Result<Counters> {
-            let mut memory = PROCESS_MEMORY_COUNTERS_EX::default();
-            memory.cb = u32::try_from(size_of::<PROCESS_MEMORY_COUNTERS_EX>())?;
+            let mut memory = PROCESS_MEMORY_COUNTERS_EX {
+                cb: u32::try_from(size_of::<PROCESS_MEMORY_COUNTERS_EX>())?,
+                ..PROCESS_MEMORY_COUNTERS_EX::default()
+            };
             // SAFETY: `memory` is a live PROCESS_MEMORY_COUNTERS_EX with `cb` set, and the
             // function writes at most `cb` bytes into it.
             unsafe {
@@ -610,6 +616,8 @@ use win::Process;
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used)]
+
     use super::*;
 
     #[test]
