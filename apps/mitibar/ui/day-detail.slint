@@ -64,8 +64,12 @@ export component DayDetail inherits Rectangle {
         Flickable {
             height: data.events.length > 0 ? 120px : 0px;
             content-width: self.width;
-            VerticalLayout {
+            // The natural height of the list, not the box: short lists do not scroll, long ones do.
+            content-height: events-list.preferred-height;
+            events-list := VerticalLayout {
+                width: parent.width;
                 spacing: 2px;
+                alignment: start;
                 for event in data.events: Text {
                     text: event;
                     color: Theme.ink;
