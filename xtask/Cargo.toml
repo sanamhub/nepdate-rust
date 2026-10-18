@@ -8,6 +8,9 @@ publish = false
 [dependencies]
 anyhow = "1"
 serde_json = "1"
+# W4-04: parse the release workflow for the static test. A YAML parser, not a regex, so
+# comments and block scalars cannot fake a check.
+serde_yaml_ng = "0.10"
 # Tray icon generation (W1-03): resvg re-exports usvg and tiny-skia. Both crates are already in
 # the tree through Slint, so this adds no new crate.
 resvg = { version = "0.48", default-features = false, features = ["text"] }
