@@ -26,7 +26,7 @@ pub struct MonthView {
 pub struct Cell {
     pub date: Option<NepaliDate>,          // None = padding
     pub bs_day: String, pub ad_day: String, pub ad_month_marker: Option<&'static str>,
-    pub is_today: bool, pub is_holiday_tint: bool,  // Saturday or public holiday
+    pub is_today: bool, pub is_saturday: bool, pub is_public_holiday: bool,  // holiday wins
     pub tithi: Option<&'static str>, pub has_events: bool,
 }
 pub fn month_view(year: u16, month: Month, today: NepaliDate, lang: Lang) -> MonthView;

@@ -2,7 +2,7 @@
 //! converts between the two. W1 adds the popup placement (W1-04); W1B wires `PopupAnchor::Above`
 //! for the taskbar text (W1B-03).
 
-use nepdate::{Lang, Month, NepaliDate, Weekday};
+use nepdate::{Lang, Month, NepaliDate};
 use slint::ComponentHandle;
 
 use crate::app::clock::Header;
@@ -98,19 +98,16 @@ pub fn set_month(popup: &PopupWindow, view: &MonthView, lang: Lang) {
     popup.set_can_next(view.can_next);
 }
 
-/// One `Cell` to one `CellData` (WR-03 AC3). The model's single `is_holiday_tint` covers
-/// Saturday and public holidays; this split keeps the two design colours apart.
+/// One `Cell` to one `CellData` (WR-03 AC3). The model keeps Saturday and public holidays
+/// apart; the UI gives the holiday colour priority, so a holiday on a Saturday stays red.
 fn cell_data(cell: &Cell, lang: Lang) -> CellData {
-    let is_saturday = cell
-        .date
-        .is_some_and(|date| date.weekday() == Weekday::Saturday);
     CellData {
         bs_day: cell.bs_day.as_str().into(),
         ad_day: cell.ad_day.as_str().into(),
         ad_month: cell.ad_month_marker.unwrap_or_default().into(),
         is_today: cell.is_today,
-        is_holiday: cell.is_holiday_tint && !is_saturday,
-        is_saturday,
+        is_holiday: cell.is_public_holiday,
+        is_saturday: cell.is_saturday,
         tithi: cell.tithi.unwrap_or_default().into(),
         has_events: cell.has_events,
         is_padding: cell.date.is_none(),
@@ -348,6 +345,25 @@ mod tests {
         assert_eq!(
             cell_label(date, Lang::Ne),
             "2081/01/01 2024-04-13 शनिवार पञ्चमी"
+        );
+    }
+
+    #[test]
+    fn cell_data_keeps_a_holiday_on_a_saturday() {
+        use crate::app::month_view::month_view;
+
+        let new_year = NepaliDate::new(2081, 1, 1).expect("date");
+        let view = month_view(2081, Month::Baishakh, new_year, Lang::En);
+        let cell = view
+            .cells
+            .iter()
+            .find(|cell| cell.date == Some(new_year))
+            .expect("New Year");
+        let data = cell_data(cell, Lang::En);
+        assert!(data.is_saturday);
+        assert!(
+            data.is_holiday,
+            "the public-holiday colour must win over the Saturday colour"
         );
     }
 

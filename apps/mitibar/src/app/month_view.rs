@@ -26,6 +26,9 @@ pub struct MonthView {
 }
 
 /// One grid cell. Padding cells have no date and no content.
+// The flags are independent calendar facts, not a state machine: a day can be today, a Saturday
+// and a public holiday at once, so separate bools read better than an enum here.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Cell {
     /// `None` for the leading and trailing padding cells.
@@ -37,8 +40,11 @@ pub struct Cell {
     /// Set on the cell whose AD date is the 1st of a new AD month (WR-03 AC2).
     pub ad_month_marker: Option<&'static str>,
     pub is_today: bool,
-    /// Saturday or a public holiday (WR-03 AC3).
-    pub is_holiday_tint: bool,
+    /// The date falls on a Saturday (WR-03 AC3).
+    pub is_saturday: bool,
+    /// A public holiday from `nepdate-patro`. The UI gives this colour priority over the
+    /// Saturday colour, so a holiday that falls on a Saturday stays a holiday (WR-03 AC3).
+    pub is_public_holiday: bool,
     /// Tithi name in `lang`, or `None` outside the patro coverage (WR-03 AC4).
     pub tithi: Option<&'static str>,
     pub has_events: bool,
@@ -89,7 +95,8 @@ pub fn month_view(year: u16, month: Month, today: NepaliDate, lang: Lang) -> Mon
             ad_month_marker: (changed_ad_month && ad.day() == 1)
                 .then_some(ad_month_name(ad.month())),
             is_today: date == today,
-            is_holiday_tint: date.weekday() == Weekday::Saturday || info.is_public_holiday(),
+            is_saturday: date.weekday() == Weekday::Saturday,
+            is_public_holiday: info.is_public_holiday(),
             tithi: info.tithi().map(|t| t.name(lang)),
             has_events: info.has_events(),
         });
@@ -125,7 +132,8 @@ impl Cell {
             ad_day: String::new(),
             ad_month_marker: None,
             is_today: false,
-            is_holiday_tint: false,
+            is_saturday: false,
+            is_public_holiday: false,
             tithi: None,
             has_events: false,
         }
@@ -327,35 +335,51 @@ mod tests {
 
     #[test]
     fn wr03_ac3_saturday_and_holiday_tint() {
-        // Republic Day 2081-02-15 is a Tuesday, so this checks the public-holiday branch on its
-        // own; New Year 2081-01-01 would pass on the Saturday branch alone.
+        // New Year 2081-01-01 is a Saturday and a public holiday. Both flags stay set; the UI
+        // gives the holiday colour priority, so the cell is red, not slate (W2 review).
+        let new_year = month_view(2081, Month::Baishakh, date(2081, 1, 1), Lang::En);
+        let new_year_cell = new_year
+            .cells
+            .iter()
+            .find(|cell| cell.date == Some(date(2081, 1, 1)))
+            .expect("New Year");
+        assert_eq!(date(2081, 1, 1).weekday(), Weekday::Saturday);
+        assert!(new_year_cell.is_saturday);
+        assert!(new_year_cell.is_public_holiday);
+
+        // Republic Day 2081-02-15 is a Tuesday: a holiday without the Saturday flag.
         let view = month_view(2081, Month::Jestha, date(2081, 2, 15), Lang::En);
         let holiday = date(2081, 2, 15);
-        assert_ne!(holiday.weekday(), Weekday::Saturday);
         let holiday_cell = view
             .cells
             .iter()
             .find(|cell| cell.date == Some(holiday))
             .expect("Republic Day");
-        assert!(
-            holiday_cell.is_holiday_tint,
-            "2081-02-15 is a public holiday"
-        );
-        let saturday = view
+        assert_ne!(holiday.weekday(), Weekday::Saturday);
+        assert!(holiday_cell.is_public_holiday);
+        assert!(!holiday_cell.is_saturday);
+
+        // A plain Saturday is Saturday only, and a plain weekday is neither.
+        let plain_saturday = view
             .cells
             .iter()
             .find(|cell| {
                 cell.date
                     .is_some_and(|date| date.weekday() == Weekday::Saturday)
+                    && !cell.is_public_holiday
             })
-            .expect("a Saturday");
-        assert!(saturday.is_holiday_tint);
-        assert!(
-            view.cells
-                .iter()
-                .any(|cell| cell.date.is_some() && !cell.is_holiday_tint),
-            "a plain weekday cell"
-        );
+            .expect("a plain Saturday");
+        assert!(plain_saturday.is_saturday);
+        let plain_weekday = view
+            .cells
+            .iter()
+            .find(|cell| {
+                cell.date.is_some_and(|date| {
+                    date.weekday() != Weekday::Saturday && !cell.is_public_holiday
+                })
+            })
+            .expect("a plain weekday");
+        assert!(!plain_weekday.is_saturday && !plain_weekday.is_public_holiday);
     }
 
     #[test]
