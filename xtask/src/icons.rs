@@ -51,7 +51,9 @@ pub(crate) fn icons(check: bool) -> Result<()> {
     if check {
         let stale: Vec<&str> = files
             .iter()
-            .filter(|(path, bytes)| std::fs::read(root.join(path)).ok().as_deref() != Some(bytes.as_slice()))
+            .filter(|(path, bytes)| {
+                std::fs::read(root.join(path)).ok().as_deref() != Some(bytes.as_slice())
+            })
             .map(|(path, _)| path.as_str())
             .collect();
         if let Some(first) = stale.first() {
@@ -101,11 +103,12 @@ fn generated(root: &Path) -> Result<Vec<(String, Vec<u8>)>> {
     }
     files.push((SLINT_OUT.to_owned(), slint_arrays().into_bytes()));
 
-    let app_svg = std::fs::read_to_string(root.join(APP_SVG))
-        .with_context(|| format!("read {APP_SVG}"))?;
+    let app_svg =
+        std::fs::read_to_string(root.join(APP_SVG)).with_context(|| format!("read {APP_SVG}"))?;
     let mut app_pngs: Vec<(u32, Vec<u8>)> = Vec::new();
     for size in APP_PNG_SIZES {
-        let png = render(&app_svg, size, &fontdb).with_context(|| format!("render app icon {size}"))?;
+        let png =
+            render(&app_svg, size, &fontdb).with_context(|| format!("render app icon {size}"))?;
         files.push((format!("{APP_OUT}/{size}x{size}.png"), png.clone()));
         app_pngs.push((size, png));
     }
@@ -219,7 +222,11 @@ fn ico(pngs: &[(u32, Vec<u8>)]) -> Result<Vec<u8>> {
         out.push(0); // reserved
         out.extend_from_slice(&1u16.to_le_bytes()); // colour planes
         out.extend_from_slice(&32u16.to_le_bytes()); // bits per pixel
-        out.extend_from_slice(&u32::try_from(png.len()).context("icon length")?.to_le_bytes());
+        out.extend_from_slice(
+            &u32::try_from(png.len())
+                .context("icon length")?
+                .to_le_bytes(),
+        );
         out.extend_from_slice(&offset.to_le_bytes());
         offset += u32::try_from(png.len()).context("icon offset")?;
     }
@@ -254,11 +261,7 @@ fn icns(pngs: &[(u32, Vec<u8>)]) -> Result<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::indexing_slicing
-    )]
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
     use super::*;
 

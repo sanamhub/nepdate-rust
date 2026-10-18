@@ -1,0 +1,53 @@
+# cargo-packager configuration for MitiBar (W4-03, ADR-0012). `cargo xtask package` runs this
+# file with the release-widget binary and the formats for the current OS: NSIS on Windows,
+# .app + .dmg on macOS, .AppImage + .deb on Linux.
+#
+# Paths are relative to this file because cargo-packager changes into the config directory.
+name = "mitibar"
+productName = "MitiBar"
+version = "0.1.0"
+identifier = "sanamhub.MitiBar"
+description = "A tray calendar for Nepal, showing today's Bikram Sambat date."
+longDescription = "MitiBar keeps today's Bikram Sambat date in the tray, with a month grid, tithi, public holidays, a converter and settings. It makes no network requests."
+homepage = "https://github.com/sanamhub/nepdate-rust"
+authors = ["Sanam Pakuwal"]
+publisher = "Sanam Pakuwal"
+licenseFile = "../../LICENSE"
+category = "Utility"
+beforePackagingCommand = "cargo build -p mitibar --profile release-widget"
+
+binaries = [
+    { path = "mitibar", main = true },
+]
+
+icons = [
+    "icons/16x16.png",
+    "icons/24x24.png",
+    "icons/32x32.png",
+    "icons/48x48.png",
+    "icons/64x64.png",
+    "icons/128x128.png",
+    "icons/256x256.png",
+    "icons/512x512.png",
+    "icons/1024x1024.png",
+    "icons/icon.ico",
+    "icons/icon.icns",
+]
+
+# The per-user install needs no administrator rights (ADR-0012). cargo-packager's NSIS default
+# is `%LOCALAPPDATA%\MitiBar`, which is the same directory as the log folder
+# `%LOCALAPPDATA%\mitibar` on case-insensitive Windows. Put the program under
+# `%LOCALAPPDATA%\Programs\MitiBar` instead, unless the user chose another directory with /D.
+[nsis]
+installMode = "currentUser"
+preinstallSection = """
+Section "SetInstallDir"
+  ${If} $INSTDIR == "$LOCALAPPDATA\\MitiBar"
+    StrCpy $INSTDIR "$LOCALAPPDATA\\Programs\\MitiBar"
+  ${EndIf}
+SectionEnd
+"""
+
+# A menu-bar app: no Dock icon (ADR-0012, W4-03).
+[macos]
+backgroundApp = true
