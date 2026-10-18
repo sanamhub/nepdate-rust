@@ -22,7 +22,8 @@ Glossary: **BS** = Bikram Sambat (Nepali) date. **AD** = Gregorian date.
 - AC4: Left-click (Windows/Linux) toggles the popup. On macOS, clicking opens the menu,
   whose first item is "Open".
 - AC5: Menu items, in order: Open · Copy today (BS) · Copy today (AD) · Settings · Quit.
-  "Copy" writes `YYYY/MM/DD` (BS) or `YYYY-MM-DD` (AD) to the clipboard.
+  "Copy" writes `YYYY/MM/DD` (BS) or `YYYY-MM-DD` (AD) to the clipboard, both in the active
+  language's digits (W5-04: the clipboard is exactly what the screen shows).
 - AC6: If no tray is available (e.g. GNOME without the extension), the app opens the
   popup on start and logs a warning. It must not exit.
 
@@ -66,7 +67,7 @@ Glossary: **BS** = Bikram Sambat (Nepali) date. **AD** = Gregorian date.
 
 - AC1: Inline panel or overlay inside the popup (no new OS window): BS long date, AD
   long date, weekday, tithi, holiday badge, event list. All in the current language.
-- AC2: Buttons "Copy BS" / "Copy AD".
+- AC2: Buttons "Copy BS" / "Copy AD", both in the active language's digits (W5-04).
 - AC3: Escape or clicking outside closes the detail first, then the popup.
 
 ## WR-05 Clock and time zone

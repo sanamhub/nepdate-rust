@@ -762,12 +762,12 @@ fn copy_bs(state: &Rc<RefCell<AppState>>) {
     let _ = state.clipboard.set_text(&text);
 }
 
-/// Writes today's AD date as `YYYY-MM-DD` to the clipboard (WR-01 AC5).
+/// Writes today's AD date as `YYYY-MM-DD` to the clipboard, in the language's digits like Copy
+/// BS, so the clipboard is exactly what the header shows (WR-01 AC5, W5-04).
 fn copy_ad(state: &Rc<RefCell<AppState>>) {
     let state = state.borrow();
-    let _ = state
-        .clipboard
-        .set_text(&today_of(&state).to_gregorian().to_string());
+    let text = app::format::ad_short(today_of(&state).to_gregorian(), state.settings.lang());
+    let _ = state.clipboard.set_text(&text);
 }
 
 /// Refreshes the popup header, clocks and month grid from the local date and viewed month.

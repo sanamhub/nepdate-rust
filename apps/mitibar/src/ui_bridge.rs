@@ -97,6 +97,8 @@ pub fn set_month(popup: &PopupWindow, view: &MonthView, lang: Lang) {
     popup.set_month_names(slint::ModelRc::new(slint::VecModel::from(months)));
     popup.set_month_index(i32::from(view.month.number()) - 1);
     popup.set_year(i32::from(view.year));
+    // W5-04: the custom year control shows the language's digits; Slint's SpinBox cannot.
+    popup.set_year_text(lang.digits(u32::from(view.year), 0).to_string().into());
     popup.set_month_title(view.title.as_str().into());
     popup.set_can_prev(view.can_prev);
     popup.set_can_next(view.can_next);

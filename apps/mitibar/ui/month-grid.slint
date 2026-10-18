@@ -3,7 +3,7 @@
 // cells, `ui_bridge.rs` converts them, and this file never calls `nepdate`.
 
 import { Theme } from "theme.slint";
-import { Button, ComboBox, SpinBox } from "std-widgets.slint";
+import { Button, ComboBox, Palette } from "std-widgets.slint";
 
 /// One cell as the grid draws it. `date` stays in Rust; the label is data built from ISO dates,
 /// the weekday name and the tithi name, with no English sentence.
@@ -122,6 +122,9 @@ export component MonthGrid inherits Rectangle {
     in property <[string]> month-names;
     in-out property <int> month-index: 0;
     in-out property <int> year: 1901;
+    /// The year in the active language's digits (W5-04). Slint's `SpinBox` cannot format its
+    /// value, so this control shows Rust's `Lang::digits(year)` string.
+    in property <string> year-text: "";
     in property <string> title: "";
     in property <bool> can-prev: false;
     in property <bool> can-next: false;
@@ -181,13 +184,71 @@ export component MonthGrid inherits Rectangle {
                 width: 128px;
                 selected(_value) => { root.month-picked(root.month-index); }
             }
-            SpinBox {
-                minimum: 1901;
-                maximum: 2199;
-                value <=> root.year;
-                accessible-label: @tr("Year");
+            // W5-04: the standard `SpinBox` shows ASCII digits in Nepali. This control shows
+            // `root.year-text` from Rust, keeps the 1901 to 2199 range, and steps by keyboard,
+            // mouse wheel or the accessibility increment/decrement actions. The range edges
+            // disable those actions instead of wrapping.
+            FocusScope {
                 width: 112px;
-                edited(value) => { root.year-picked(value); }
+                height: 32px;
+                accessible-role: spinbox;
+                accessible-label: @tr("Year");
+                accessible-value: root.year-text;
+                accessible-value-minimum: 1901;
+                accessible-value-maximum: 2199;
+                accessible-value-step: 1;
+                accessible-action-set-value(v) => {
+                    if (v.is-float()) {
+                        root.year-picked(round(v.to-float()));
+                    }
+                }
+                accessible-action-increment => {
+                    if (root.year < 2199) { root.year-picked(root.year + 1); }
+                }
+                accessible-action-decrement => {
+                    if (root.year > 1901) { root.year-picked(root.year - 1); }
+                }
+                key-pressed(event) => {
+                    if (event.text == Key.UpArrow) {
+                        if (root.year < 2199) { root.year-picked(root.year + 1); }
+                        return accept;
+                    }
+                    if (event.text == Key.DownArrow) {
+                        if (root.year > 1901) { root.year-picked(root.year - 1); }
+                        return accept;
+                    }
+                    reject
+                }
+
+                Rectangle {
+                    border-radius: 4px;
+                    background: Palette.control-background;
+                    border-width: 1px;
+                    border-color: Palette.border;
+
+                    Text {
+                        text: root.year-text;
+                        color: Palette.control-foreground;
+                        font-size: 14px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        accessible-role: none;
+                    }
+
+                    TouchArea {
+                        scroll-event(event) => {
+                            if (event.delta-y != 0) {
+                                if (event.delta-y > 0) {
+                                    if (root.year < 2199) { root.year-picked(root.year + 1); }
+                                } else {
+                                    if (root.year > 1901) { root.year-picked(root.year - 1); }
+                                }
+                                return accept;
+                            }
+                            reject
+                        }
+                    }
+                }
             }
             Rectangle { horizontal-stretch: 1; }
             Button {

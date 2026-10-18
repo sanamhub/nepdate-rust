@@ -192,14 +192,32 @@ fn a_day_click_opens_the_detail_and_escape_closes_detail_then_popup() {
 
 #[test]
 fn copy_buttons_write_the_exact_strings_to_the_injected_clipboard() {
-    let (popup, _state, clipboard) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+    let (popup, state, clipboard) = app(NepaliDate::new(2081, 1, 1).expect("date"));
     let label = day_label(&popup, "1");
     click(&popup, &label);
     click(&popup, "Copy BS");
     click(&popup, "Copy AD");
+    // The tray copies use the same date and, like the detail buttons, the language digits.
+    crate::copy_bs(&state);
+    crate::copy_ad(&state);
     assert_eq!(
         *clipboard.texts.borrow(),
-        vec!["2081/01/01".to_owned(), "2024-04-13".to_owned()]
+        vec![
+            "2081/01/01".to_owned(),
+            "2024-04-13".to_owned(),
+            "2081/01/01".to_owned(),
+            "2024-04-13".to_owned()
+        ]
+    );
+
+    // W5-04: Nepali gets Devanagari digits in both copies, not only Copy BS.
+    state.borrow_mut().settings.language = "ne".to_owned();
+    let _ = slint::select_bundled_translation("ne");
+    crate::copy_bs(&state);
+    crate::copy_ad(&state);
+    assert_eq!(
+        clipboard.texts.borrow()[4..],
+        ["२०८१/०१/०१".to_owned(), "२०२४-०४-१३".to_owned()]
     );
 }
 
@@ -324,6 +342,40 @@ fn a_settings_switch_applies_at_once_and_saves_after_300_ms() {
     let (saved, warnings) = crate::platform::settings_store::load(&path);
     assert!(warnings.is_empty(), "{warnings:?}");
     assert!(saved.clock_24h, "saved after 300 ms");
+}
+
+#[test]
+fn the_year_control_shows_language_digits_and_stops_at_the_edges() {
+    let (popup, state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+    let year = element(&popup, "Year");
+    assert_eq!(year.accessible_role(), Some(AccessibleRole::Spinbox));
+    assert_eq!(year.accessible_value().as_deref(), Some("2081"));
+    assert_eq!(popup.get_year_text().as_str(), "2081");
+
+    state.borrow_mut().settings.language = "ne".to_owned();
+    let _ = slint::select_bundled_translation("ne");
+    update_popup(&state);
+    assert_eq!(popup.get_year_text().as_str(), "२०८१");
+    assert_eq!(
+        element(&popup, "वर्ष").accessible_value().as_deref(),
+        Some("२०८१")
+    );
+
+    state.borrow_mut().settings.language = "en".to_owned();
+    let _ = slint::select_bundled_translation("en");
+    update_popup(&state);
+
+    show_month(&state, 1901, Month::Baishakh);
+    element(&popup, "Year").invoke_accessible_decrement_action();
+    assert_eq!(popup.get_year(), 1901, "1901 is the lower edge");
+    element(&popup, "Year").invoke_accessible_increment_action();
+    assert_eq!(popup.get_year(), 1902);
+
+    show_month(&state, 2199, Month::Chaitra);
+    element(&popup, "Year").invoke_accessible_increment_action();
+    assert_eq!(popup.get_year(), 2199, "2199 is the upper edge");
+    element(&popup, "Year").invoke_accessible_decrement_action();
+    assert_eq!(popup.get_year(), 2198);
 }
 
 #[test]
