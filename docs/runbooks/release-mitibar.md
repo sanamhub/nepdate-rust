@@ -16,7 +16,10 @@ The workflow creates a **draft**; a human installs the assets and publishes it.
    data through the hub's
    [data-update runbook](https://github.com/sanamhub/nepdate/blob/main/docs/runbooks/data-update.md)
    first, never by lowering the threshold.
-4. `docs/benchmarks-widget.md` has current numbers from a quiet machine (ADR-0008 §C).
+4. `docs/benchmarks-widget.md` has current numbers from a quiet machine (ADR-0008 §C), and no
+   row is LOADED. **0.1.0 is not releasable yet:** the W4 idle RSS (153.86 MB) and idle CPU
+   (6.87 % of one core) rows are raw misses on a loaded machine; W5 measures them quietly and
+   fixes them or records a decision.
 5. `cargo xtask ci` passes locally.
 
 ## Build the packages locally (optional)
@@ -54,7 +57,7 @@ Outputs are in `dist/` (override with `CARGO_TARGET_DIR` for the build cache, no
 
 ```bash
 sha256sum -c SHA256SUMS
-gh attestation verify MitiBar-<version>-windows-x64-setup.exe --repo sanamhub/nepdate-rust
+gh attestation verify mitibar_<version>_x64-setup.exe --repo sanamhub/nepdate-rust
 ```
 
 On Windows without `sha256sum`:
@@ -101,7 +104,9 @@ Get-Content SHA256SUMS | ForEach-Object {
 ### Linux
 
 1. AppImage: `chmod +x MitiBar-<version>-linux-x86_64.AppImage` and run it. It needs a desktop
-   session with a tray (StatusNotifier/AppIndicator) and the usual GTK/WebKit runtime libraries.
+   session with a tray (StatusNotifier/AppIndicator), OpenGL (the femtovg renderer), fontconfig,
+   xkbcommon and D-Bus. MitiBar uses no GTK or WebKit. The AppImage and `.deb` names below are
+   the expected cargo-packager names; confirm them against the first workflow run.
 2. Debian/Ubuntu: `sudo apt install ./MitiBar-<version>-linux-amd64.deb` (or `dpkg -i` followed
    by `apt-get -f install`). Uninstall with `sudo apt remove mitibar`.
 3. Settings and log live in `~/.config/mitibar` and `~/.local/share/mitibar`. Remove those
@@ -127,6 +132,17 @@ Do this on each OS on a clean user account, with the network disconnected or a f
    <pid>` shows no connections; on macOS/Linux, `lsof -i -p <pid>` is empty. The app has no
    telemetry and no update check (ADR-0008 B.8).
 7. Uninstall and repeat the cleanup check in the OS section above.
+
+## Known gaps before 1.0
+
+These are accepted for 0.x previews and recorded here so a 1.0 release cannot skip them.
+
+| Gap | Today | Needed before 1.0 |
+|---|---|---|
+| Windows signing target | The workflow signs `dist/*.exe`, which is the NSIS setup only. `mitibar.exe` inside the installer and `MitiBar.exe` in the portable zip are unsigned. | Sign the release binary before packaging, then sign the setup. |
+| macOS signing | The step signs the `.app` inside the mounted DMG. A compressed DMG mounts read-only, so `codesign` fails there and the DMG is never rebuilt. The step is gated off, so 0.x is unaffected. | Sign the `.app` before the DMG is built (cargo-packager signing config or a separate `app` then `dmg` step), then notarize and staple the DMG. |
+| Windows ARM64 | ADR-0012 lists x86_64 and aarch64 for Windows; the workflow builds x86_64 only. | An `aarch64-pc-windows-msvc` build and package, or a new ADR that drops it. |
+| Quiet performance | Idle RSS and idle CPU are raw misses on a loaded machine (`docs/benchmarks-widget.md`). | W5 quiet measurements, then fixes or a decision. |
 
 ## Releasing
 
