@@ -4,6 +4,8 @@ All notable changes to MitiBar. Format: [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-18
+
 ### Added
 
 - Slint window that opens with today's BS date in English and Nepali, in the bundled Noto Sans and Noto Sans Devanagari fonts.
@@ -20,6 +22,8 @@ All notable changes to MitiBar. Format: [Keep a Changelog](https://keepachangelo
 - Settings (W3): language, theme, 12/24-hour clock, seconds, extra IANA time zone with a filter, launch at login and the Windows 11 taskbar text. Changes apply at once and are saved atomically 300 ms after the last one; a corrupt file is moved aside.
 - Launch at login (W3) and single instance (W3): a second launch opens the running instance's popup and exits 0.
 - `--converter` and `--settings` (snapshot feature) open those cards for the W3 review images.
+- App icon (a calendar page with "सं") and `cargo xtask icons` output: PNG sizes 16 to 1024, a multi-image `.ico` and an `.icns`.
+- Packaging and release preparation (W4): `apps/mitibar/Packager.toml`, `cargo xtask package` (NSIS plus a portable zip on Windows, `.app`/`.dmg` on macOS, `.AppImage`/`.deb` on Linux), `release-mitibar.yml` with a draft release, `SHA256SUMS`, a CycloneDX SBOM and build-provenance attestations, and the release runbook.
 
 ### Changed
 
