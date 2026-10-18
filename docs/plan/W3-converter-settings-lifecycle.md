@@ -74,13 +74,13 @@ About section: version, data coverage (`nepdate_patro::coverage()`), NepDate MIT
 Slint attribution (`AboutSlint`, required by the Royalty-free license, ADR-0013), font licenses.
 
 ### W3-05 Autostart (`src/platform/autostart.rs`)
-`auto-launch` 0.6 (`AutoLaunchBuilder::new().set_app_name(..).set_app_path(..).build()?`, then
-`enable()`/`disable()`/`is_enabled()`). App name `mitibar`, path = `std::env::current_exe()`.
-macOS: `MacOSLaunchMode::SMAppService` when running from a `.app` bundle (macOS 13+), and the
-LaunchAgent mode otherwise (e.g. `cargo run`).
-Enable/disable follows `launch_at_login`. At startup, if enabled but the registered path differs
-from `current_exe()` (the app was moved), re-register. Log the result; never fail startup
-because of autostart.
+`auto-launch` 0.6 has no builder; it is `AutoLaunch::new` with a platform mode:
+`WindowsEnableMode::CurrentUser`, `LinuxLaunchMode::XdgAutostart`, or `MacOSLaunchMode::SMAppService`
+inside a `.app` bundle and `LaunchAgent` otherwise (e.g. `cargo run`). Then
+`enable()`/`disable()`/`is_enabled()`. App name `mitibar`, path = `std::env::current_exe()`.
+Enable/disable follows `launch_at_login`. Enabling writes the entry on every start, which also
+refreshes the path when the app was moved; `auto-launch` 0.6 exposes no getter for the registered
+path. Log the result; never fail startup because of autostart.
 
 ### W3-06 Single instance (`src/platform/single_instance.rs`)
 A local socket (`interprocess` 2.x: `ListenerOptions::new().name(n).create_sync()`,

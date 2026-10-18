@@ -7,6 +7,12 @@ en/ne, with `--today` pinning the date and the clock to 12:00. 14 snapshots are 
 `docs/plan/spike-results/w2/`. No UI click, keyboard or screen-reader run was made; those lines
 stay unticked.
 
+W3 agent run 2026-10-18: the converter (W3-02) and settings (W3-04) cards are rendered in
+`docs/plan/spike-results/w3/` at light/dark, en/ne and 1x/2x, with `--today 2081-01-01`; not
+verified. The converter model, settings store and validation, autostart state machine and the
+local-socket message have unit tests. The panels were not typed into or clicked, the app was not
+restarted, no real login item was created, and no second process was launched.
+
 W3-00a agent run 2026-10-18: `src/interaction_tests.rs` drives the popup with Slint's headless
 testing backend. It finds controls by accessible label and invokes their actions: previous,
 next and Today (including the disabled edges), the month and year pickers, the wheel, a day
@@ -44,12 +50,12 @@ still unverified. Tab order, Narrator/VoiceOver/Orca and the real clipboard are 
 - [ ] Sleep/resume: correct within 61 s
 
 ## Settings / Converter / Lifecycle / Privacy (WR-06, 07, 09, 11)
-- [ ] Every setting applies immediately and persists across restart
-- [ ] Corrupt settings file → app starts with defaults, `.broken-*` file created
-- [ ] Converter BS→AD, AD→BS, Devanagari input, range message, days-between
+- [ ] Every setting applies immediately and persists across restart (the store round-trip and the settings-data mapping are unit tests; the panel was rendered, not clicked, and no restart was run)
+- [x] Corrupt settings file → app starts with defaults, `.broken-*` file created (unit test `wr06_ac2_broken_file_is_renamed`; no real `settings.toml` was corrupted)
+- [ ] Converter BS→AD, AD→BS, Devanagari input, range message, days-between (model tests pass; the converter card was rendered, not typed into)
 - [ ] No network connections while running (firewall / Resource Monitor / `lsof -i`)
-- [ ] Second launch opens the first instance's popup; exit code 0
-- [ ] Launch at login works after reboot; disabling removes the entry
+- [ ] Second launch opens the first instance's popup; exit code 0 (a local-socket unit test sends `open` and reads it; two real processes were not started)
+- [ ] Launch at login works after reboot; disabling removes the entry (the fake-login-item tests cover the on/off logic; no real registry value, LaunchAgent or desktop file was created. `reg query HKCU\Software\Microsoft\Windows\CurrentVersion\Run /v mitibar` still reports that the value does not exist)
 - [ ] Quit leaves no process
 
 ## Accessibility (WR-10)
