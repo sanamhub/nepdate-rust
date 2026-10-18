@@ -71,3 +71,9 @@ msgstr "वि.सं. प्रतिलिपि"
 
 msgid "Copy AD"
 msgstr "ई.सं. प्रतिलिपि"
+
+msgid "Close day detail"
+msgstr "दिन विवरण बन्द गर्नुहोस्"
+
+msgid "Event list"
+msgstr "कार्यक्रम सूची"

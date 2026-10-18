@@ -15,7 +15,11 @@
 )]
 
 mod app;
+#[cfg(test)]
+mod interaction_tests;
 mod platform;
+#[cfg(test)]
+pub(crate) mod test_support;
 mod theme;
 mod ui_bridge;
 
@@ -30,6 +34,7 @@ use slint::{ComponentHandle, Weak};
 use crate::app::settings::Settings;
 use crate::app::taskbar::taskbar_lines;
 use crate::app::{APP_NAME, clock, holidays, month_view};
+use crate::platform::clipboard::{Clipboard, SystemClipboard};
 use crate::platform::taskbar::{MenuItem, TaskbarEvent, TaskbarText};
 use crate::platform::tray::{SlintTray, Tray, TrayEvent};
 
@@ -47,8 +52,30 @@ struct AppState {
     hidden_on: NepaliDate,
     /// The open day detail, if any (WR-04); cleared on hide and navigation.
     detail: Option<month_view::DayDetail>,
-    /// The fixed local date for a snapshot (`--today`); `None` in the normal app (W2 review).
+    /// The fixed local date for a snapshot (`--today`) or a test; `None` in the normal app
+    /// (W2 review, W3-00a).
     today_override: Option<NepaliDate>,
+    /// The clipboard port (W3-00a). Tests inject a fake so they never touch the real clipboard.
+    clipboard: Rc<dyn Clipboard>,
+}
+
+impl AppState {
+    fn new(
+        settings: Settings,
+        today: NepaliDate,
+        today_override: Option<NepaliDate>,
+        clipboard: Rc<dyn Clipboard>,
+    ) -> Self {
+        Self {
+            settings,
+            popup_hidden_at: None,
+            viewed_month: (today.year(), today.month()),
+            hidden_on: today,
+            detail: None,
+            today_override,
+            clipboard,
+        }
+    }
 }
 
 /// A tray click within this long after focus loss hid the popup was the click that took the focus
@@ -220,6 +247,10 @@ fn main() -> anyhow::Result<()> {
             Lang::En => String::from("en"),
         };
     }
+    // The `--no-taskbar-text` flag turns WR-12 off for this run (W3 builds the settings UI).
+    if cli.no_taskbar_text {
+        settings.taskbar_text = false;
+    }
     let lang = settings.lang();
 
     // Taskbar snapshot (W1B-04 test tool): render the text and composite it over a taskbar
@@ -252,18 +283,12 @@ fn main() -> anyhow::Result<()> {
     let today_override = cli.today;
     #[cfg(not(feature = "snapshot"))]
     let today_override = None;
-    let state = Rc::new(RefCell::new(AppState {
+    let state = Rc::new(RefCell::new(AppState::new(
         settings,
-        popup_hidden_at: None,
-        viewed_month: (today.year(), today.month()),
-        hidden_on: today,
-        detail: None,
+        today,
         today_override,
-    }));
-    // The `--no-taskbar-text` flag turns WR-12 off for this run (W3 builds the settings UI).
-    if cli.no_taskbar_text {
-        state.borrow_mut().settings.taskbar_text = false;
-    }
+        Rc::new(SystemClipboard),
+    )));
     let popup = PopupWindow::new()?;
     // The popup title (Alt+Tab) and every later window title share this one value (ADR-0017).
     ui_bridge::set_app_name(&popup);
@@ -370,8 +395,8 @@ fn handle_tray_event(
                 let _ = ui_bridge::show_popup_at(&popup, ui_bridge::PopupAnchor::TrayCorner);
             }
         }
-        TrayEvent::CopyBs => copy_bs(&state.borrow().settings),
-        TrayEvent::CopyAd => copy_ad(),
+        TrayEvent::CopyBs => copy_bs(state),
+        TrayEvent::CopyAd => copy_ad(state),
         TrayEvent::Settings => {}
         TrayEvent::Quit => {
             let _ = slint::quit_event_loop();
@@ -415,22 +440,26 @@ fn handle_taskbar_event(
 }
 
 /// Writes today's BS date as `YYYY/MM/DD` to the clipboard (WR-01 AC5).
-fn copy_bs(s: &Settings) {
-    let now = jiff::Zoned::now();
-    if let Ok(bs) = NepaliDate::try_from(now.date()) {
-        let text = bs
-            .short(DateOrder::Ymd, Separator::Slash, true, s.lang())
-            .to_string();
-        let _ = platform::clipboard::set_text(&text);
-    }
+fn copy_bs(state: &Rc<RefCell<AppState>>) {
+    let state = state.borrow();
+    let bs = today_of(&state);
+    let text = bs
+        .short(
+            DateOrder::Ymd,
+            Separator::Slash,
+            true,
+            state.settings.lang(),
+        )
+        .to_string();
+    let _ = state.clipboard.set_text(&text);
 }
 
 /// Writes today's AD date as `YYYY-MM-DD` to the clipboard (WR-01 AC5).
-fn copy_ad() {
-    let now = jiff::Zoned::now();
-    if let Ok(bs) = NepaliDate::try_from(now.date()) {
-        let _ = platform::clipboard::set_text(&bs.to_gregorian().to_string());
-    }
+fn copy_ad(state: &Rc<RefCell<AppState>>) {
+    let state = state.borrow();
+    let _ = state
+        .clipboard
+        .set_text(&today_of(&state).to_gregorian().to_string());
 }
 
 /// Refreshes the popup header, clocks and month grid from the local date and viewed month.
@@ -455,6 +484,11 @@ fn update_popup(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>) {
     let holiday = holidays::next_holiday(today, lang);
     ui_bridge::set_next_holiday(&popup, holiday.as_ref());
     ui_bridge::set_detail(&popup, s.detail.as_ref());
+}
+
+/// The date the app calls today: the pinned date in a snapshot or test, otherwise the local date.
+fn today_of(s: &AppState) -> NepaliDate {
+    s.today_override.unwrap_or_else(today_local)
 }
 
 /// The local BS date, or `MIN` if the system clock is outside 1901..=2199.
@@ -564,7 +598,7 @@ fn wire_popup(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, popup_weak: &W
         let state = state.clone();
         let popup_weak = popup_weak.clone();
         move || {
-            let today = today_local();
+            let today = today_of(&state.borrow());
             set_month(&state, &popup_weak, today.year(), today.month());
         }
     });
@@ -640,7 +674,7 @@ fn copy_detail(state: &Rc<RefCell<AppState>>, bs: bool) {
         return;
     };
     let text = if bs { &detail.copy_bs } else { &detail.copy_ad };
-    let _ = platform::clipboard::set_text(text);
+    let _ = state.clipboard.set_text(text);
 }
 
 /// Refreshes the tray title (macOS), day icon (Windows/Linux) and tooltip.

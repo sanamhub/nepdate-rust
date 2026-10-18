@@ -57,6 +57,10 @@ name = "slint-macros"
 allow = ["LicenseRef-Slint-Royalty-free-2.0"]
 
 [[licenses.exceptions]]
+name = "i-slint-backend-testing"
+allow = ["LicenseRef-Slint-Royalty-free-2.0"]
+
+[[licenses.exceptions]]
 name = "i-slint-backend-linuxkms"
 allow = ["LicenseRef-Slint-Royalty-free-2.0"]
 

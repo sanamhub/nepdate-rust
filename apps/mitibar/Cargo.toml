@@ -35,6 +35,11 @@ dirs = "6"
 # PNG encoding for the snapshot flags, behind the `snapshot` feature (W1B-00, ADR-0016).
 image = { version = "0.25", default-features = false, features = ["png"], optional = true }
 
+[dev-dependencies]
+# Slint's headless testing backend for the W3-00a interaction tests. It is an internal crate:
+# the version must equal `slint` exactly (1.18.1 in Cargo.lock), hence the `=`.
+i-slint-backend-testing = "=1.18.1"
+
 [build-dependencies]
 slint-build = "1.18"
 # Application manifest (ADR-0016): Windows 8 to 11 `supportedOS`, per-monitor-v2 DPI and the

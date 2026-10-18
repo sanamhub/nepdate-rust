@@ -159,6 +159,12 @@ export component PopupWindow inherits Window {
             height: 100%;
             background: #40000000;
             TouchArea {
+                accessible-role: button;
+                accessible-label: @tr("Close day detail");
+                accessible-action-default => {
+                    root.detail-visible = false;
+                    root.detail-closed();
+                }
                 clicked => {
                     root.detail-visible = false;
                     root.detail-closed();

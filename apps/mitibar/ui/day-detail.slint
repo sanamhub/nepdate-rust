@@ -64,6 +64,8 @@ export component DayDetail inherits Rectangle {
         // The list takes the free height of the card. A fixed box made the Nepali card taller
         // than 320 px, which pushed the buttons onto the card's bottom edge.
         if data.events.length > 0: ScrollView {
+            accessible-role: list;
+            accessible-label: @tr("Event list");
             vertical-stretch: 1;
             min-height: 40px;
             horizontal-scrollbar-policy: always-off;
@@ -76,6 +78,7 @@ export component DayDetail inherits Rectangle {
                 alignment: start;
                 for event in data.events: Text {
                     text: event;
+                    accessible-label: event;
                     color: Theme.ink;
                     font-size: 12px;
                     wrap: word-wrap;
@@ -88,8 +91,16 @@ export component DayDetail inherits Rectangle {
 
         HorizontalLayout {
             spacing: 8px;
-            Button { text: @tr("Copy BS"); clicked => { root.copy-bs(); } }
-            Button { text: @tr("Copy AD"); clicked => { root.copy-ad(); } }
+            Button {
+                text: @tr("Copy BS");
+                accessible-label: @tr("Copy BS");
+                clicked => { root.copy-bs(); }
+            }
+            Button {
+                text: @tr("Copy AD");
+                accessible-label: @tr("Copy AD");
+                clicked => { root.copy-ad(); }
+            }
         }
     }
 }

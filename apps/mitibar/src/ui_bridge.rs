@@ -373,33 +373,6 @@ mod tests {
         );
     }
 
-    /// A platform that builds a component without a display, for the tests that read a Slint
-    /// model or global back. The software renderer is a default feature (ADR-0010).
-    struct TestPlatform;
-
-    impl slint::platform::Platform for TestPlatform {
-        fn create_window_adapter(
-            &self,
-        ) -> Result<std::rc::Rc<dyn slint::platform::WindowAdapter>, slint::PlatformError> {
-            Ok(
-                slint::platform::software_renderer::MinimalSoftwareWindow::new(
-                    slint::platform::software_renderer::RepaintBufferType::ReusedBuffer,
-                ),
-            )
-        }
-    }
-
-    /// A process can set one platform, so this single component test is the only test that
-    /// creates one. Slint's platform is also tied to the thread that set it, so splitting the
-    /// assertions over tests would fail under `cargo test` (one process, many threads).
-    static PLATFORM: std::sync::Once = std::sync::Once::new();
-
-    fn init_platform() {
-        PLATFORM.call_once(|| {
-            let _ = slint::platform::set_platform(Box::new(TestPlatform));
-        });
-    }
-
     #[test]
     fn popup_bridge_maps_the_name_month_and_detail() {
         use crate::app::APP_NAME;
@@ -408,7 +381,7 @@ mod tests {
         use slint::Model;
 
         assert_eq!(APP_NAME, "MitiBar");
-        init_platform();
+        crate::test_support::init_platform();
         let popup = crate::PopupWindow::new().expect("popup component");
 
         set_app_name(&popup);

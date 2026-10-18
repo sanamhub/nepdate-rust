@@ -13,9 +13,14 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 fn main() {
+    // Slint element ids and accessible metadata are in debug builds only. The W3-00a tests
+    // find elements by accessible label, which needs the metadata; release keeps its smaller
+    // generated code.
+    let debug_info = std::env::var("PROFILE").as_deref() == Ok("debug");
     let config = slint_build::CompilerConfiguration::new()
         .with_bundled_translations("i18n")
-        .with_default_translation_context(slint_build::DefaultTranslationContext::None);
+        .with_default_translation_context(slint_build::DefaultTranslationContext::None)
+        .with_debug_info(debug_info);
     // app.slint is the single entry; it imports the other windows, so one compile call emits
     // every component (a second call would overwrite the first's generated file).
     slint_build::compile_with_config("ui/app.slint", config).expect("slint compile");
@@ -30,4 +35,5 @@ fn main() {
         embed_manifest(manifest).expect("embed manifest");
     }
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-env-changed=PROFILE");
 }

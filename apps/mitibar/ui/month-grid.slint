@@ -44,6 +44,8 @@ component DayCell inherits Rectangle {
         focus-on-tab-navigation: !data.is-padding;
         accessible-role: button;
         accessible-label: data.accessible-label;
+        // The same action a screen reader invokes (W3-00a).
+        accessible-action-default => { root.clicked(root.index); }
 
         // Enter or Space opens the day detail (WR-10 AC2). Tab order is the repeater order.
         key-pressed(event) => {
