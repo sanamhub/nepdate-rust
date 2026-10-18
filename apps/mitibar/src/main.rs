@@ -286,6 +286,8 @@ fn load_settings(cli: &Cli) -> (Settings, Vec<String>) {
 // timers. Splitting it would scatter the startup order.
 #[allow(clippy::too_many_lines)]
 fn main() -> anyhow::Result<()> {
+    // W4-05: the start of the process, so the "tray ready" line measures cold start.
+    let startup = std::time::Instant::now();
     // Best-effort: the app still runs if the file logger can't start; the panic hook is
     // installed regardless (W1-06).
     let _ = platform::logging::init();
@@ -443,6 +445,8 @@ fn main() -> anyhow::Result<()> {
 
     // First paint of the tray, then the once-per-minute (or per-second) timer (W1-05).
     update_tray(&state, &tray);
+    // W4-05: the benchmark in docs/benchmarks-widget.md reads this line for cold start.
+    log::info!("tray ready in {:?}", startup.elapsed());
 
     // WR-09 AC1: the listener thread sets a flag; this small timer turns it into an open popup
     // on the UI thread. It only runs in the first instance.
