@@ -17,10 +17,11 @@ The workflow creates a **draft**; a human installs the assets and publishes it.
    [data-update runbook](https://github.com/sanamhub/nepdate/blob/main/docs/runbooks/data-update.md)
    first, never by lowering the threshold.
 4. `docs/benchmarks-widget.md` has current numbers from a quiet machine (ADR-0008 §C), and no
-   row is LOADED. **0.1.0 is not releasable yet:** W5 removed the popup-at-start cost and the
-   250 ms poll, but femtovg still measures 112.92 MB working set and 0.825 % of one core against
-   the 40 MB and about-0 targets. The software renderer measured 60.23 MB and 0.335 %. A new ADR
-   for the renderer or the target is needed before 0.1.0.
+   row is LOADED. Idle memory is judged on private bytes (ADR-0018). **0.1.0 is not releasable
+   yet:** W5 removed the popup-at-start cost and the 250 ms poll, but femtovg still measures
+   61.79 MB private and 0.825 % of one core. ADR-0018 moves MitiBar to the software renderer
+   (34.68 MB private, 0.335 %) once W6-01 shows Devanagari renders correctly with it; a quiet
+   5-minute row on that build must then pass.
 5. `cargo xtask ci` passes locally.
 
 ## Build the packages locally (optional)
@@ -143,7 +144,7 @@ These are accepted for 0.x previews and recorded here so a 1.0 release cannot sk
 | Signing credentials | The Windows and macOS signing steps exist and are gated on `WINDOWS_SIGNING_ENABLED` / `MACOS_SIGNING_ENABLED`, but no certificate, Developer ID or notarization secrets are configured here. 0.x ships unsigned and says so. | Provision Azure Artifact Signing and the Apple Developer ID plus notarization secrets, set both variables, and verify a signed asset. |
 | Signing not exercised | `xtask/src/workflow.rs` checks the order (sign `mitibar.exe`, package, sign the NSIS setup; sign `MitiBar.app`, build the DMG, notarize and staple it), but no workflow run has exercised the tools. | A `workflow_dispatch` dry run with both variables on, on all 3 OSes. |
 | Windows ARM64 package | The matrix builds `aarch64-pc-windows-msvc` and names the installer and portable zip arm64, but this was not built or installed locally. | The first workflow run on `windows-latest`; optionally a real ARM64 machine. |
-| Quiet performance | W5: femtovg 112.92 MB working set and 0.825 % of one core against 40 MB and about 0; the software renderer measured 60.23 MB and 0.335 %. The final 5-minute run was LOADED (108.47 MB, 1.455 %). Both renderers miss the RSS target (`docs/benchmarks-widget.md`). | A new ADR for a renderer or target change, then a quiet 5-minute run and 5 cold starts. |
+| Quiet performance | W5: femtovg 61.79 MB private and 0.825 % of one core; the software renderer 34.68 MB private and 0.335 %. The final 5-minute run was LOADED (61.66 MB private, 1.455 %). ADR-0018 judges private bytes and moves to the software renderer, conditional on W6-01 (`docs/benchmarks-widget.md`). | W6: the Devanagari check and renderer switch, then a quiet 5-minute run and 5 cold starts. |
 | macOS and Linux packages | Built only in the release workflow; not built or installed locally on this Windows machine. | The first workflow run and the 3-OS manual checklist. |
 
 ## Releasing

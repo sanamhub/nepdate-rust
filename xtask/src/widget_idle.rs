@@ -24,8 +24,9 @@ use crate::codegen::workspace_root;
 const DEFAULT_MINUTES: u32 = 5;
 const WARMUP: Duration = Duration::from_secs(15);
 const SAMPLE: Duration = Duration::from_secs(5);
-/// ADR-0008 §C: idle RSS at most 40 MB. The harness uses 40 MiB, the unit W4 has reported in.
-const RSS_TARGET_BYTES: u64 = 40 * 1024 * 1024;
+/// ADR-0018 (redefining the ADR-0008 §C idle memory row): private bytes at most 40 MB. The
+/// harness uses 40 MiB, the unit W4 has reported in. The working set is recorded, not judged.
+const PRIVATE_TARGET_BYTES: u64 = 40 * 1024 * 1024;
 /// ADR-0008 §C says "about 0 %". Half a percent of one core is the harness's testable edge.
 const CPU_TARGET_PERCENT: f64 = 0.5;
 
@@ -66,11 +67,13 @@ pub(crate) fn is_loaded(before_mean: f64, during: &[f64]) -> bool {
     before_mean >= 15.0 || during.iter().any(|sample| *sample >= 15.0)
 }
 
-/// ADR-0008 §C idle RSS target, applied to the working set (the Windows RSS).
-pub(crate) fn rss_verdict(working_set_bytes: u64, loaded: bool) -> Verdict {
+/// ADR-0018 idle memory target, applied to private bytes (the process's own commit). The working
+/// set also counts shared pages (GPU driver, DWM, fonts) the process does not own, so it is
+/// reported without a verdict.
+pub(crate) fn memory_verdict(private_bytes: u64, loaded: bool) -> Verdict {
     if loaded {
         Verdict::Loaded
-    } else if working_set_bytes <= RSS_TARGET_BYTES {
+    } else if private_bytes <= PRIVATE_TARGET_BYTES {
         Verdict::Pass
     } else {
         Verdict::Miss
@@ -252,18 +255,18 @@ fn measure(child: &mut std::process::Child, minutes: u32) -> Result<Measurement>
 
 #[cfg(windows)]
 fn print_lines(measurement: &Measurement) {
-    let rss = rss_verdict(measurement.working_set_bytes, measurement.loaded);
+    let memory = memory_verdict(measurement.private_bytes, measurement.loaded);
     let cpu = cpu_verdict(measurement.cpu_percent, measurement.loaded);
     println!(
-        "private bytes: {:.2} MB ({} bytes)",
+        "private bytes: {:.2} MB ({} bytes), target <= 40 MB (ADR-0018): {}",
         mb(measurement.private_bytes),
-        measurement.private_bytes
+        measurement.private_bytes,
+        memory.label()
     );
     println!(
-        "working set (RSS): {:.2} MB ({} bytes), target <= 40 MB: {}",
+        "working set (RSS): {:.2} MB ({} bytes), recorded, not judged (ADR-0018)",
         mb(measurement.working_set_bytes),
-        measurement.working_set_bytes,
-        rss.label()
+        measurement.working_set_bytes
     );
     println!(
         "idle CPU: {:.3} % of one core ({:.3} CPU s in {:.1} s), target about 0 %: {}",
@@ -385,7 +388,7 @@ impl Measurement {
             },
             "loaded": self.loaded,
             "verdicts": {
-                "working_set": rss_verdict(self.working_set_bytes, self.loaded).label(),
+                "private_bytes": memory_verdict(self.private_bytes, self.loaded).label(),
                 "cpu": cpu_verdict(self.cpu_percent, self.loaded).label(),
             },
             "samples": samples,
@@ -630,9 +633,18 @@ mod tests {
 
     #[test]
     fn the_verdict_table_uses_the_adr_targets() {
-        assert_eq!(rss_verdict(RSS_TARGET_BYTES, false), Verdict::Pass);
-        assert_eq!(rss_verdict(RSS_TARGET_BYTES + 1, false), Verdict::Miss);
-        assert_eq!(rss_verdict(RSS_TARGET_BYTES + 1, true), Verdict::Loaded);
+        assert_eq!(memory_verdict(PRIVATE_TARGET_BYTES, false), Verdict::Pass);
+        assert_eq!(
+            memory_verdict(PRIVATE_TARGET_BYTES + 1, false),
+            Verdict::Miss
+        );
+        assert_eq!(
+            memory_verdict(PRIVATE_TARGET_BYTES + 1, true),
+            Verdict::Loaded
+        );
+        // The W5 quiet rows under ADR-0018: software passes, femtovg misses.
+        assert_eq!(memory_verdict(36_364_288, false), Verdict::Pass);
+        assert_eq!(memory_verdict(64_791_552, false), Verdict::Miss);
 
         assert_eq!(cpu_verdict(0.5, false), Verdict::Pass);
         assert_eq!(cpu_verdict(0.5001, false), Verdict::Miss);

@@ -227,3 +227,14 @@ The final W5-06 5-minute run was LOADED (30.6 % before, 34.7 % during): 61.66 MB
 108.47 MB working set, 1.455 % of one core. It gets no verdict, and it does not change the
 conclusion that the femtovg working set misses 40 MB and the software renderer still misses it
 at 60.23 MB. A renderer or target decision needs a new ADR before code.
+
+### W5 review: ADR-0018
+
+ADR-0018 judges idle memory on private bytes (the process's own commit) and records the working
+set without a verdict, because the working set counts shared GPU driver, DWM and font pages. On
+the rows above, the software renderer passes (34.68 MB private, 0.335 % of one core) and
+femtovg misses (61.79 MB, 0.825 %). The same ADR moves MitiBar to the software renderer, on the
+condition that W6-01 shows Devanagari renders correctly with it: every committed image so far
+was rendered with femtovg, and the software-renderer rows above measured memory, not text.
+`cargo xtask widget-idle` now prints the private-bytes verdict and the working set as recorded
+only.
