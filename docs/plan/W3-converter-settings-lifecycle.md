@@ -28,11 +28,12 @@ report, with the reason, and its manual checklist line stays unticked.
 At 1x the English tithi in a cell elides to four letters ("Sapt…"). The fix is the 11 px Latin
 `caption` step of widget-design §3, allowed for Latin by §4, while Devanagari stays at 12 px or
 larger. The line keeps the W2 review's "full width" wording, so the Latin caption uses the
-whole cell instead of the 4 px inset of line 1. No abbreviation is invented: the library has no
-short tithi form. `ui_bridge.rs` passes the size from the language, like `ad-day-size`. The W2
-plan's "tithi 12 px" becomes "full cell width, 11 px Latin, 12 px Devanagari". Before and after
-PNGs go in `docs/plan/spike-results/w3/`. If a name still elides at 11 px, the report says
-which; no smaller font is used.
+whole cell instead of the 4 px inset of line 1. The today cell is the exception: it keeps the
+4 px inset so its 2 px ring stays 2 px clear of the glyphs. No abbreviation is invented: the
+library has no short tithi form. `ui_bridge.rs` passes the size from the language, like
+`ad-day-size`. The W2 plan's "tithi 12 px" becomes "full cell width (4 px inset on today), 11 px
+Latin, 12 px Devanagari". Before and after PNGs go in `docs/plan/spike-results/w3/`. If a name
+still elides at 11 px, the report says which; no smaller font is used.
 
 ### W3-00c Tithi "*" marker
 Some Nepali tithi cells show a trailing `*`. Find whether it comes from the hub data, the

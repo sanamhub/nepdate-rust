@@ -54,10 +54,12 @@ Kartik 2083, light, English, 100 %.
 | `tithi-after-light-en-1x.png` | 11 px tithi across the full cell; "Saptami", "Ashtami", "Navami" | not verified |
 | `tithi-after-light-ne-1x.png` | the 12 px Devanagari caption is unchanged | not verified |
 
-At 11 px and the full 46 px cell, these names fit whole in the image: Saptami, Ashtami, Navami,
-Dashami, Ekadashi, Dwadashi, Purnima, Tritiya, Shashthi. These still elide: Trayodashi,
-Chaturdashi, Pratipadha, Chaturthi, Panchami. No abbreviation was invented and no font below
-11 px Latin or 12 px Devanagari was used.
+At 11 px and the full 46 px cell, these names fit whole in a cell without the today ring:
+Saptami, Ashtami, Navami, Dashami, Ekadashi, Dwadashi, Purnima, Tritiya, Shashthi. These still
+elide: Trayodashi, Chaturdashi, Pratipadha, Chaturthi, Panchami. The today cell keeps a 4 px
+inset so its 2 px ring keeps 2 px clear of the glyphs; that cell shows "Sapta…" instead of
+"Saptami". No abbreviation was invented and no font below 11 px Latin or 12 px Devanagari was
+used.
 
 ## W3-00c: tithi marker
 

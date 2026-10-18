@@ -97,13 +97,13 @@ component DayCell inherits Rectangle {
             vertical-alignment: center;
         }
 
-        // Line 2: the tithi, full cell width (the W2 review's wording), 11 px Latin or 12 px
-        // Devanagari (widget-design §3/§4), elided when long. The full width is what lets the
-        // 11 px Latin caption fit "Saptami" at 1x (W3-00b).
+        // Line 2: the tithi, 11 px Latin or 12 px Devanagari (widget-design §3/§4), elided when
+        // long. The full cell width is what lets the 11 px Latin caption fit "Saptami" at 1x
+        // (W3-00b). Today keeps the 4 px inset so its 2 px ring stays clear of the glyphs.
         Text {
-            x: 0;
+            x: data.is-today ? 4px : 0px;
             y: 24px;
-            width: parent.width;
+            width: parent.width - (data.is-today ? 8px : 0px);
             height: 16px;
             text: data.tithi;
             color: Theme.ink-muted;
