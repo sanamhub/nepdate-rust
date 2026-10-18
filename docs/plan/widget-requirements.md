@@ -50,7 +50,8 @@ Glossary: **BS** = Bikram Sambat (Nepali) date. **AD** = Gregorian date.
   (from `nepdate-patro`) use the holiday colour, which wins on a Saturday.
 - AC4: When patro data exists: tithi shown small under the day; a dot marks days with
   events. Outside `nepdate_patro::coverage()` nothing is shown and nothing errors.
-- AC5: Title: `Ashoj 2083 · Sep/Oct 2026` (ne: `असोज २०८३ · Sep/Oct 2026`).
+- AC5: Title: `Ashoj 2083 · Sep/Oct 2026` (ne: `असोज २०८३ · Sep/Oct २०२६`). AD month names
+  stay Latin; every number follows the language's digits (widget-design §4, W3 review).
 - AC6: Prev/next buttons, a "Today" button, month + year dropdowns (full range
   1901–2199) and mouse wheel over the grid (one notch = one month) all navigate. At the
   range edges the corresponding control is disabled; no crash.
@@ -162,7 +163,8 @@ Windows 11 only (ADR-0016). Elsewhere the tray icon (WR-01) is the only always-v
   Line 1: weekday, ` | `, local time (WR-05 AC2 format). Line 2: BS long date, ` | `, AD date
   as `Oct 15, 2026`. Example (en): `Thursday | 1:50 PM` / `Ashoj 29, 2083 | Oct 15, 2026`.
   With language = ne the weekday, the time digits and the BS date are Nepali
-  (`बिहिवार | १:५० PM` / `असोज २९, २०८३ | Oct 15, 2026`); the AD date stays Latin. The
+  (`बिहिवार | १:५० PM` / `असोज २९, २०८३ | Oct १५, २०२६`); the AD month name stays Latin and
+  its numbers use Devanagari digits (widget-design §4, W3 review). The
   weekday and BS date come from the same local date (WR-05 AC4), formatted by `nepdate`.
 - AC2: Text colour is the `ink` token for the **taskbar** theme (`SystemUsesLightTheme`), not
   the app theme, and changes within 1 s of a system light/dark switch, without restart.

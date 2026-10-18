@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- MitiBar app icon: a calendar page with the Nepali syllable "सं" (sam). The generator in
+       `cargo xtask icons` renders the PNG sizes, the .ico and the .icns from this file. -->
+  <rect width="1024" height="1024" rx="220" fill="#8C1D18"/>
+  <rect x="312" y="118" width="44" height="150" rx="22" fill="#FBF6EE"/>
+  <rect x="668" y="118" width="44" height="150" rx="22" fill="#FBF6EE"/>
+  <rect x="140" y="170" width="744" height="700" rx="72" fill="#FBF6EE"/>
+  <path d="M140 242a72 72 0 0 1 72-72h600a72 72 0 0 1 72 72v96H140z" fill="#B42318"/>
+  <circle cx="244" cy="266" r="18" fill="#FBF6EE"/>
+  <circle cx="780" cy="266" r="18" fill="#FBF6EE"/>
+  <text x="512" y="712" text-anchor="middle" font-family="Noto Sans Devanagari"
+        font-size="330" font-weight="600" fill="#211C17">सं</text>
+</svg>

@@ -17,6 +17,9 @@ struct Package {
     name: &'static str,
     manifest: String,
     changelog: String,
+    /// The cargo-packager config, for `mitibar` only (W4-03). Its version must follow the
+    /// manifest's, or an installer would be named for the wrong release.
+    packager: Option<String>,
 }
 
 impl Package {
@@ -30,7 +33,15 @@ impl Package {
             name,
             manifest: read("Cargo.toml")?,
             changelog: read("CHANGELOG.md")?,
+            packager: None,
         })
+    }
+
+    fn with_packager(mut self, root: &Path) -> Result<Self> {
+        let path = root.join("apps/mitibar/Packager.toml");
+        self.packager =
+            Some(fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?);
+        Ok(self)
     }
 }
 
@@ -42,7 +53,9 @@ fn packages(package: &str) -> Result<Vec<Package>> {
             Package::read(&root, "nepdate", "crates/nepdate")?,
             Package::read(&root, "nepdate-patro", "crates/nepdate-patro")?,
         ]),
-        "mitibar" => Ok(vec![Package::read(&root, "mitibar", "apps/mitibar")?]),
+        "mitibar" => Ok(vec![
+            Package::read(&root, "mitibar", "apps/mitibar")?.with_packager(&root)?,
+        ]),
         other => bail!("unknown package `{other}`: expected nepdate or mitibar"),
     }
 }
@@ -94,6 +107,16 @@ fn check(packages: &[Package], version: &str) -> Vec<String> {
                 "{}: CHANGELOG.md has no `## [{version}]` section",
                 package.name
             ));
+        }
+        if let Some(packager) = &package.packager {
+            match top_level_version(packager) {
+                Some(found) if found == version => {}
+                Some(found) => problems.push(format!(
+                    "{}: Packager.toml has version {found}, expected {version}",
+                    package.name
+                )),
+                None => problems.push(format!("{}: Packager.toml has no version", package.name)),
+            }
         }
     }
     // The patro crate follows the core's minor version (hub ADR-0004 §3, ADR-0002).
@@ -205,6 +228,14 @@ fn package_version(manifest: &str) -> Option<&str> {
     table(manifest, "package").find_map(|line| string_value(line, "version"))
 }
 
+/// `version` at the top of a TOML file, before its first `[table]` (Packager.toml).
+fn top_level_version(toml: &str) -> Option<&str> {
+    toml.lines()
+        .map(str::trim)
+        .take_while(|line| !line.starts_with('['))
+        .find_map(|line| string_value(line, "version"))
+}
+
 /// `version` inside `name = { ... version = "..." ... }` under `[dependencies]`.
 fn dependency_version<'a>(manifest: &'a str, name: &str) -> Option<&'a str> {
     let line = table(manifest, "dependencies").find(|line| {
@@ -263,11 +294,13 @@ mod tests {
                 name: "nepdate",
                 manifest: manifest(core, None),
                 changelog: changelog.into(),
+                packager: None,
             },
             Package {
                 name: "nepdate-patro",
                 manifest: manifest(patro, Some(dep)),
                 changelog: changelog.into(),
+                packager: None,
             },
         ]
     }
@@ -400,10 +433,29 @@ mod tests {
             name: "mitibar",
             manifest: manifest("0.1.0", None),
             changelog: CHANGELOG.into(),
+            packager: Some("version = \"0.1.0\"\n[nsis]\ninstallMode = \"currentUser\"\n".into()),
         }];
         let text = notes("mitibar", &packages, "0.1.0").unwrap_or_default();
         assert!(text.contains("/blob/mitibar-v0.1.0/apps/mitibar/CHANGELOG.md"));
         assert!(text.contains("### Install"));
         assert!(!text.contains("widget-v"));
+    }
+
+    #[test]
+    fn packager_version_must_match_the_manifest() {
+        let packages = |packager: &str| {
+            [Package {
+                name: "mitibar",
+                manifest: manifest("0.1.0", None),
+                changelog: CHANGELOG.into(),
+                packager: Some(packager.into()),
+            }]
+        };
+        assert!(check(&packages("version = \"0.1.0\"\n"), "0.1.0").is_empty());
+        let problems = check(&packages("version = \"0.0.0\"\n"), "0.1.0");
+        assert_eq!(
+            problems,
+            ["mitibar: Packager.toml has version 0.0.0, expected 0.1.0"]
+        );
     }
 }

@@ -2,11 +2,12 @@
 //! converts between the two. W1 adds the popup placement (W1-04); W1B wires `PopupAnchor::Above`
 //! for the taskbar text (W1B-03).
 
-use nepdate::{Lang, Month, NepaliDate};
+use nepdate::{DateOrder, Lang, Month, NepaliDate, Separator};
 use slint::ComponentHandle;
 
 use crate::app::clock::Header;
 use crate::app::converter::ConvertOutcome;
+use crate::app::format;
 use crate::app::holidays::NextHoliday;
 use crate::app::month_view::{Cell, DayDetail, MonthView};
 use crate::app::settings::Settings;
@@ -130,12 +131,13 @@ fn cell_data(cell: &Cell, lang: Lang) -> CellData {
 }
 
 /// The accessible name of a day cell: ISO BS and AD dates, the weekday and the tithi, all data.
-/// The holiday suffix is a `@tr` string added in the markup.
+/// Both dates use the language's digits, like the visible grid. The holiday suffix is a `@tr`
+/// string added in the markup.
 fn cell_label(date: NepaliDate, lang: Lang) -> String {
     let mut label = format!(
         "{} {} {}",
-        date,
-        date.to_gregorian(),
+        date.short(DateOrder::Ymd, Separator::Slash, true, lang),
+        format::ad_short(date.to_gregorian(), lang),
         date.weekday().name(lang)
     );
     if let Some(tithi) = nepdate_patro::info(date).tithi() {
@@ -440,7 +442,7 @@ mod tests {
         );
         assert_eq!(
             cell_label(date, Lang::Ne),
-            "2081/01/01 2024-04-13 शनिवार पञ्चमी"
+            "२०८१/०१/०१ २०२४-०४-१३ शनिवार पञ्चमी"
         );
     }
 

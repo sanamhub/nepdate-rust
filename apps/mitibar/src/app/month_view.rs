@@ -4,6 +4,8 @@
 use nepdate::{DateOrder, GregorianDate, Lang, LongDate, Month, NepaliDate, Separator, Weekday};
 use nepdate_patro as patro;
 
+use crate::app::format;
+
 /// English AD month abbreviations. The AD side of a title stays Latin in both languages
 /// (FORMATTING §1, WR-03 AC5); the BS side follows `lang`.
 const AD_MONTHS: [&str; 12] = [
@@ -106,7 +108,7 @@ pub fn month_view(year: u16, month: Month, today: NepaliDate, lang: Lang) -> Mon
         "{} {} · {}",
         month.name(lang),
         lang.digits(u32::from(year), 1),
-        ad_range(first_ad, last.to_gregorian()),
+        ad_range(first_ad, last.to_gregorian(), lang),
     );
 
     MonthView {
@@ -136,18 +138,21 @@ impl Cell {
     }
 }
 
-/// The AD month range for the title: `Sep 2026`, `Sep/Oct 2026`, or `Dec 2026/Jan 2027`.
-fn ad_range(first: nepdate::GregorianDate, last: nepdate::GregorianDate) -> String {
+/// The AD month range for the title: `Sep 2026`, `Sep/Oct 2026`, or `Dec 2026/Jan 2027`. The
+/// month names stay Latin; the years follow the language's digits (widget-design §4).
+fn ad_range(first: GregorianDate, last: GregorianDate, lang: Lang) -> String {
     let first_name = ad_month_name(first.month());
     let last_name = ad_month_name(last.month());
+    let first_year = lang.digits(u32::try_from(first.year()).unwrap_or(0), 1);
+    let last_year = lang.digits(u32::try_from(last.year()).unwrap_or(0), 1);
     if first.year() == last.year() {
         if first.month() == last.month() {
-            format!("{first_name} {}", first.year())
+            format!("{first_name} {first_year}")
         } else {
-            format!("{first_name}/{last_name} {}", first.year())
+            format!("{first_name}/{last_name} {first_year}")
         }
     } else {
-        format!("{first_name} {}/{last_name} {}", first.year(), last.year())
+        format!("{first_name} {first_year}/{last_name} {last_year}")
     }
 }
 
@@ -242,7 +247,7 @@ pub struct DayDetail {
 #[must_use]
 pub fn day_detail(date: NepaliDate, lang: Lang) -> DayDetail {
     let info = patro::info(date);
-    let ad: jiff::civil::Date = date.into();
+    let ad = date.to_gregorian();
     DayDetail {
         bs_long: date
             .long(
@@ -254,7 +259,7 @@ pub fn day_detail(date: NepaliDate, lang: Lang) -> DayDetail {
                 lang,
             )
             .to_string(),
-        ad_long: ad.strftime("%B %-d, %Y").to_string(),
+        ad_long: format::ad_long(ad, lang),
         weekday: date.weekday().name(lang).to_owned(),
         tithi: info.tithi().map(|t| t.name(lang)),
         is_holiday: info.is_public_holiday(),
@@ -449,7 +454,7 @@ mod tests {
         let en = month_view(2083, Month::Ashoj, date(2083, 7, 1), Lang::En);
         assert_eq!(en.title, "Ashoj 2083 · Sep/Oct 2026");
         let ne = month_view(2083, Month::Ashoj, date(2083, 7, 1), Lang::Ne);
-        assert_eq!(ne.title, "असोज २०८३ · Sep/Oct 2026");
+        assert_eq!(ne.title, "असोज २०८३ · Sep/Oct २०२६");
     }
 
     #[test]
@@ -558,8 +563,9 @@ mod tests {
         assert_eq!(detail.weekday, "शनिवार");
         assert_eq!(detail.tithi, Some("पञ्चमी"));
         assert_eq!(detail.events.first(), Some(&"नयाँ वर्ष"));
-        // The AD long date stays Latin (the design keeps AD dates in Latin).
-        assert_eq!(detail.ad_long, "April 13, 2024");
+        // The AD month name stays Latin (the design keeps AD dates in Latin), but its numbers
+        // follow the language's digit set (widget-design §4).
+        assert_eq!(detail.ad_long, "April १३, २०२४");
     }
 
     #[test]

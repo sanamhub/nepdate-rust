@@ -28,3 +28,11 @@ indexing_slicing = "warn"                      # forces .get() or proven-safe in
 lto = "fat"
 codegen-units = 1
 strip = true
+
+# The desktop app (W4-01, ADR-0012): smaller than `release`, and a panic ends the process
+# instead of unwinding, which removes the unwind tables. The library crates keep the `release`
+# profile above, so their users still get unwinding.
+[profile.release-widget]
+inherits = "release"
+opt-level = "s"
+panic = "abort"

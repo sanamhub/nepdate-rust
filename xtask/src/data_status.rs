@@ -1,5 +1,8 @@
 //! `cargo xtask data-status [--today YYYY-MM-DD]` (L5-01b): when each kind of patro data ends,
-//! and whether a release still has half a year of tithi and holidays left (W4-00 gate).
+//! whether a release still has half a year of holidays left (W4-00 gate), and a warning when the
+//! tithi or events data is shorter than that. Only holidays fail the gate: the hub rule (H1-02)
+//! makes the public-holiday range a release blocker and the other two a warning copied into the
+//! release PR.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -11,8 +14,35 @@ use crate::patro::{Bs, Day, Lengths, read, read_lengths, to_serial};
 /// Tithi or holiday data must reach at least this many days past today.
 const MIN_DAYS_LEFT: i64 = 183;
 
-/// A data kind: its name, whether a day has it, and whether the release gate checks it.
-type Kind = (&'static str, fn(&Day) -> bool, bool);
+/// What a short data range does to the release gate.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Gate {
+    /// A release stops here (public holidays).
+    Fail,
+    /// A release continues with a warning (tithi and events).
+    Warn,
+}
+
+/// One data kind: its name, whether a day has it, and what a short range does.
+type Kind = (&'static str, fn(&Day) -> bool, Gate);
+
+/// The gate decision for a range that ends `days_left` days after today.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Status {
+    Ok,
+    Warning,
+    Failing,
+}
+
+fn status(days_left: i64, gate: Gate) -> Status {
+    if days_left >= MIN_DAYS_LEFT {
+        Status::Ok
+    } else if gate == Gate::Fail {
+        Status::Failing
+    } else {
+        Status::Warning
+    }
+}
 
 pub(crate) fn run(today: Option<&str>) -> Result<()> {
     let today = match today {
@@ -23,13 +53,14 @@ pub(crate) fn run(today: Option<&str>) -> Result<()> {
     let lengths = read_lengths(&root)?;
     let patro = read(&root)?;
     let kinds: [Kind; 3] = [
-        ("tithi", |d| d.tithi.is_some(), true),
-        ("holidays", |d| d.holiday, true),
-        ("events", |d| !d.events.is_empty(), false),
+        ("tithi", |d| d.tithi.is_some(), Gate::Warn),
+        ("holidays", |d| d.holiday, Gate::Fail),
+        ("events", |d| !d.events.is_empty(), Gate::Warn),
     ];
     println!("today (AD): {}", ad(today));
-    let mut short = Vec::new();
-    for (kind, has, gated) in kinds {
+    let mut warnings = Vec::new();
+    let mut failures = Vec::new();
+    for (kind, has, gate) in kinds {
         let mut dates = patro
             .days
             .iter()
@@ -46,14 +77,28 @@ pub(crate) fn run(today: Option<&str>) -> Result<()> {
             ad(ad_days(&lengths, first)?),
             ad(last_ad)
         );
-        if gated && left < MIN_DAYS_LEFT {
-            short.push(format!("{kind} ({left} days)"));
+        match status(left, gate) {
+            Status::Ok => {}
+            Status::Warning => {
+                println!(
+                    "WARNING: {kind} data ends in {left} days, less than {MIN_DAYS_LEFT}; \
+                     refresh it before the release"
+                );
+                warnings.push(format!("{kind} ({left} days)"));
+            }
+            Status::Failing => failures.push(format!("{kind} ({left} days)")),
         }
     }
-    if !short.is_empty() {
+    if !failures.is_empty() {
         bail!(
             "data-status: less than {MIN_DAYS_LEFT} days of data left for {}",
-            short.join(", ")
+            failures.join(", ")
+        );
+    }
+    if !warnings.is_empty() {
+        println!(
+            "data-status: released with warnings for {}; copy the WARNING lines into the PR",
+            warnings.join(", ")
         );
     }
     Ok(())
@@ -116,5 +161,22 @@ mod tests {
         }
         assert!(parse_ad("2026-02-30").is_err());
         assert!(parse_ad("2026-10").is_err());
+    }
+
+    #[test]
+    fn the_gate_is_183_days_and_only_holidays_fail() {
+        assert_eq!(status(184, Gate::Fail), Status::Ok);
+        assert_eq!(status(183, Gate::Fail), Status::Ok);
+        // The negative case: one day short of 183 fails the holiday gate.
+        assert_eq!(status(182, Gate::Fail), Status::Failing);
+        assert_eq!(status(0, Gate::Fail), Status::Failing);
+        assert_eq!(status(-52, Gate::Fail), Status::Failing);
+    }
+
+    #[test]
+    fn a_short_tithi_or_event_range_is_only_a_warning() {
+        assert_eq!(status(183, Gate::Warn), Status::Ok);
+        assert_eq!(status(175, Gate::Warn), Status::Warning);
+        assert_eq!(status(-52, Gate::Warn), Status::Warning);
     }
 }

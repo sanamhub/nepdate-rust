@@ -4,6 +4,8 @@
 
 use nepdate::{DateOrder, Error, Lang, LongDate, NepaliDate, Separator};
 
+use crate::app::format;
+
 /// Which way the converter reads its input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {
@@ -45,10 +47,10 @@ pub fn convert(input: &str, dir: Direction, lang: Lang) -> ConvertOutcome {
     match dir {
         Direction::BsToAd => match NepaliDate::parse_lenient(input) {
             Ok(date) => {
-                let ad: jiff::civil::Date = date.into();
+                let ad = date.to_gregorian();
                 ConvertOutcome::Ok {
-                    short: ad.to_string(),
-                    long: ad.strftime("%B %-d, %Y").to_string(),
+                    short: format::ad_short(ad, lang),
+                    long: format::ad_long(ad, lang),
                 }
             }
             Err(Error::OutOfRange) => ConvertOutcome::Error(range_message(lang).to_owned()),
@@ -193,11 +195,12 @@ fn parse_ad(input: &str) -> Result<(i32, u8, u8), ()> {
 }
 
 /// The range sentence of WR-07 AC3, in the current language. The English text is the exact
-/// requirement; the Nepali digits follow `Lang::digits` and the AD year stays Latin.
+/// requirement; the Nepali text uses Devanagari digits for both the BS and AD years
+/// (widget-design §4).
 fn range_message(lang: Lang) -> &'static str {
     match lang {
         Lang::En => "Supported range: 1901–2199 BS (1844–2143 AD)",
-        Lang::Ne => "समर्थित दायरा: १९०१–२१९९ वि.सं. (1844–2143 ई.सं.)",
+        Lang::Ne => "समर्थित दायरा: १९०१–२१९९ वि.सं. (१८४४–२१४३ ई.सं.)",
     }
 }
 
@@ -283,12 +286,14 @@ mod tests {
                 long: "बैशाख १, २०८१".to_owned()
             }
         );
+        // An AD result is still an AD date: the month name is the library's English one, and
+        // every number in it uses Devanagari digits in Nepali (widget-design §4).
         let outcome = convert("२०८१/०१/०१", Direction::BsToAd, Lang::Ne);
         assert_eq!(
             outcome,
             ConvertOutcome::Ok {
-                short: "2024-04-13".to_owned(),
-                long: "April 13, 2024".to_owned()
+                short: "२०२४-०४-१३".to_owned(),
+                long: "April १३, २०२४".to_owned()
             }
         );
     }
@@ -327,6 +332,11 @@ mod tests {
         assert_eq!(
             convert("2143-12-31", Direction::AdToBs, Lang::En),
             ConvertOutcome::Error(message.to_owned())
+        );
+        // Both ranges use Devanagari digits in Nepali, including the AD years.
+        assert_eq!(
+            convert("1900/12/30", Direction::BsToAd, Lang::Ne),
+            ConvertOutcome::Error("समर्थित दायरा: १९०१–२१९९ वि.सं. (१८४४–२१४३ ई.सं.)".to_owned())
         );
     }
 

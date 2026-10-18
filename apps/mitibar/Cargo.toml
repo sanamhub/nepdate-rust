@@ -1,6 +1,6 @@
 [package]
 name = "mitibar"
-version = "0.0.0"
+version = "0.1.0"
 description = "MitiBar, a tray calendar widget for the nepdate crate"
 edition.workspace = true
 license.workspace = true

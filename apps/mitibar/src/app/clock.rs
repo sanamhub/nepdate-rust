@@ -5,6 +5,7 @@ use std::fmt::Write as _;
 
 use nepdate::{Lang, LongDate, NepaliDate};
 
+use crate::app::format;
 use crate::app::settings::Settings;
 
 /// One clock line for the popup. `zone_city` is `None` for the local line; the UI shows the
@@ -96,7 +97,7 @@ pub fn header(now: &jiff::Zoned, lang: Lang) -> Header {
             )
             .to_string(),
         weekday: bs.weekday().name(lang).to_owned(),
-        ad: bs.to_gregorian().to_string(),
+        ad: format::ad_short(bs.to_gregorian(), lang),
     }
 }
 
@@ -259,6 +260,12 @@ mod tests {
         assert_eq!(h.bs, "Ashoj 8, 2083");
         assert_eq!(h.weekday, "Thursday");
         assert_eq!(h.ad, "2026-09-24");
+        // The AD date follows the language's digit set (widget-design §4); the separator stays
+        // ASCII so the string is still a date.
+        let ne = header(&now, Lang::Ne);
+        assert_eq!(ne.bs, "असोज ८, २०८३");
+        assert_eq!(ne.weekday, "बिहिवार");
+        assert_eq!(ne.ad, "२०२६-०९-२४");
         // The weekday string is the weekday of the BS date, not of a shifted zone.
         assert_eq!(
             h.weekday,

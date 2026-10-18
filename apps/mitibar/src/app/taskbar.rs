@@ -8,6 +8,7 @@
 use nepdate::{LongDate, NepaliDate};
 
 use crate::app::clock;
+use crate::app::format;
 use crate::app::settings::Settings;
 
 /// The two lines drawn inside the taskbar (WR-12 AC1). Empty when the local date is outside the
@@ -19,8 +20,8 @@ pub struct TaskbarLines {
 }
 
 /// Line 1: weekday, ` | `, local time (WR-05 AC2 format). Line 2: BS long date, ` | `, AD date
-/// as `%b %-d, %Y` (the AD part stays Latin in both languages). The weekday and BS date come from
-/// the same local date (WR-05 AC4).
+/// as `%b %-d, %Y` with the language's digits (the AD month name stays Latin). The weekday and
+/// BS date come from the same local date (WR-05 AC4).
 pub fn taskbar_lines(now: &jiff::Zoned, s: &Settings) -> TaskbarLines {
     let lang = s.lang();
     let Ok(bs) = NepaliDate::try_from(now.date()) else {
@@ -42,7 +43,7 @@ pub fn taskbar_lines(now: &jiff::Zoned, s: &Settings) -> TaskbarLines {
                 },
                 lang
             ),
-            now.strftime("%b %-d, %Y"),
+            format::ad_day_month_year(bs.to_gregorian(), lang),
         ),
     }
 }
@@ -178,7 +179,7 @@ mod tests {
         };
         let lines = taskbar_lines(&now, &s);
         assert_eq!(lines.line1, "बिहिवार | १:५० PM");
-        assert_eq!(lines.line2, "असोज २९, २०८३ | Oct 15, 2026");
+        assert_eq!(lines.line2, "असोज २९, २०८३ | Oct १५, २०२६");
     }
 
     #[test]

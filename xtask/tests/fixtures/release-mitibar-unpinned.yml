@@ -1,0 +1,19 @@
+# Negative fixture for xtask/src/workflow.rs. The checkout action uses a moving tag instead of
+# a 40-digit commit, so the static check must reject it. This file is not a workflow: it lives
+# outside .github/workflows/ and is never run.
+name: release-mitibar
+on:
+  push:
+    tags: ["mitibar-v*"]
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        type: boolean
+        default: true
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7

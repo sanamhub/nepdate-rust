@@ -173,6 +173,9 @@ export component PopupWindow inherits Window {
                     }
                     Text {
                         text: @tr("Convert");
+                        // The FocusScope above is the one accessible button; without this the
+                        // Text would expose the same label a second time (W3 review).
+                        accessible-role: none;
                         color: Theme.ink-muted;
                         font-size: 11px;
                         horizontal-alignment: right;

@@ -281,11 +281,7 @@ fn month_names_come_from_the_library() {
 #[test]
 fn converter_converts_typed_input_both_ways() {
     let (popup, _state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
-    // The header entry's own Text also carries the label "Convert"; take the button.
-    ElementHandle::find_by_accessible_label(&popup, "Convert")
-        .find(|found| found.accessible_role() == Some(AccessibleRole::Button))
-        .expect("the Convert button")
-        .invoke_accessible_default_action();
+    element(&popup, "Convert").invoke_accessible_default_action();
     assert!(popup.get_converter_visible());
 
     element(&popup, "Date to convert").set_accessible_value("2081/02/32");
