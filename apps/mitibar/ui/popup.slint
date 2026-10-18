@@ -1,5 +1,6 @@
-// The popup window (WR-02): borderless, always-on-top, fixed 360x440. It shows today's header
-// and the clock lines, hides on Escape and on focus loss (WR-02 AC2).
+// The popup window (WR-02): borderless, always-on-top, fixed 360x520. It shows today's header
+// and the clock lines, hides on Escape and on focus loss (WR-02 AC2). The height grew from 440 in
+// the W2 review: the 44 px day cells and a 6-row month need the extra 80 px (WR-02 AC1).
 import { AppInfo } from "app-info.slint";
 import { DayDetail, DayDetailData } from "day-detail.slint";
 import { MonthGrid, CellData } from "month-grid.slint";
@@ -17,7 +18,7 @@ export component PopupWindow inherits Window {
     no-frame: true;
     always-on-top: true;
     width: 360px;
-    height: 440px;
+    height: 520px;
     background: Theme.surface;
     default-font-family: "Noto Sans";
 
@@ -104,7 +105,7 @@ export component PopupWindow inherits Window {
             spacing: 4px;
 
             // Two lines: the weekday and AD date share one, so a 6-row month still fits the grid
-            // and the WR-03 AC8 holiday line in 440 px (WR-02 AC3 keeps every field).
+            // and the WR-03 AC8 holiday line in 520 px (WR-02 AC3 keeps every field).
             Text { text: root.weekday + " · " + root.ad; color: Theme.ink-muted; font-size: 13px; }
             Text { text: root.bs; color: Theme.ink; font-size: 22px; }
 

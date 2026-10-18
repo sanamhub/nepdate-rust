@@ -41,6 +41,8 @@ first weekday index), `wr03_ac2_ad_month_marker`, `wr03_ac3_saturday_and_holiday
 (generated struct). Weekday header row. The today outline, holiday colour and event dot come from
 properties. Mouse wheel → `callback wheel(delta)`. Prev/next/today buttons. Month
 `ComboBox` + year `SpinBox` (1901–2199).
+The popup is 360×520 (WR-02 AC1; raised from 440 in the W2 review): each cell is 44 px with an AD
+superscript line, a BS numeral line and a tithi line, so a 6-row month and the holiday line fit.
 
 ### W2-03 Day detail (`ui/day-detail.slint`, `src/app/month_view.rs::day_detail`)
 Inline overlay (WR-04 AC1), with Copy BS / Copy AD buttons via `platform::clipboard` (`arboard`).

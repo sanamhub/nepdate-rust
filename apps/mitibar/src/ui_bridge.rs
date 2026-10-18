@@ -270,9 +270,10 @@ fn position_tray_corner(popup: &PopupWindow) {
         )));
 }
 
-/// The popup size and the per-OS corner margins (logical px), WR-02 AC1.
+/// The popup size and the per-OS corner margins (logical px), WR-02 AC1. 520 replaced 440 in the
+/// W2 review to fit the 44 px grid cells and a 6-row month.
 const POPUP_W: f64 = 360.0;
-const POPUP_H: f64 = 440.0;
+const POPUP_H: f64 = 520.0;
 
 /// Top-left position of the popup for the primary monitor, per OS (WR-02 AC1). Wayland ignores
 /// `set_position`, so the Linux value is a hint only.
@@ -326,13 +327,13 @@ mod tests {
         // Anchor fully inside the work area: popup sits directly above it, left-aligned.
         let area = rect(0, 0, 1920, 1080);
         let anchor = rect(1000, 900, 1100, 950);
-        assert_eq!(above_position(anchor, (360, 440), area), (1000, 460));
+        assert_eq!(above_position(anchor, (360, 520), area), (1000, 380));
         // Anchor near the left and top edges: clamped inside.
         let anchor = rect(-50, 100, 50, 150);
-        assert_eq!(above_position(anchor, (360, 440), area), (0, 0));
+        assert_eq!(above_position(anchor, (360, 520), area), (0, 0));
         // Anchor near the right and top edges: clamped to the right.
         let anchor = rect(1900, 500, 1950, 550);
-        assert_eq!(above_position(anchor, (360, 440), area), (1560, 60));
+        assert_eq!(above_position(anchor, (360, 520), area), (1560, 0));
     }
 
     #[test]

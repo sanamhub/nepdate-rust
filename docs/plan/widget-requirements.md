@@ -28,7 +28,7 @@ Glossary: **BS** = Bikram Sambat (Nepali) date. **AD** = Gregorian date.
 
 ## WR-02 Popup window
 
-- AC1: Borderless and non-resizable, with a fixed logical size (default 360×440). The window
+- AC1: Borderless and non-resizable, with a fixed logical size (default 360×520). The window
   title is `MitiBar` (shown in Alt+Tab). It opens at the primary monitor's tray corner (Windows
   bottom-right above the taskbar, macOS top-right below the menu bar, Linux X11 top-right;
   Wayland: compositor placement), fully on-screen, and doesn't show in the Windows taskbar.

@@ -26,7 +26,9 @@ component DayCell inherits Rectangle {
     callback clicked(int);
 
     horizontal-stretch: 1;
-    height: 31px;
+    // Two text lines plus the superscript: the AD line (10 px), the BS numeral (17 px) and the
+    // tithi (13 px). The old 31 px cell let both lines overflow into the next row (W2 review).
+    height: 44px;
     border-radius: 4px;
     border-width: data.is-today ? 2px : 0px;
     border-color: Theme.sindoor;
@@ -52,18 +54,26 @@ component DayCell inherits Rectangle {
             clicked => { root.clicked(root.index); }
         }
 
-        // AD day, small, top-right; the short AD month on the 1st of a new AD month (WR-03 AC2).
+        // AD day and month marker, small, top-right. They sit on their own line above the BS
+        // numeral, so the marker can never cover the numeral (W2 review, WR-03 AC2).
         HorizontalLayout {
-            x: 0;
-            y: 0;
-            width: 100%;
+            x: 3px;
+            y: 2px;
+            width: parent.width - 6px;
+            height: 10px;
             alignment: end;
-            spacing: 2px;
-            Text { text: data.ad-day; color: Theme.ink-muted; font-size: 8px; }
+            spacing: 1px;
+            Text {
+                text: data.ad-day;
+                color: Theme.ink-muted;
+                font-size: 8px;
+                vertical-alignment: center;
+            }
             Text {
                 text: data.ad-month;
                 color: Theme.ink-muted;
                 font-size: 8px;
+                vertical-alignment: center;
                 visible: data.ad-month != "";
             }
         }
@@ -79,33 +89,34 @@ component DayCell inherits Rectangle {
             visible: data.has-events;
         }
 
-        // BS day and tithi, centred in a column so the cell width does the alignment (WR-03 AC2,
-        // AC4). 12 px is the Devanagari minimum (widget-design.md §4), so long tithi names elide
-        // here and the day detail shows the full one.
-        VerticalLayout {
-            x: 0;
-            y: 0;
-            width: 100%;
-            height: 100%;
-            alignment: center;
-            spacing: 0;
-            Text {
-                width: 100%;
-                text: data.bs-day;
-                color: data.is-holiday ? Theme.sindoor : data.is-saturday ? Theme.saturday : Theme.ink;
-                font-size: 14px;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
-            Text {
-                width: 100%;
-                text: data.tithi;
-                color: Theme.ink-muted;
-                font-size: 12px;
-                horizontal-alignment: center;
-                overflow: elide;
-                visible: data.tithi != "";
-            }
+        // BS day on its own line, centred in the cell (WR-03 AC2). The AD superscript above is
+        // a separate line, so this numeral is never crowded.
+        Text {
+            x: 2px;
+            y: 12px;
+            width: parent.width - 4px;
+            height: 17px;
+            text: data.bs-day;
+            color: data.is-holiday ? Theme.sindoor : data.is-saturday ? Theme.saturday : Theme.ink;
+            font-size: 14px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        // Tithi on the third line; 12 px is the Devanagari minimum (widget-design.md §4), so long
+        // names elide here and the day detail shows the full one (WR-03 AC4).
+        Text {
+            x: 2px;
+            y: 29px;
+            width: parent.width - 4px;
+            height: 13px;
+            text: data.tithi;
+            color: Theme.ink-muted;
+            font-size: 12px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+            visible: data.tithi != "";
         }
     }
 }
@@ -206,7 +217,7 @@ export component MonthGrid inherits Rectangle {
                 reject
             }
             GridLayout {
-                spacing: 2px;
+                spacing: 3px;
                 for cell[i] in root.cells: DayCell {
                     data: cell;
                     index: i;
