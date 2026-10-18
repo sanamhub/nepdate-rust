@@ -25,6 +25,9 @@ nepdate = { path = "../../crates/nepdate", features = ["jiff"] }
 nepdate-patro = { path = "../../crates/nepdate-patro" }
 jiff = "0.2"
 anyhow = "1"
+# Settings file (W3-03, ADR-0015): serde derive + TOML.
+serde = { version = "1", features = ["derive"] }
+toml = "1"
 # Clipboard (WR-01 AC5). Already in the tree through Slint's winit backend, so no new crate;
 # text-only, no image feature (ADR-0015).
 arboard = { version = "3", default-features = false, features = ["wayland-data-control"] }
@@ -39,6 +42,8 @@ image = { version = "0.25", default-features = false, features = ["png"], option
 # Slint's headless testing backend for the W3-00a interaction tests. It is an internal crate:
 # the version must equal `slint` exactly (1.18.1 in Cargo.lock), hence the `=`.
 i-slint-backend-testing = "=1.18.1"
+# Temporary directories for the W3-03 settings store tests.
+tempfile = "3"
 
 [build-dependencies]
 slint-build = "1.18"

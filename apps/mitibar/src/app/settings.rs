@@ -2,11 +2,13 @@
 //! the WR-06 defaults; W3 adds serde, file IO and validation.
 
 use nepdate::Lang;
+use serde::{Deserialize, Serialize};
 
-/// Per-user settings (WR-06). Plain struct in W1; the `language` and `theme` values stay strings
-/// so W3's serde deserializes them as written in the file. The four bools are the four bool keys
-/// of WR-06, so the lint is allowed rather than re-shaping the config file.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Per-user settings (WR-06). The `language` and `theme` values stay strings so the TOML file
+/// reads and writes them as written. The four bools are the four bool keys of WR-06, so the lint
+/// is allowed rather than re-shaping the config file.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Settings {
     pub schema: u32,
@@ -26,6 +28,46 @@ impl Settings {
             "ne" => Lang::Ne,
             _ => Lang::En,
         }
+    }
+
+    /// Replaces every invalid value with that key's default and returns the warnings to log
+    /// (WR-06 AC2). A missing key never reaches here: serde's `#[serde(default)]` fills it.
+    /// An unknown IANA zone becomes `Asia/Kathmandu`; an empty zone stays empty, which means
+    /// "no extra clock".
+    pub fn validate(&mut self) -> Vec<String> {
+        let defaults = Settings::default();
+        let mut warnings = Vec::new();
+        if self.schema != defaults.schema {
+            warnings.push(format!(
+                "schema {} is not {}; using {}",
+                self.schema, defaults.schema, defaults.schema
+            ));
+            self.schema = defaults.schema;
+        }
+        if !matches!(self.language.as_str(), "en" | "ne") {
+            warnings.push(format!(
+                "language {:?} is not en or ne; using en",
+                self.language
+            ));
+            self.language = defaults.language;
+        }
+        if !matches!(self.theme.as_str(), "system" | "light" | "dark") {
+            warnings.push(format!(
+                "theme {:?} is not system, light or dark; using system",
+                self.theme
+            ));
+            self.theme = defaults.theme;
+        }
+        if !self.extra_time_zone.is_empty()
+            && jiff::tz::TimeZone::get(&self.extra_time_zone).is_err()
+        {
+            warnings.push(format!(
+                "extra_time_zone {:?} is not an IANA zone; using {}",
+                self.extra_time_zone, defaults.extra_time_zone
+            ));
+            self.extra_time_zone = defaults.extra_time_zone;
+        }
+        warnings
     }
 }
 
@@ -74,6 +116,45 @@ mod tests {
             ..Settings::default()
         };
         assert_eq!(bogus.lang(), Lang::En);
+    }
+
+    #[test]
+    fn wr06_ac2_validate_replaces_invalid_values() {
+        let mut s = Settings {
+            schema: 7,
+            language: "fr".to_owned(),
+            theme: "sepia".to_owned(),
+            extra_time_zone: "Mars/Olympus".to_owned(),
+            ..Settings::default()
+        };
+        let warnings = s.validate();
+        assert_eq!(warnings.len(), 4, "{warnings:?}");
+        assert_eq!(s, Settings::default());
+    }
+
+    #[test]
+    fn wr06_ac2_validate_keeps_valid_values_and_an_empty_zone() {
+        let mut s = Settings {
+            schema: 1,
+            language: "ne".to_owned(),
+            theme: "dark".to_owned(),
+            extra_time_zone: String::new(),
+            ..Settings::default()
+        };
+        assert!(s.validate().is_empty());
+        assert_eq!(s.language, "ne");
+        assert_eq!(s.theme, "dark");
+        assert_eq!(s.extra_time_zone, "");
+    }
+
+    #[test]
+    fn wr06_ac2_serde_defaults_missing_keys_and_ignores_unknown() {
+        let parsed: Settings =
+            toml::from_str("language = \"ne\"\nunknown_key = 42\n").expect("toml");
+        assert_eq!(parsed.language, "ne");
+        assert_eq!(parsed.theme, "system");
+        assert_eq!(parsed.schema, 1);
+        assert!(parsed.launch_at_login);
     }
 
     /// Every `msgstr` in the Nepali translation file must be non-empty, except the header

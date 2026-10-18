@@ -4,7 +4,7 @@
 mod autostart;
 pub mod clipboard;
 pub mod logging;
-mod settings_store;
+pub mod settings_store;
 mod single_instance;
 pub mod taskbar;
 pub mod taskbar_scheme;

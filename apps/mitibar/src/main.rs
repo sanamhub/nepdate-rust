@@ -232,6 +232,21 @@ impl Cli {
     }
 }
 
+/// The settings for this run: the per-user file, or the defaults for a snapshot tool so a
+/// review image neither reads nor writes `settings.toml`.
+fn load_settings(cli: &Cli) -> (Settings, Vec<String>) {
+    #[cfg(feature = "snapshot")]
+    if cli.popup {
+        return (Settings::default(), Vec::new());
+    }
+    #[cfg(all(windows, feature = "snapshot"))]
+    if cli.taskbar_snapshot.is_some() {
+        return (Settings::default(), Vec::new());
+    }
+    let _ = cli;
+    platform::settings_store::load_default()
+}
+
 fn main() -> anyhow::Result<()> {
     // Best-effort: the app still runs if the file logger can't start; the panic hook is
     // installed regardless (W1-06).
@@ -251,7 +266,13 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let mut settings = Settings::default();
+    // WR-06: load the per-user file (or write the defaults), then let the snapshot flags
+    // override language and theme for this run only. A snapshot run uses the defaults and never
+    // touches the user's settings file.
+    let (mut settings, settings_warnings) = load_settings(&cli);
+    for warning in settings_warnings {
+        log::warn!("settings: {warning}");
+    }
     if let Some(lang) = cli.lang {
         settings.language = match lang {
             Lang::Ne => String::from("ne"),
