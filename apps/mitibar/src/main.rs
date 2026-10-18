@@ -31,6 +31,7 @@ use std::rc::Rc;
 use nepdate::{DateOrder, Lang, LongDate, Month, NepaliDate, Separator};
 use slint::{ComponentHandle, Weak};
 
+use crate::app::converter::{self, Direction};
 use crate::app::settings::Settings;
 use crate::app::taskbar::taskbar_lines;
 use crate::app::{APP_NAME, clock, holidays, month_view};
@@ -84,6 +85,8 @@ const REOPEN_GUARD: std::time::Duration = std::time::Duration::from_millis(400);
 
 /// Command-line flags. `theme` and `lang` override the settings, for snapshot determinism.
 #[derive(Debug, Default)]
+// The flags are independent switches; a state machine would obscure the parser.
+#[allow(clippy::struct_excessive_bools)]
 struct Cli {
     font_test: bool,
     popup: bool,
@@ -95,6 +98,9 @@ struct Cli {
     /// A BS date whose day-detail card the snapshot opens (W2 review).
     #[cfg(feature = "snapshot")]
     detail: Option<NepaliDate>,
+    /// Opens the converter overlay in a snapshot (W3-02).
+    #[cfg(feature = "snapshot")]
+    converter: bool,
     theme: Option<ThemeChoice>,
     lang: Option<Lang>,
     no_taskbar_text: bool,
@@ -140,6 +146,8 @@ impl Cli {
                 "--today" => cli.today = Some(parse_bs_date(&mut args, "--today")?),
                 #[cfg(feature = "snapshot")]
                 "--detail" => cli.detail = Some(parse_bs_date(&mut args, "--detail")?),
+                #[cfg(feature = "snapshot")]
+                "--converter" => cli.converter = true,
                 "--theme" => {
                     let value = args
                         .next()
@@ -212,6 +220,9 @@ impl Cli {
             }
             if cli.detail.is_some() && !cli.popup {
                 anyhow::bail!("--detail needs --popup --snapshot");
+            }
+            if cli.converter && !cli.popup {
+                anyhow::bail!("--converter needs --popup --snapshot");
             }
         }
         if cli.font_test && cli.popup {
@@ -368,6 +379,14 @@ fn snapshot_popup(
         state.borrow_mut().detail = Some(month_view::day_detail(detail, lang));
     }
     update_popup(state, &popup.as_weak());
+    if cli.converter {
+        let today = today_of(&state.borrow());
+        ui_bridge::reset_converter(popup, today, lang);
+        popup.set_converter_input("2081/01/01".into());
+        let outcome = converter::convert("2081/01/01", Direction::BsToAd, lang);
+        ui_bridge::set_converter(popup, &outcome);
+        popup.set_converter_visible(true);
+    }
     snapshot(popup, &path)
 }
 
@@ -555,7 +574,11 @@ fn change_month(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>, d
 fn wire_popup(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>) {
     popup.on_hidden({
         let state = state.clone();
+        let popup_weak = popup_weak.clone();
         move || {
+            if let Some(popup) = popup_weak.upgrade() {
+                popup.set_converter_visible(false);
+            }
             let mut state = state.borrow_mut();
             state.popup_hidden_at = Some(std::time::Instant::now());
             state.hidden_on = today_local();
@@ -583,6 +606,8 @@ fn wire_popup(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, popup_weak: &W
         let state = state.clone();
         move || copy_detail(&state, false)
     });
+
+    wire_converter(popup, state, popup_weak);
 
     popup.on_prev_month({
         let state = state.clone();
@@ -638,6 +663,57 @@ fn wire_popup(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, popup_weak: &W
                 return;
             }
             change_month(&state, &popup_weak, if delta > 0 { 1 } else { -1 });
+        }
+    });
+}
+
+/// W3-02: the converter overlay. Opening it closes the day detail, and the Days tab starts with
+/// today on both sides.
+fn wire_converter(
+    popup: &PopupWindow,
+    state: &Rc<RefCell<AppState>>,
+    popup_weak: &Weak<PopupWindow>,
+) {
+    popup.on_converter_opened({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move || {
+            let (today, lang) = {
+                let state = state.borrow();
+                (today_of(&state), state.settings.lang())
+            };
+            state.borrow_mut().detail = None;
+            if let Some(popup) = popup_weak.upgrade() {
+                ui_bridge::set_detail(&popup, None);
+                ui_bridge::reset_converter(&popup, today, lang);
+            }
+        }
+    });
+    popup.on_converter_edited({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move |input, direction| {
+            let lang = state.borrow().settings.lang();
+            let direction = if direction == 0 {
+                Direction::BsToAd
+            } else {
+                Direction::AdToBs
+            };
+            let outcome = converter::convert(input.as_str(), direction, lang);
+            if let Some(popup) = popup_weak.upgrade() {
+                ui_bridge::set_converter(&popup, &outcome);
+            }
+        }
+    });
+    popup.on_converter_days_edited({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move |from, to| {
+            let lang = state.borrow().settings.lang();
+            let outcome = converter::days_between(from.as_str(), to.as_str(), lang);
+            if let Some(popup) = popup_weak.upgrade() {
+                ui_bridge::set_converter(&popup, &outcome);
+            }
         }
     });
 }

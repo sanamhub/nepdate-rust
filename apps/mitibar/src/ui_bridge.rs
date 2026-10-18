@@ -6,10 +6,13 @@ use nepdate::{Lang, Month, NepaliDate};
 use slint::ComponentHandle;
 
 use crate::app::clock::Header;
+use crate::app::converter::ConvertOutcome;
 use crate::app::holidays::NextHoliday;
 use crate::app::month_view::{Cell, DayDetail, MonthView};
 use crate::platform::taskbar::MenuLabels;
-use crate::{AppInfo, CellData, DayDetailData, MenuText, PopupClockLine, PopupWindow};
+use crate::{
+    AppInfo, CellData, ConverterData, DayDetailData, MenuText, PopupClockLine, PopupWindow,
+};
 
 /// Where to open the popup (W1-04).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -172,6 +175,40 @@ pub fn set_detail(popup: &PopupWindow, detail: Option<&DayDetail>) {
         copy_ad: detail.copy_ad.as_str().into(),
     });
     popup.set_detail_visible(true);
+}
+
+/// Fills the converter result area (W3-02). The UI shows the message, or the short and long
+/// forms; an empty outcome clears all three.
+pub fn set_converter(popup: &PopupWindow, outcome: &ConvertOutcome) {
+    let (short, long, error) = match outcome {
+        ConvertOutcome::Empty => (String::new(), String::new(), String::new()),
+        ConvertOutcome::Ok { short, long } => (short.clone(), long.clone(), String::new()),
+        ConvertOutcome::Error(message) => (String::new(), String::new(), message.clone()),
+    };
+    popup.set_converter_data(ConverterData {
+        short: short.as_str().into(),
+        long: long.as_str().into(),
+        error: error.as_str().into(),
+    });
+}
+
+/// Sets the Days tab defaults to today's BS date. A user-typed value is kept.
+pub fn reset_converter(popup: &PopupWindow, today: NepaliDate, lang: Lang) {
+    let today = today
+        .short(
+            nepdate::DateOrder::Ymd,
+            nepdate::Separator::Slash,
+            true,
+            lang,
+        )
+        .to_string();
+    if popup.get_converter_from().is_empty() {
+        popup.set_converter_from(today.as_str().into());
+    }
+    if popup.get_converter_to().is_empty() {
+        popup.set_converter_to(today.as_str().into());
+    }
+    set_converter(popup, &ConvertOutcome::Empty);
 }
 
 /// Maps the `theme` setting of WR-06 onto the `ThemeChoice` of `ui/theme.slint`.

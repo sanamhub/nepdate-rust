@@ -1,0 +1,142 @@
+// The converter (WR-07, W3-02): an inline card inside the popup, opened from the header. The
+// "Convert" tab converts one date; the "Days" tab counts between two BS dates. `app::converter`
+// does the work; `ui_bridge::set_converter` fills `data`.
+
+import { Theme } from "theme.slint";
+import { Button, LineEdit } from "std-widgets.slint";
+
+export struct ConverterData {
+    short: string,
+    long: string,
+    error: string,
+}
+
+export component Converter inherits Rectangle {
+    in-out property <ConverterData> data;
+    in-out property <string> input: "";
+    in-out property <string> from: "";
+    in-out property <string> to: "";
+    /// 0 = Convert, 1 = Days.
+    in-out property <int> tab: 0;
+    /// 0 = BS to AD, 1 = AD to BS.
+    in-out property <int> direction: 0;
+
+    callback edited(string, int);
+    callback days-edited(string, string);
+    callback closed();
+
+    width: 320px;
+    height: 300px;
+    background: Theme.surface-raised;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: Theme.hairline;
+
+    // Swallow clicks on the card so they do not reach the scrim behind it.
+    TouchArea {}
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 8px;
+
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: @tr("Converter");
+                color: Theme.ink;
+                font-size: 16px;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            Button {
+                text: @tr("Close");
+                accessible-label: @tr("Close converter");
+                clicked => { root.closed(); }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 4px;
+            Button {
+                text: @tr("Convert");
+                checkable: true;
+                checked: root.tab == 0;
+                accessible-label: @tr("Convert tab");
+                clicked => { root.tab = 0; }
+            }
+            Button {
+                text: @tr("Days");
+                checkable: true;
+                checked: root.tab == 1;
+                accessible-label: @tr("Days tab");
+                clicked => { root.tab = 1; }
+            }
+        }
+
+        if root.tab == 0: VerticalLayout {
+            spacing: 6px;
+            HorizontalLayout {
+                spacing: 4px;
+                Button {
+                    text: "BS → AD";
+                    checkable: true;
+                    checked: root.direction == 0;
+                    clicked => {
+                        root.direction = 0;
+                        root.edited(root.input, 0);
+                    }
+                }
+                Button {
+                    text: "AD → BS";
+                    checkable: true;
+                    checked: root.direction == 1;
+                    clicked => {
+                        root.direction = 1;
+                        root.edited(root.input, 1);
+                    }
+                }
+            }
+            LineEdit {
+                text <=> root.input;
+                placeholder-text: "2081/01/01 or 2024-04-13";
+                accessible-label: @tr("Date to convert");
+                edited(text) => { root.edited(text, root.direction); }
+            }
+        }
+
+        if root.tab == 1: VerticalLayout {
+            spacing: 6px;
+            LineEdit {
+                text <=> root.from;
+                placeholder-text: @tr("From BS date");
+                accessible-label: @tr("From BS date");
+                edited(text) => { root.days-edited(text, root.to); }
+            }
+            LineEdit {
+                text <=> root.to;
+                placeholder-text: @tr("To BS date");
+                accessible-label: @tr("To BS date");
+                edited(text) => { root.days-edited(root.from, text); }
+            }
+        }
+
+        if root.data.error != "": Text {
+            text: root.data.error;
+            color: Theme.sindoor;
+            font-size: 12px;
+            wrap: word-wrap;
+        }
+        if root.data.error == "" && root.data.short != "": Text {
+            text: root.data.short;
+            color: Theme.ink;
+            font-size: 16px;
+        }
+        if root.data.error == "" && root.data.long != "": Text {
+            text: root.data.long;
+            color: Theme.ink-muted;
+            font-size: 13px;
+            wrap: word-wrap;
+        }
+        Rectangle { vertical-stretch: 1; }
+    }
+}

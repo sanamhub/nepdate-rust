@@ -77,3 +77,33 @@ msgstr "दिन विवरण बन्द गर्नुहोस्"
 
 msgid "Event list"
 msgstr "कार्यक्रम सूची"
+
+msgid "Convert"
+msgstr "रूपान्तरण"
+
+msgid "Converter"
+msgstr "रूपान्तरण"
+
+msgid "Close"
+msgstr "बन्द"
+
+msgid "Close converter"
+msgstr "रूपान्तरण बन्द गर्नुहोस्"
+
+msgid "Convert tab"
+msgstr "रूपान्तरण ट्याब"
+
+msgid "Days"
+msgstr "दिन"
+
+msgid "Days tab"
+msgstr "दिन ट्याब"
+
+msgid "Date to convert"
+msgstr "रूपान्तरण गर्ने मिति"
+
+msgid "From BS date"
+msgstr "सुरु वि.सं. मिति"
+
+msgid "To BS date"
+msgstr "अन्त्य वि.सं. मिति"
