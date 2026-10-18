@@ -94,6 +94,62 @@ impl AppState {
 /// away, so it means "close", not "open again".
 const REOPEN_GUARD: std::time::Duration = std::time::Duration::from_millis(400);
 
+thread_local! {
+    /// The UI-thread action a second launch runs. A thread-local holds the non-`Send` `Rc`, so
+    /// the listener thread can wake the loop with a closure that captures nothing.
+    static OPEN_REQUEST: RefCell<Option<Rc<dyn Fn()>>> = const { RefCell::new(None) };
+}
+
+/// Installs the second-launch handler on the UI thread (W5-02).
+pub(crate) fn install_open_request(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>) {
+    let state = state.clone();
+    let popup_weak = popup_weak.clone();
+    let handler: Rc<dyn Fn()> = Rc::new(move || {
+        let Some(popup) = popup_weak.upgrade() else {
+            return;
+        };
+        prepare_show(&state);
+        update_popup(&state, &popup_weak);
+        let _ = ui_bridge::show_popup_at(&popup, ui_bridge::PopupAnchor::TrayCorner);
+    });
+    OPEN_REQUEST.with(|slot| *slot.borrow_mut() = Some(handler));
+}
+
+/// Runs the installed second-launch handler on the UI thread.
+pub(crate) fn run_open_request() {
+    note_wake();
+    // Clone the handler out before calling it: the handler borrows state and may run a callback
+    // that reaches this thread-local again.
+    let handler = OPEN_REQUEST.with(|slot| slot.borrow().clone());
+    if let Some(handler) = handler {
+        handler();
+    }
+}
+
+/// Called on the listener thread when a second instance connects.
+fn wake_ui() {
+    if let Err(err) = slint::invoke_from_event_loop(run_open_request) {
+        log::warn!("single instance: could not wake the UI thread: {err}");
+    }
+}
+
+/// W5-02's idle-wake counter, present only in a `snapshot` build.
+#[cfg(feature = "snapshot")]
+static IDLE_WAKES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Counts one UI wake: a timer tick or a second-launch open. A no-op in the shipped build.
+fn note_wake() {
+    #[cfg(feature = "snapshot")]
+    {
+        IDLE_WAKES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+#[cfg(feature = "snapshot")]
+fn idle_wakes() -> u64 {
+    IDLE_WAKES.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Command-line flags. `theme` and `lang` override the settings, for snapshot determinism.
 #[derive(Debug, Default)]
 // The flags are independent switches; a state machine would obscure the parser.
@@ -115,9 +171,19 @@ struct Cli {
     /// Opens the settings panel in a snapshot (W3-04).
     #[cfg(feature = "snapshot")]
     settings_panel: bool,
+    /// W5-02: run for this many seconds, then write the UI-wake count and quit. A test tool,
+    /// available only with the `snapshot` feature.
+    #[cfg(feature = "snapshot")]
+    wake_probe: Option<u64>,
+    /// Where `--wake-probe` writes its count.
+    #[cfg(feature = "snapshot")]
+    wake_out: Option<PathBuf>,
     theme: Option<ThemeChoice>,
     lang: Option<Lang>,
     no_taskbar_text: bool,
+    /// W5-01: use this settings file instead of the per-user one, and do not touch the login item
+    /// or the single-instance socket. It is how the idle harness starts a measured process.
+    settings_file: Option<PathBuf>,
     #[cfg(all(windows, feature = "snapshot"))]
     taskbar_snapshot: Option<PathBuf>,
     #[cfg(all(windows, feature = "snapshot"))]
@@ -151,6 +217,12 @@ impl Cli {
                 "--font-test" => cli.font_test = true,
                 "--popup" => cli.popup = true,
                 "--no-taskbar-text" => cli.no_taskbar_text = true,
+                "--settings-file" => {
+                    let path = args
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("--settings-file needs a path"))?;
+                    cli.settings_file = Some(PathBuf::from(path));
+                }
                 #[cfg(feature = "snapshot")]
                 "--snapshot" => {
                     let path = args
@@ -166,6 +238,24 @@ impl Cli {
                 "--converter" => cli.converter = true,
                 #[cfg(feature = "snapshot")]
                 "--settings" => cli.settings_panel = true,
+                #[cfg(feature = "snapshot")]
+                "--wake-probe" => {
+                    let value = args
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("--wake-probe needs a number of seconds"))?;
+                    cli.wake_probe = Some(
+                        value
+                            .parse()
+                            .map_err(|_| anyhow::anyhow!("--wake-probe needs whole seconds"))?,
+                    );
+                }
+                #[cfg(feature = "snapshot")]
+                "--wake-out" => {
+                    let path = args
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("--wake-out needs a path"))?;
+                    cli.wake_out = Some(PathBuf::from(path));
+                }
                 "--theme" => {
                     let value = args
                         .next()
@@ -246,6 +336,20 @@ impl Cli {
                 anyhow::bail!("--settings needs --popup --snapshot");
             }
         }
+        #[cfg(feature = "snapshot")]
+        {
+            if cli.wake_probe.is_some() != cli.wake_out.is_some() {
+                anyhow::bail!("--wake-probe and --wake-out go together");
+            }
+            if cli.wake_probe.is_some() && cli.settings_file.is_none() {
+                anyhow::bail!(
+                    "--wake-probe needs --settings-file, so it never touches the user's file"
+                );
+            }
+            if cli.wake_probe.is_some() && (cli.popup || cli.font_test || cli.snapshot.is_some()) {
+                anyhow::bail!("--wake-probe does not combine with a snapshot window");
+            }
+        }
         if cli.font_test && cli.popup {
             anyhow::bail!("--font-test and --popup are exclusive");
         }
@@ -255,8 +359,13 @@ impl Cli {
     /// Whether this run is a review/snapshot tool, which must not touch the user's login item or
     /// settings file.
     fn is_snapshot_tool(&self) -> bool {
+        // W5-01: a settings-file run is isolated like a snapshot tool: no login item, no socket,
+        // and no read or write of the real settings file unless the flag points at it.
+        if self.settings_file.is_some() {
+            return true;
+        }
         #[cfg(feature = "snapshot")]
-        if self.popup {
+        if self.popup || self.wake_probe.is_some() {
             return true;
         }
         #[cfg(all(windows, feature = "snapshot"))]
@@ -270,6 +379,11 @@ impl Cli {
 /// The settings for this run: the per-user file, or the defaults for a snapshot tool so a
 /// review image neither reads nor writes `settings.toml`.
 fn load_settings(cli: &Cli) -> (Settings, Vec<String>) {
+    // W5-01: the idle harness points at its own file, so the real `%APPDATA%\mitibar` is never
+    // read or written. A missing file is created there, which is also what the harness expects.
+    if let Some(path) = &cli.settings_file {
+        return platform::settings_store::load(path);
+    }
     #[cfg(feature = "snapshot")]
     if cli.popup {
         return (Settings::default(), Vec::new());
@@ -448,31 +562,30 @@ fn main() -> anyhow::Result<()> {
     // W4-05: the benchmark in docs/benchmarks-widget.md reads this line for cold start.
     log::info!("tray ready in {:?}", startup.elapsed());
 
-    // WR-09 AC1: the listener thread sets a flag; this small timer turns it into an open popup
-    // on the UI thread. It only runs in the first instance.
-    let single_timer = slint::Timer::default();
+    // WR-09 AC1: the listener thread wakes the event loop with `invoke_from_event_loop`; the UI
+    // thread then runs the same open path as before. No polling timer remains (W5-02).
     if let Some(listener) = primary {
-        platform::single_instance::start(listener);
-        let state = state.clone();
-        let popup_weak = popup_weak.clone();
-        single_timer.start(
-            slint::TimerMode::Repeated,
-            std::time::Duration::from_millis(250),
-            move || {
-                if !platform::single_instance::take_request() {
-                    return;
-                }
-                let Some(popup) = popup_weak.upgrade() else {
-                    return;
-                };
-                prepare_show(&state);
-                update_popup(&state, &popup_weak);
-                let _ = ui_bridge::show_popup_at(&popup, ui_bridge::PopupAnchor::TrayCorner);
-            },
-        );
+        install_open_request(&state, &popup_weak);
+        platform::single_instance::start(listener, wake_ui);
     }
 
     arm_timer(state.clone(), popup_weak.clone(), tray, taskbar);
+
+    // W5-02: count UI wakes in a headless window, write the count and quit. Snapshot tool only.
+    #[cfg(feature = "snapshot")]
+    if let Some(seconds) = cli.wake_probe {
+        let out = cli
+            .wake_out
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("--wake-probe needs --wake-out"))?;
+        slint::Timer::single_shot(std::time::Duration::from_secs(seconds), move || {
+            let text = format!("seconds={seconds}\nwakes={}\n", idle_wakes());
+            if let Err(err) = std::fs::write(&out, text) {
+                log::warn!("wake probe: could not write {}: {err}", out.display());
+            }
+            let _ = slint::quit_event_loop();
+        });
+    }
 
     slint::run_event_loop()?;
     // A change made in the last 300 ms before Quit is still waiting for the debounce timer.
@@ -1093,6 +1206,7 @@ fn update_tick(
     tray: &Rc<SlintTray>,
     taskbar: &Rc<dyn TaskbarText>,
 ) {
+    note_wake();
     update_tray(state, tray);
     update_popup(state, popup_weak);
     let s = state.borrow();
@@ -1236,4 +1350,24 @@ fn write_snapshot<C: ComponentHandle>(ui: &C, path: &std::path::Path) -> anyhow:
     img.save_with_format(path, image::ImageFormat::Png)?;
     println!("wrote {}", path.display());
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn settings_file_flag_is_parsed_and_isolates_the_run() {
+        let cli = Cli::parse(
+            ["--settings-file", "C:\\temp\\mitibar-settings.toml"]
+                .into_iter()
+                .map(str::to_owned),
+        )
+        .expect("parse");
+        assert_eq!(
+            cli.settings_file.as_deref(),
+            Some(std::path::Path::new("C:\\temp\\mitibar-settings.toml"))
+        );
+        assert!(cli.is_snapshot_tool());
+    }
 }

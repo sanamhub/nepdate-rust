@@ -92,3 +92,57 @@ Findings:
 Follow-up: W5 (`docs/plan/W5-idle-footprint.md`) measures with a harness, removes the 250 ms
 poll, and decides the renderer and popup lifetime with before/after numbers. 0.1.0 is not
 releasable until idle RSS and idle CPU are measured on a quiet machine.
+
+## W5-01 idle harness (2026-10-18)
+
+`cargo xtask widget-idle [--minutes N]` (Windows only; macOS and Linux print `not supported
+here` and exit 0, counted as skipped, never passed) builds `release-widget` and starts it with
+`--settings-file <temp>` and `launch_at_login = false`. The new documented flag makes the run
+use that file instead of `%APPDATA%\mitibar\settings.toml`, skip the login item and skip the
+single-instance socket. After 15 s of warmup the harness samples private bytes, working set,
+process CPU seconds, thread count and the all-CPU load every 5 s, writes
+`docs/benchmarks/widget/<date>/idle.json`, kills the process, removes the temporary settings,
+checks that `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` still has no `mitibar` value,
+and checks that the real settings file is byte-for-byte unchanged.
+
+The load rule is the W5 family rule: a row is `LOADED` when the all-CPU mean before the row, or
+any sample during it, excluding the measured process's own CPU time, is 15 % or more. A loaded
+row is reported and gets no verdict. RSS is the working set against the 40 MB target; CPU is
+judged against "about 0 %" with a testable edge of 0.5 % of one core.
+
+Baseline before W5-03 (1-minute run, 2026-10-18 21:47, the same build as W4):
+
+| Metric | Measured | All-CPU load | Verdict |
+|---|---|---|---|
+| Private bytes | 82.51 MB (86,515,712 bytes) | before 55.3 %, during mean 53.9 % (19.5 to 70.9) | LOADED, no verdict |
+| Working set (RSS) | 131.47 MB (137,859,072 bytes) | same | LOADED, no verdict; raw miss against 40 MB |
+| Idle CPU | 1.392 % of one core (0.844 CPU s in 60.6 s) | same | LOADED, no verdict |
+| Threads | 16 | same | reported |
+
+The four W5-01 unit tests cover the 14.9 % / 15.0 % / single-15 % rule, the RSS and CPU
+verdict table, and the `--minutes` default and zero rejection.
+
+## W5-02 idle wake-ups (2026-10-18)
+
+Before: a repeated 250 ms `slint::Timer` polled the single-instance listener,
+`platform::single_instance::take_request()`, so the UI thread woke four times a second forever.
+After: the listener thread calls `slint::invoke_from_event_loop(run_open_request)` only when a
+second instance writes `open\n`; the closure captures no Slint type and the non-`Send` handler
+lives in a UI thread-local.
+
+Waker audit while idle with seconds hidden:
+
+| Waker | Period | Work while idle |
+|---|---|---|
+| `arm_timer` (`main.rs`) | next minute boundary, single-shot | tray tooltip/icon, hidden popup update, taskbar lines |
+| single-instance listener | blocked on `listener.incoming()` | none until a second launch; then one `invoke_from_event_loop` |
+| settings save timer | 300 ms after a settings change, single-shot | none unless the user changed a setting |
+| taskbar controller (`controller.rs`) | no `SetTimer` | `WM_SETTINGCHANGE`, `TaskbarCreated`, mouse and paint messages only |
+| taskbar UIA worker (`uia.rs`) | blocked on `GetMessageW` | none until an Explorer event |
+| tray (`tray.rs`) | no timer | OS tray events only |
+| snapshot/probe timers | `snapshot` feature only | none in the release build |
+
+The `--wake-probe 120` run (snapshot build, popup never opened, seconds hidden) wrote
+`seconds=120` and `wakes=2`: two minute ticks and no second-launch wake, against the AC of at
+most 2. The second-launch interaction test hides the popup, installs the handler and runs the
+wake path; it shows the popup again. The probe left no process and no `mitibar` Run value.

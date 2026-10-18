@@ -1,7 +1,8 @@
 //! Single instance (WR-09 AC1, W3-06). The first instance listens on a local socket. A second
 //! instance connects, sends `open\n` and exits 0. The listener runs on a background thread and
-//! sets a flag that a small UI timer turns into "open the popup", because a Slint component is
-//! not `Send`.
+//! wakes the UI thread with `slint::invoke_from_event_loop`, because a Slint component is not
+//! `Send`. W5-02 replaced the 250 ms polling timer with this wake, so an idle app has no
+//! four-times-a-second UI wake.
 //!
 //! The name is `mitibar-<username-hash>.sock` in the OS namespace when available (Windows,
 //! Linux). macOS has no namespace, so the socket is a file in the data-local directory. A stale
@@ -9,7 +10,6 @@
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use interprocess::local_socket::prelude::*;
 use interprocess::local_socket::{
@@ -40,8 +40,10 @@ pub fn claim() -> anyhow::Result<Claim> {
     claim_at(&address)
 }
 
-/// Starts the listener thread. Each `open\n` sets the flag read by [`take_request`].
-pub fn start(listener: Listener) {
+/// Starts the listener thread. Each `open\n` calls `wake`, which the composition root turns into
+/// `slint::invoke_from_event_loop(run_open_request)`. The callback must be `Send`; it captures no
+/// Slint type, only a function pointer or a sendable channel.
+pub fn start(listener: Listener, wake: impl Fn() + Send + 'static) {
     std::thread::spawn(move || {
         for connection in listener.incoming() {
             let Ok(stream) = connection else {
@@ -51,19 +53,11 @@ pub fn start(listener: Listener) {
             let mut line = String::new();
             let mut reader = BufReader::new(stream.take(MESSAGE_LIMIT));
             if reader.read_line(&mut line).is_ok() && line.trim() == "open" {
-                OPEN_REQUESTED.store(true, Ordering::SeqCst);
+                wake();
             }
         }
     });
 }
-
-/// Takes the pending "open" request, if any.
-#[must_use]
-pub fn take_request() -> bool {
-    OPEN_REQUESTED.swap(false, Ordering::SeqCst)
-}
-
-static OPEN_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 /// The most bytes read from one connection.
 const MESSAGE_LIMIT: u64 = 16;
@@ -179,20 +173,15 @@ mod tests {
         let Claim::Primary(listener) = claim_at(&address).expect("primary") else {
             panic!("first claim must be primary");
         };
+        let (wake, woken) = std::sync::mpsc::channel();
+        start(listener, move || {
+            let _ = wake.send(());
+        });
         signal_at(&address).expect("signal");
-        let mut line = String::new();
-        {
-            let mut incoming = listener.incoming();
-            let stream = incoming.next().expect("one connection").expect("stream");
-            BufReader::new(stream).read_line(&mut line).expect("read");
-        }
-        assert_eq!(line, "open\n");
-        drop(listener);
-        // The tempdir (Unix socket file) and the named pipe (Windows) both go away here.
-        if let Address::File(path) = &address {
-            let _ = std::fs::remove_file(path);
-            assert!(!path.exists(), "test socket cleaned up");
-        }
+        woken
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("the listener woke the UI callback");
+        // The thread owns the listener for the rest of this process; the test process ends here.
     }
 
     #[cfg(not(windows))]

@@ -324,3 +324,16 @@ fn a_settings_switch_applies_at_once_and_saves_after_300_ms() {
     assert!(warnings.is_empty(), "{warnings:?}");
     assert!(saved.clock_24h, "saved after 300 ms");
 }
+
+#[test]
+fn wr09_ac1_second_launch_opens_the_first_instance_popup() {
+    let (popup, state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+    popup.hide().expect("hide");
+    assert!(!popup.window().is_visible());
+    crate::install_open_request(&state, &popup.as_weak());
+    crate::run_open_request();
+    assert!(
+        popup.window().is_visible(),
+        "the second-launch wake shows the popup"
+    );
+}

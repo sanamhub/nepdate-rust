@@ -17,5 +17,16 @@ yaml-rust2 = { version = "0.13", default-features = false }
 resvg = { version = "0.48", default-features = false, features = ["text"] }
 fontdb = "0.24"
 
+# W5-01: process memory, CPU time and thread count for the idle harness. Windows-only and
+# xtask-only, the same `windows` family the app uses (ADR-0016); it never reaches a shipped
+# binary.
+[target."cfg(windows)".dependencies]
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_ProcessStatus",
+    "Win32_System_Threading",
+] }
+
 [lints]
 workspace = true

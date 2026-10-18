@@ -14,6 +14,7 @@ mod icons;
 mod package;
 mod patro;
 mod release;
+mod widget_idle;
 #[cfg(test)]
 mod workflow;
 
@@ -40,11 +41,14 @@ fn main() -> ExitCode {
         ["package"] => package::run(),
         ["release-check", package, version] => release::run_check(package, version),
         ["changelog", package, version] => release::run_changelog(package, version),
+        ["widget-idle"] => widget_idle::run(None),
+        ["widget-idle", "--minutes", minutes] => widget_idle::run(Some(minutes)),
         _ => {
             eprintln!(
                 "usage: cargo xtask <ci | coverage | bench | codegen [--check] | catalog-check <phase> [--list] | \
                  data-status [--today YYYY-MM-DD] | check-core-has-no-patro | icons [--check] | \
-                 package | release-check <package> <version> | changelog <package> <version>>"
+                 package | release-check <package> <version> | changelog <package> <version> | \
+                 widget-idle [--minutes N]>"
             );
             return ExitCode::from(2);
         }
