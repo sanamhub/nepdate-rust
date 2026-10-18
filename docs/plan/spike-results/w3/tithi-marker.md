@@ -26,4 +26,6 @@ file in this repository or in the C# source defines it. Because neither the spec
 marker, the widget keeps the name exactly as the library returns it. Removing it would hide
 information and invent a rule the data does not state.
 
-Action: report to the hub (the `shared/` copy is read-only here). The widget changes nothing.
+Action: reported to the hub (the `shared/` copy is read-only here). The hub answered as U-09:
+`shared/spec/PATRO.md` now says starred tithi names (`*` / `(K)`) are shown unchanged. The
+widget already does that and has no special case. Nothing changed in the app code.

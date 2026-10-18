@@ -21,10 +21,11 @@ The agent cannot judge the images, so every verdict is **not verified**: the rev
 | `converter-dark-ne-1x.png` | dark | ne | 1x | not verified |
 | `converter-dark-ne-2x.png` | dark | ne | 2x | not verified |
 
-The card is 320×300, centered over a scrim. The sample input is 2081/01/01 and the result is
-2024-04-13 / April 13, 2024. The "Convert" tab holds the BS → AD and AD → BS buttons, one input
-and the result; the "Days" tab has the from/to inputs and starts with today on both sides. The
-cards were not typed into; the converter logic is covered by `app::converter` tests.
+The card is 320×300, centered over a scrim. The sample input is 2081/01/01 and the English
+result is 2024-04-13 / April 13, 2024; the Nepali images show the same numbers in Devanagari
+(`२०२४-०४-१३` / `April १३, २०२४`). The "Convert" tab holds the BS → AD and AD → BS buttons, one
+input and the result; the "Days" tab has the from/to inputs and starts with today on both sides.
+The cards were not typed into; the converter logic is covered by `app::converter` tests.
 
 ## Settings (W3-04)
 
