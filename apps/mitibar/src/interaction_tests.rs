@@ -11,7 +11,7 @@ use slint::{ComponentHandle, Model};
 
 use crate::app::settings::Settings;
 use crate::platform::clipboard::Clipboard;
-use crate::{AppState, PopupWindow, update_popup, wire_popup};
+use crate::{AppState, PopupWindow, update_popup, wire_popup, wire_settings};
 
 /// Records every clipboard write, so a test can assert the exact string.
 #[derive(Default)]
@@ -276,4 +276,55 @@ fn month_names_come_from_the_library() {
     assert_eq!(months.row_count(), 12);
     assert_eq!(months.row_data(0).expect("Baishakh").as_str(), "Baishakh");
     assert_eq!(Month::Baishakh.name(Lang::En), "Baishakh");
+}
+
+#[test]
+fn converter_converts_typed_input_both_ways() {
+    let (popup, _state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+    // The header entry's own Text also carries the label "Convert"; take the button.
+    ElementHandle::find_by_accessible_label(&popup, "Convert")
+        .find(|found| found.accessible_role() == Some(AccessibleRole::Button))
+        .expect("the Convert button")
+        .invoke_accessible_default_action();
+    assert!(popup.get_converter_visible());
+
+    element(&popup, "Date to convert").set_accessible_value("2081/02/32");
+    let data = popup.get_converter_data();
+    assert_eq!(data.short.as_str(), "2024-06-14");
+    assert_eq!(data.error.as_str(), "");
+
+    element(&popup, "Date to convert").set_accessible_value("2081/02/33");
+    assert_eq!(popup.get_converter_data().error.as_str(), "Invalid date");
+
+    click(&popup, "AD → BS");
+    element(&popup, "Date to convert").set_accessible_value("2024-04-13");
+    assert_eq!(popup.get_converter_data().short.as_str(), "2081/01/01");
+
+    click(&popup, "Days tab");
+    element(&popup, "From BS date").set_accessible_value("2081/01/01");
+    element(&popup, "To BS date").set_accessible_value("2081/02/01");
+    assert_eq!(popup.get_converter_data().short.as_str(), "31 days");
+}
+
+#[test]
+fn a_settings_switch_applies_at_once_and_saves_after_300_ms() {
+    let (popup, state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("settings.toml");
+    state.borrow_mut().settings_path = Some(path.clone());
+    let save_timer = Rc::new(slint::Timer::default());
+    wire_settings(&popup, &state, &popup.as_weak(), &save_timer);
+    crate::refresh_settings(&popup, &state);
+    popup.set_settings_visible(true);
+    assert!(!state.borrow().settings.clock_24h);
+
+    click(&popup, "24-hour clock");
+    assert!(state.borrow().settings.clock_24h, "applied at once");
+    assert!(!path.exists(), "not saved before the debounce");
+
+    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(350));
+    slint::platform::update_timers_and_animations();
+    let (saved, warnings) = crate::platform::settings_store::load(&path);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert!(saved.clock_24h, "saved after 300 ms");
 }

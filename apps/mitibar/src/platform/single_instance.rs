@@ -7,9 +7,7 @@
 //! Linux). macOS has no namespace, so the socket is a file in the data-local directory. A stale
 //! file is removed and the listener retried.
 
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -49,8 +47,10 @@ pub fn start(listener: Listener) {
             let Ok(stream) = connection else {
                 break;
             };
+            // `open` plus a newline is 5 bytes; a longer message is not ours and is not buffered.
             let mut line = String::new();
-            if BufReader::new(stream).read_line(&mut line).is_ok() && line.trim() == "open" {
+            let mut reader = BufReader::new(stream.take(MESSAGE_LIMIT));
+            if reader.read_line(&mut line).is_ok() && line.trim() == "open" {
                 OPEN_REQUESTED.store(true, Ordering::SeqCst);
             }
         }
@@ -64,6 +64,9 @@ pub fn take_request() -> bool {
 }
 
 static OPEN_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+/// The most bytes read from one connection.
+const MESSAGE_LIMIT: u64 = 16;
 
 fn claim_at(address: &Address) -> anyhow::Result<Claim> {
     if let Ok(listener) = create(address) {
@@ -93,9 +96,16 @@ fn user_hash() -> u64 {
     let user = std::env::var("USERNAME")
         .or_else(|_| std::env::var("USER"))
         .unwrap_or_default();
-    let mut hasher = DefaultHasher::new();
-    user.hash(&mut hasher);
-    hasher.finish()
+    fnv1a(user.as_bytes())
+}
+
+/// 64-bit FNV-1a. The socket name must be the same in every build of the app, so an upgraded
+/// binary still finds the running one; `DefaultHasher` makes no such promise across Rust
+/// releases.
+fn fnv1a(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &byte| {
+        (hash ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3)
+    })
 }
 
 fn create(address: &Address) -> anyhow::Result<Listener> {
@@ -153,6 +163,14 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = dir.path().join(format!("mitibar-test-{tag}.sock"));
         (Address::File(path), Some(dir))
+    }
+
+    #[test]
+    fn socket_name_hash_is_fixed_across_builds() {
+        // Published FNV-1a 64 test vectors.
+        assert_eq!(fnv1a(b""), 0xcbf2_9ce4_8422_2325);
+        assert_eq!(fnv1a(b"a"), 0xaf63_dc4c_8601_ec8c);
+        assert_eq!(fnv1a(b"foobar"), 0x8594_4171_f739_67e8);
     }
 
     #[test]

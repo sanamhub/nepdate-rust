@@ -4,6 +4,7 @@
 //! renamed over the target (WR-06 AC3, learn/11 §2).
 
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -25,19 +26,6 @@ pub fn load_default() -> (Settings, Vec<String>) {
         );
     };
     load(&path)
-}
-
-/// Saves the per-user settings, or does nothing when there is no config directory. The settings
-/// UI wires this in W3-04.
-///
-/// # Errors
-///
-/// Returns the IO or TOML error when the file cannot be written.
-#[allow(dead_code)]
-pub fn save_default(settings: &Settings) -> anyhow::Result<()> {
-    let path =
-        default_path().ok_or_else(|| anyhow::anyhow!("no config directory for settings.toml"))?;
-    save(&path, settings)
 }
 
 /// Loads `path`. A missing file is created with the defaults. A parse failure renames the file
@@ -80,7 +68,9 @@ pub fn load(path: &Path) -> (Settings, Vec<String>) {
     }
 }
 
-/// Writes `settings` atomically: the same folder's `settings.toml.tmp`, then a rename.
+/// Writes `settings` atomically: the same folder's `settings.toml.tmp`, flushed to disk, then a
+/// rename over the target (`MoveFileExW` with replace on Windows). Without the flush, a power
+/// loss after the rename can leave an empty file on some file systems.
 ///
 /// # Errors
 ///
@@ -91,7 +81,11 @@ pub fn save(path: &Path, settings: &Settings) -> anyhow::Result<()> {
     }
     let text = toml::to_string_pretty(settings)?;
     let temp = path.with_extension("toml.tmp");
-    fs::write(&temp, text)?;
+    {
+        let mut file = fs::File::create(&temp)?;
+        file.write_all(text.as_bytes())?;
+        file.sync_all()?;
+    }
     fs::rename(&temp, path)?;
     Ok(())
 }
@@ -136,6 +130,19 @@ mod tests {
             !path.with_extension("toml.tmp").exists(),
             "temp file removed"
         );
+    }
+
+    #[test]
+    fn wr06_ac3_save_replaces_an_existing_file() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("settings.toml");
+        save(&path, &Settings::default()).expect("first save");
+        let dark = Settings {
+            theme: "dark".to_owned(),
+            ..Settings::default()
+        };
+        save(&path, &dark).expect("save over the existing file");
+        assert_eq!(load(&path).0.theme, "dark");
     }
 
     #[test]

@@ -340,13 +340,25 @@ mod tests {
             convert("2024-04-31", Direction::AdToBs, Lang::En),
             ConvertOutcome::Error("Invalid date".to_owned())
         );
-        // `parse_lenient` spills an impossible BS day into the next month (the library and C#
-        // behaviour); W3-01 follows the plan and does not add a second validator.
+        // Jestha 2081 has 32 days, so 2081/02/32 is a real date (Asar 1 is 2024-06-15). Day 33
+        // does not exist and `parse_lenient` rejects it through `NepaliDate::new`; it never
+        // rolls over into the next month.
         assert_eq!(
             convert("2081/02/32", Direction::BsToAd, Lang::En),
             ConvertOutcome::Ok {
                 short: "2024-06-14".to_owned(),
                 long: "June 14, 2024".to_owned()
+            }
+        );
+        assert_eq!(
+            convert("2081/02/33", Direction::BsToAd, Lang::En),
+            ConvertOutcome::Error("Invalid date".to_owned())
+        );
+        assert_eq!(
+            convert("2081/03/01", Direction::BsToAd, Lang::En),
+            ConvertOutcome::Ok {
+                short: "2024-06-15".to_owned(),
+                long: "June 15, 2024".to_owned()
             }
         );
     }

@@ -63,6 +63,9 @@ struct AppState {
     /// The live tray and taskbar text, so a settings change can reach them (W3-04).
     tray: Option<Rc<SlintTray>>,
     taskbar: Option<Rc<dyn TaskbarText>>,
+    /// Where the settings panel saves (W3-04): the per-user file in the app, a temporary file in
+    /// a test, `None` in a snapshot run or without a config directory.
+    settings_path: Option<PathBuf>,
 }
 
 impl AppState {
@@ -83,6 +86,7 @@ impl AppState {
             zones: Vec::new(),
             tray: None,
             taskbar: None,
+            settings_path: None,
         }
     }
 }
@@ -304,11 +308,13 @@ fn main() -> anyhow::Result<()> {
     // WR-09 AC1: a second launch signals this one and exits 0 before touching settings, the
     // login item or the UI. A snapshot run never claims the socket, so a review image can be
     // rendered while the app is open.
+    // If the socket can't be created at all, the app still starts, without the guard.
     let mut primary = None;
     if !cli.is_snapshot_tool() {
-        match platform::single_instance::claim()? {
-            platform::single_instance::Claim::Secondary => return Ok(()),
-            platform::single_instance::Claim::Primary(listener) => primary = Some(listener),
+        match platform::single_instance::claim() {
+            Ok(platform::single_instance::Claim::Secondary) => return Ok(()),
+            Ok(platform::single_instance::Claim::Primary(listener)) => primary = Some(listener),
+            Err(err) => log::warn!("single instance: {err}; running without the guard"),
         }
     }
 
@@ -372,6 +378,9 @@ fn main() -> anyhow::Result<()> {
         Rc::new(SystemClipboard),
     )));
     state.borrow_mut().zones = ui_bridge::all_time_zones();
+    if !cli.is_snapshot_tool() {
+        state.borrow_mut().settings_path = platform::settings_store::default_path();
+    }
     let popup = PopupWindow::new()?;
     // The popup title (Alt+Tab) and every later window title share this one value (ADR-0017).
     ui_bridge::set_app_name(&popup);
@@ -463,6 +472,10 @@ fn main() -> anyhow::Result<()> {
     arm_timer(state.clone(), popup_weak.clone(), tray, taskbar);
 
     slint::run_event_loop()?;
+    // A change made in the last 300 ms before Quit is still waiting for the debounce timer.
+    if save_timer.running() {
+        save_settings(&state);
+    }
     Ok(())
 }
 
@@ -968,13 +981,22 @@ fn schedule_save(timer: &Rc<slint::Timer>, state: &Rc<RefCell<AppState>>) {
     timer.start(
         slint::TimerMode::SingleShot,
         std::time::Duration::from_millis(300),
-        move || {
-            let settings = state.borrow().settings.clone();
-            if let Err(err) = platform::settings_store::save_default(&settings) {
-                log::warn!("settings: could not save: {err}");
-            }
-        },
+        move || save_settings(&state),
     );
+}
+
+/// Writes the current settings to `AppState::settings_path`, if there is one.
+fn save_settings(state: &Rc<RefCell<AppState>>) {
+    let (settings, path) = {
+        let s = state.borrow();
+        (s.settings.clone(), s.settings_path.clone())
+    };
+    let Some(path) = path else {
+        return;
+    };
+    if let Err(err) = platform::settings_store::save(&path, &settings) {
+        log::warn!("settings: could not save: {err}");
+    }
 }
 
 /// Opens the settings panel, showing the popup first if it was hidden.

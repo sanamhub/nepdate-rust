@@ -28,8 +28,6 @@ anyhow = "1"
 # Settings file (W3-03, ADR-0015): serde derive + TOML.
 serde = { version = "1", features = ["derive"] }
 toml = "1"
-# Per-user launch at login (W3-05, ADR-0015).
-auto-launch = "0.6"
 # Single instance over a local socket (W3-06, ADR-0015).
 interprocess = "2"
 # Clipboard (WR-01 AC5). Already in the tree through Slint's winit backend, so no new crate;
@@ -57,6 +55,11 @@ embed-manifest = "1.5"
 
 [lints]
 workspace = true
+
+# Per-user launch at login on macOS and Linux (W3-05, ADR-0015). Windows writes its `Run` value
+# with `windows-registry` instead (W3 review: quoting and Task Manager).
+[target."cfg(not(windows))".dependencies]
+auto-launch = "0.6"
 
 [target."cfg(windows)".dependencies]
 windows-registry = "0.6.1"

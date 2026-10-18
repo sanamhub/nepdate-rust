@@ -1,6 +1,6 @@
-//! Per-user launch at login (WR-09 AC2, W3-05). `auto-launch` 0.6 registers the current
-//! executable with the OS: the `HKCU\...\Run` value `mitibar` on Windows, a `LaunchAgent` or
-//! `SMAppService` on macOS, an `XDG` autostart file on Linux. No admin rights.
+//! Per-user launch at login (WR-09 AC2, W3-05). Windows writes the quoted executable path to
+//! the `HKCU\...\Run` value `mitibar` itself; `auto-launch` 0.6 registers a `LaunchAgent` or
+//! `SMAppService` on macOS and an `XDG` autostart file on Linux. No admin rights.
 //!
 //! The tests use a fake `LoginItem`; they never create a registry value, `LaunchAgent` or desktop
 //! file. The real registration is behind the same trait.
@@ -64,18 +64,71 @@ pub fn apply(enabled: bool) {
 }
 
 /// The platform login item for `exe`.
+///
+/// Windows writes the `HKCU` `Run` value itself instead of using `auto-launch`, which writes the
+/// path unquoted (a path with spaces is then an unquoted-path entry, CWE-428) and also sets the
+/// Task Manager `StartupApproved` value on every enable, which would undo a user's "Disable" in
+/// Task Manager at each start.
 #[cfg(target_os = "windows")]
 fn platform_item(exe: &Path) -> Box<dyn LoginItem> {
-    use auto_launch::{AutoLaunch, WindowsEnableMode};
+    Box::new(RunKeyItem {
+        command: run_command(exe),
+    })
+}
 
-    let path = exe.to_string_lossy();
-    let item = AutoLaunch::new(
-        APP_NAME,
-        path.as_ref(),
-        WindowsEnableMode::CurrentUser,
-        &[] as &[&str],
-    );
-    Box::new(AutoItem(item))
+/// The `Run` value data: the executable path in double quotes.
+#[cfg(any(target_os = "windows", test))]
+fn run_command(exe: &Path) -> String {
+    format!("\"{}\"", exe.display())
+}
+
+/// `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `APP_NAME`.
+#[cfg(target_os = "windows")]
+struct RunKeyItem {
+    command: String,
+}
+
+#[cfg(target_os = "windows")]
+const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
+
+#[cfg(target_os = "windows")]
+fn is_not_found(err: &windows_core::Error) -> bool {
+    // ERROR_FILE_NOT_FOUND, for a missing key or value.
+    err.code() == windows_core::HRESULT::from_win32(2)
+}
+
+#[cfg(target_os = "windows")]
+impl LoginItem for RunKeyItem {
+    fn is_enabled(&self) -> anyhow::Result<bool> {
+        match windows_registry::CURRENT_USER
+            .open(RUN_KEY)
+            .and_then(|key| key.get_string(APP_NAME))
+        {
+            Ok(_) => Ok(true),
+            Err(err) if is_not_found(&err) => Ok(false),
+            Err(err) => Err(err.into()),
+        }
+    }
+
+    fn enable(&self) -> anyhow::Result<()> {
+        windows_registry::CURRENT_USER
+            .create(RUN_KEY)?
+            .set_string(APP_NAME, &self.command)?;
+        Ok(())
+    }
+
+    fn disable(&self) -> anyhow::Result<()> {
+        match windows_registry::CURRENT_USER
+            .options()
+            .write()
+            .open(RUN_KEY)
+            .and_then(|key| key.remove_value(APP_NAME))
+        {
+            Ok(()) => Ok(()),
+            Err(err) if is_not_found(&err) => Ok(()),
+            Err(err) => Err(err.into()),
+        }
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -114,9 +167,11 @@ fn platform_item(exe: &Path) -> Box<dyn LoginItem> {
     Box::new(AutoItem(item))
 }
 
-/// The `auto-launch` wrapper.
+/// The `auto-launch` wrapper (macOS and Linux).
+#[cfg(not(target_os = "windows"))]
 struct AutoItem(auto_launch::AutoLaunch);
 
+#[cfg(not(target_os = "windows"))]
 impl LoginItem for AutoItem {
     fn is_enabled(&self) -> anyhow::Result<bool> {
         Ok(self.0.is_enabled()?)
@@ -177,6 +232,15 @@ mod tests {
         assert_eq!(item.disables.get(), 1);
         sync(false, &item).expect("still disabled");
         assert_eq!(item.disables.get(), 1, "no second remove");
+    }
+
+    #[test]
+    fn wr09_ac2_run_value_quotes_a_path_with_spaces() {
+        let exe = Path::new(r"C:\Program Files\MitiBar\mitibar.exe");
+        assert_eq!(
+            run_command(exe),
+            r#""C:\Program Files\MitiBar\mitibar.exe""#
+        );
     }
 
     #[test]

@@ -83,6 +83,12 @@ Enable/disable follows `launch_at_login`. Enabling writes the entry on every sta
 refreshes the path when the app was moved; `auto-launch` 0.6 exposes no getter for the registered
 path. Log the result; never fail startup because of autostart.
 
+W3 review: Windows no longer goes through `auto-launch`. Its `enable()` writes the path unquoted
+(an unquoted path with spaces, CWE-428) and also sets the Task Manager `StartupApproved` value,
+which at each start would undo a user's "Disable" in Task Manager. `RunKeyItem` writes
+`"<exe>"` to `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `mitibar`, with
+`windows-registry`, and never touches `StartupApproved`. macOS and Linux keep `auto-launch`.
+
 ### W3-06 Single instance (`src/platform/single_instance.rs`)
 A local socket (`interprocess` 2.x: `ListenerOptions::new().name(n).create_sync()`,
 `Stream::connect(n)`). Name `mitibar-<username-hash>.sock` via `GenericNamespaced` when
