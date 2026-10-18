@@ -30,6 +30,8 @@ serde = { version = "1", features = ["derive"] }
 toml = "1"
 # Per-user launch at login (W3-05, ADR-0015).
 auto-launch = "0.6"
+# Single instance over a local socket (W3-06, ADR-0015).
+interprocess = "2"
 # Clipboard (WR-01 AC5). Already in the tree through Slint's winit backend, so no new crate;
 # text-only, no image feature (ADR-0015).
 arboard = { version = "3", default-features = false, features = ["wayland-data-control"] }

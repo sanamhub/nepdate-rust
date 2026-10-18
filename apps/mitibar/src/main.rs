@@ -301,6 +301,17 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    // WR-09 AC1: a second launch signals this one and exits 0 before touching settings, the
+    // login item or the UI. A snapshot run never claims the socket, so a review image can be
+    // rendered while the app is open.
+    let mut primary = None;
+    if !cli.is_snapshot_tool() {
+        match platform::single_instance::claim()? {
+            platform::single_instance::Claim::Secondary => return Ok(()),
+            platform::single_instance::Claim::Primary(listener) => primary = Some(listener),
+        }
+    }
+
     // WR-06: load the per-user file (or write the defaults), then let the snapshot flags
     // override language and theme for this run only. A snapshot run uses the defaults and never
     // touches the user's settings file.
@@ -424,6 +435,30 @@ fn main() -> anyhow::Result<()> {
 
     // First paint of the tray, then the once-per-minute (or per-second) timer (W1-05).
     update_tray(&state, &tray);
+
+    // WR-09 AC1: the listener thread sets a flag; this small timer turns it into an open popup
+    // on the UI thread. It only runs in the first instance.
+    let single_timer = slint::Timer::default();
+    if let Some(listener) = primary {
+        platform::single_instance::start(listener);
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        single_timer.start(
+            slint::TimerMode::Repeated,
+            std::time::Duration::from_millis(250),
+            move || {
+                if !platform::single_instance::take_request() {
+                    return;
+                }
+                let Some(popup) = popup_weak.upgrade() else {
+                    return;
+                };
+                prepare_show(&state);
+                update_popup(&state, &popup_weak);
+                let _ = ui_bridge::show_popup_at(&popup, ui_bridge::PopupAnchor::TrayCorner);
+            },
+        );
+    }
 
     arm_timer(state.clone(), popup_weak.clone(), tray, taskbar);
 
