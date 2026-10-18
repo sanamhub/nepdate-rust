@@ -5,6 +5,7 @@ import { AppInfo } from "app-info.slint";
 import { Converter, ConverterData } from "converter.slint";
 import { DayDetail, DayDetailData } from "day-detail.slint";
 import { MonthGrid, CellData } from "month-grid.slint";
+import { SettingsData, SettingsPanel } from "settings.slint";
 import { Theme } from "theme.slint";
 
 export struct PopupClockLine {
@@ -57,6 +58,11 @@ export component PopupWindow inherits Window {
     in-out property <int> converter-tab: 0;
     in-out property <int> converter-direction: 0;
 
+    // Settings (W3-04): the third inline overlay, opened from the tray menu.
+    in-out property <bool> settings-visible: false;
+    in-out property <SettingsData> settings-data;
+    in-out property <string> settings-filter: "";
+
     // Fired by the tray menu, the taskbar menu and the grid (W2-02).
     callback day-clicked(int);
     callback prev-month();
@@ -74,6 +80,16 @@ export component PopupWindow inherits Window {
     callback converter-closed();
     callback converter-edited(string, int);
     callback converter-days-edited(string, string);
+    // Fired by the settings panel (W3-04).
+    callback settings-closed();
+    callback settings-language(int);
+    callback settings-theme(int);
+    callback settings-clock(bool);
+    callback settings-seconds(bool);
+    callback settings-zone(string);
+    callback settings-launch(bool);
+    callback settings-taskbar(bool);
+    callback settings-filter-changed(string);
 
     // Forward the window focus to the FocusScope so it receives key events and its focus-lost
     // fires when the popup is deactivated (WR-02 AC2).
@@ -92,6 +108,11 @@ export component PopupWindow inherits Window {
         key-pressed(event) => {
             if (event.text == Key.Escape) {
                 // An overlay closes before the day detail, and the day detail before the popup.
+                if (root.settings-visible) {
+                    root.settings-visible = false;
+                    root.settings-closed();
+                    return accept;
+                }
                 if (root.converter-visible) {
                     root.converter-visible = false;
                     root.converter-closed();
@@ -266,6 +287,45 @@ export component PopupWindow inherits Window {
                 closed => {
                     root.converter-visible = false;
                     root.converter-closed();
+                }
+            }
+        }
+
+        // Settings overlay (W3-04): its scrim closes only the settings panel.
+        if root.settings-visible: Rectangle {
+            x: 0;
+            y: 0;
+            width: 100%;
+            height: 100%;
+            background: #40000000;
+            TouchArea {
+                accessible-role: button;
+                accessible-label: @tr("Close settings");
+                accessible-action-default => {
+                    root.settings-visible = false;
+                    root.settings-closed();
+                }
+                clicked => {
+                    root.settings-visible = false;
+                    root.settings-closed();
+                }
+            }
+            SettingsPanel {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                data: root.settings-data;
+                zone-filter <=> root.settings-filter;
+                language-picked(index) => { root.settings-language(index); }
+                theme-picked(index) => { root.settings-theme(index); }
+                clock-changed(value) => { root.settings-clock(value); }
+                seconds-changed(value) => { root.settings-seconds(value); }
+                zone-picked(zone) => { root.settings-zone(zone); }
+                launch-changed(value) => { root.settings-launch(value); }
+                taskbar-changed(value) => { root.settings-taskbar(value); }
+                filter-zones(text) => { root.settings-filter-changed(text); }
+                closed => {
+                    root.settings-visible = false;
+                    root.settings-closed();
                 }
             }
         }

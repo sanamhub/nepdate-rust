@@ -9,9 +9,11 @@ use crate::app::clock::Header;
 use crate::app::converter::ConvertOutcome;
 use crate::app::holidays::NextHoliday;
 use crate::app::month_view::{Cell, DayDetail, MonthView};
+use crate::app::settings::Settings;
 use crate::platform::taskbar::MenuLabels;
 use crate::{
     AppInfo, CellData, ConverterData, DayDetailData, MenuText, PopupClockLine, PopupWindow,
+    SettingsData,
 };
 
 /// Where to open the popup (W1-04).
@@ -211,6 +213,57 @@ pub fn reset_converter(popup: &PopupWindow, today: NepaliDate, lang: Lang) {
     set_converter(popup, &ConvertOutcome::Empty);
 }
 
+/// Every IANA zone in jiff's bundled database, sorted (WR-06 AC4).
+#[must_use]
+pub fn all_time_zones() -> Vec<String> {
+    let mut zones: Vec<String> = jiff::tz::TimeZoneDatabase::bundled()
+        .available()
+        .map(|name| name.as_str().to_owned())
+        .collect();
+    zones.sort();
+    zones.dedup();
+    zones
+}
+
+/// The zones whose id contains `filter`, case-insensitively. An empty filter returns all.
+#[must_use]
+pub fn filter_time_zones(zones: &[String], filter: &str) -> Vec<String> {
+    if filter.is_empty() {
+        return zones.to_vec();
+    }
+    let needle = filter.to_lowercase();
+    zones
+        .iter()
+        .filter(|zone| zone.to_lowercase().contains(&needle))
+        .cloned()
+        .collect()
+}
+
+/// Fills the settings panel from `Settings` and the filtered zone list (W3-04).
+pub fn set_settings(popup: &PopupWindow, settings: &Settings, zones: &[String]) {
+    let language_index = i32::from(u8::from(settings.lang() == Lang::Ne));
+    let theme_index = match settings.theme.as_str() {
+        "light" => 1,
+        "dark" => 2,
+        _ => 0,
+    };
+    let coverage = nepdate_patro::coverage();
+    let zone_model: Vec<slint::SharedString> =
+        zones.iter().map(|zone| zone.as_str().into()).collect();
+    popup.set_settings_data(SettingsData {
+        language_index,
+        theme_index,
+        clock_24h: settings.clock_24h,
+        show_seconds: settings.show_seconds,
+        zone: settings.extra_time_zone.as_str().into(),
+        launch_at_login: settings.launch_at_login,
+        taskbar_text: settings.taskbar_text,
+        zones: slint::ModelRc::new(slint::VecModel::from(zone_model)),
+        version: env!("CARGO_PKG_VERSION").into(),
+        coverage: format!("{} to {}", coverage.start(), coverage.end()).into(),
+    });
+}
+
 /// Maps the `theme` setting of WR-06 onto the `ThemeChoice` of `ui/theme.slint`.
 pub fn theme_choice(theme: &str) -> crate::ThemeChoice {
     match theme {
@@ -408,6 +461,56 @@ mod tests {
             data.is_holiday,
             "the public-holiday colour must win over the Saturday colour"
         );
+    }
+
+    #[test]
+    fn filter_time_zones_matches_case_insensitively() {
+        let zones = vec![
+            "Asia/Kathmandu".to_owned(),
+            "Europe/Berlin".to_owned(),
+            "America/New_York".to_owned(),
+        ];
+        assert_eq!(
+            filter_time_zones(&zones, "kath"),
+            vec!["Asia/Kathmandu".to_owned()]
+        );
+        assert_eq!(
+            filter_time_zones(&zones, "BER"),
+            vec!["Europe/Berlin".to_owned()]
+        );
+        assert_eq!(filter_time_zones(&zones, "").len(), 3);
+        assert!(filter_time_zones(&zones, "Mars").is_empty());
+    }
+
+    #[test]
+    fn wr06_settings_panel_maps_the_indices_and_zones() {
+        use crate::app::settings::Settings;
+        use slint::Model;
+
+        crate::test_support::init_platform();
+        let popup = crate::PopupWindow::new().expect("popup component");
+        let settings = Settings {
+            language: "ne".to_owned(),
+            theme: "dark".to_owned(),
+            clock_24h: true,
+            show_seconds: true,
+            extra_time_zone: "Asia/Kathmandu".to_owned(),
+            launch_at_login: false,
+            taskbar_text: false,
+            ..Settings::default()
+        };
+        let zones = vec!["Asia/Kathmandu".to_owned()];
+        set_settings(&popup, &settings, &zones);
+        let data = popup.get_settings_data();
+        assert_eq!(data.language_index, 1);
+        assert_eq!(data.theme_index, 2);
+        assert!(data.clock_24h);
+        assert!(data.show_seconds);
+        assert!(!data.launch_at_login);
+        assert!(!data.taskbar_text);
+        assert_eq!(data.zone.as_str(), "Asia/Kathmandu");
+        assert_eq!(data.zones.row_count(), 1);
+        assert_eq!(data.coverage.as_str(), "2077/01/01 to 2084/08/20");
     }
 
     #[test]

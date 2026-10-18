@@ -256,6 +256,18 @@ fn every_control_has_a_label_and_a_role() {
     );
 }
 
+/// W3-04 switches language at runtime; Slint must be able to go back to the source language.
+#[test]
+fn bundled_translation_switches_to_nepali_and_back() {
+    crate::test_support::init_platform();
+    let popup = PopupWindow::new().expect("popup component");
+    let menu = |popup: &PopupWindow| popup.global::<crate::MenuText>().get_settings().to_string();
+    slint::select_bundled_translation("ne").expect("Nepali bundle");
+    assert_eq!(menu(&popup), "सेटिङ्हरू");
+    slint::select_bundled_translation("en").expect("source language");
+    assert_eq!(menu(&popup), "Settings");
+}
+
 /// Keep the month name model in step with the language helper used above.
 #[test]
 fn month_names_come_from_the_library() {

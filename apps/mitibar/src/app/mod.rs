@@ -6,8 +6,6 @@
 pub const APP_NAME: &str = "MitiBar";
 
 pub mod clock;
-// W3-01 only: the converter UI that calls this lands in W3-02.
-#[allow(dead_code)]
 pub mod converter;
 pub mod holidays;
 pub mod month_view;

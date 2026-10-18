@@ -107,3 +107,48 @@ msgstr "सुरु वि.सं. मिति"
 
 msgid "To BS date"
 msgstr "अन्त्य वि.सं. मिति"
+
+msgid "Close settings"
+msgstr "सेटिङ बन्द गर्नुहोस्"
+
+msgid "Language"
+msgstr "भाषा"
+
+msgid "Theme"
+msgstr "थिम"
+
+msgid "System"
+msgstr "प्रणाली"
+
+msgid "Light"
+msgstr "उज्यालो"
+
+msgid "Dark"
+msgstr "अँध्यारो"
+
+msgid "24-hour clock"
+msgstr "२४ घण्टाको घडी"
+
+msgid "Show seconds"
+msgstr "सेकेन्ड देखाउनुहोस्"
+
+msgid "Extra time zone"
+msgstr "अतिरिक्त समय क्षेत्र"
+
+msgid "Filter zones"
+msgstr "समय क्षेत्र छान्नुहोस्"
+
+msgid "No extra clock"
+msgstr "अतिरिक्त घडी नचाहिने"
+
+msgid "Launch at login"
+msgstr "लगइनमा सुरु गर्नुहोस्"
+
+msgid "Taskbar text (Windows 11)"
+msgstr "टास्कबार पाठ (Windows 11)"
+
+msgid "Version {0}"
+msgstr "संस्करण {0}"
+
+msgid "Data {0}"
+msgstr "डेटा {0}"
