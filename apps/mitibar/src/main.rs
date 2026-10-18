@@ -24,7 +24,6 @@ mod theme;
 mod ui_bridge;
 
 use std::cell::RefCell;
-#[cfg(feature = "snapshot")]
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -1079,7 +1078,7 @@ fn update_tray(state: &Rc<RefCell<AppState>>, tray: &Rc<SlintTray>) {
             },
             lang
         ),
-        bs.to_gregorian(),
+        app::format::ad_short(bs.to_gregorian(), lang),
     ));
 }
 
