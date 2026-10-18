@@ -32,7 +32,8 @@ pub struct Cell {
 pub fn month_view(year: u16, month: Month, today: NepaliDate, lang: Lang) -> MonthView;
 ```
 AC as tests: `wr03_ac1_rows` (every month 2080–2084 has 35 or 42 cells, and padding count =
-first weekday index), `wr03_ac2_ad_month_marker`, `wr03_ac3_saturday_and_holiday_tint`,
+first weekday index), `wr03_ac2_ad_month_marker`, `wr03_ac2_ad_marker_on_every_first`,
+`wr03_ac3_saturday_and_holiday_tint`,
 `wr03_ac4_no_event_data_outside_coverage` (year 2090 → all tithi `None`, no panic),
 `wr03_ac5_title_en_ne`, `wr03_ac6_edges` (1901-01: `can_prev == false`; 2199-12: `can_next == false`).
 

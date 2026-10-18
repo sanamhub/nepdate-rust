@@ -1,7 +1,7 @@
 //! Month grid model: the title and the cells the grid renders (WR-03). Pure Rust, no Slint and no
 //! OS calls (ADR-0015); patro data comes only through `nepdate_patro::info` (W2-01, W2-04).
 
-use nepdate::{DateOrder, Lang, LongDate, Month, NepaliDate, Separator, Weekday};
+use nepdate::{DateOrder, GregorianDate, Lang, LongDate, Month, NepaliDate, Separator, Weekday};
 use nepdate_patro as patro;
 
 /// English AD month abbreviations. The AD side of a title stays Latin in both languages
@@ -37,7 +37,8 @@ pub struct Cell {
     pub bs_day: String,
     /// The AD day of month in `lang`'s digits (WR-03 AC2).
     pub ad_day: String,
-    /// Set on the cell whose AD date is the 1st of a new AD month (WR-03 AC2).
+    /// Set on every cell whose AD date is the 1st, including the first cell of a BS month that
+    /// starts on an AD 1st (WR-03 AC2).
     pub ad_month_marker: Option<&'static str>,
     pub is_today: bool,
     /// The date falls on a Saturday (WR-03 AC3).
@@ -72,7 +73,6 @@ pub fn month_view(year: u16, month: Month, today: NepaliDate, lang: Lang) -> Mon
     let total = (lead + month_len).div_ceil(7) * 7;
 
     let first_ad = first.to_gregorian();
-    let mut seen_ad_month = first_ad.month();
     let mut cells = Vec::with_capacity(total);
     for _ in 0..lead {
         cells.push(Cell::padding());
@@ -83,17 +83,13 @@ pub fn month_view(year: u16, month: Month, today: NepaliDate, lang: Lang) -> Mon
         };
         let info = patro::info(date);
         let ad = date.to_gregorian();
-        let changed_ad_month = ad.month() != seen_ad_month;
-        if changed_ad_month {
-            seen_ad_month = ad.month();
-        }
         cells.push(Cell {
             date: Some(date),
             bs_day: lang.digits(u32::from(day), 1).to_string(),
             ad_day: lang.digits(u32::from(ad.day()), 1).to_string(),
-            // WR-03 AC2: the marker is on day 1 of the new AD month, not on the month's first cell.
-            ad_month_marker: (changed_ad_month && ad.day() == 1)
-                .then_some(ad_month_name(ad.month())),
+            // WR-03 AC2: every AD 1st carries the short month, including the first cell of a BS
+            // month that starts on an AD 1st (W2 review). A 32-day month can contain two.
+            ad_month_marker: ad_marker(ad),
             is_today: date == today,
             is_saturday: date.weekday() == Weekday::Saturday,
             is_public_holiday: info.is_public_holiday(),
@@ -161,6 +157,12 @@ fn ad_month_name(month: u8) -> &'static str {
         .get(usize::from(month).wrapping_sub(1))
         .copied()
         .unwrap_or("")
+}
+
+/// The short AD month for a cell whose AD date is the 1st, `None` otherwise (WR-03 AC2). The rule
+/// does not depend on the cell's position, so a BS month that starts on an AD 1st is covered too.
+fn ad_marker(ad: GregorianDate) -> Option<&'static str> {
+    (ad.day() == 1).then_some(ad_month_name(ad.month()))
 }
 
 /// Steps one month forward (`delta > 0`) or back (`delta < 0`), stopping at 1901 Baishakh and
@@ -331,6 +333,51 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn wr03_ac2_ad_marker_on_every_first() {
+        // The rule itself: an AD 1st carries the short month, whatever its position in the grid.
+        assert_eq!(
+            ad_marker(GregorianDate::new(2024, 4, 1).expect("AD date")),
+            Some("Apr")
+        );
+        assert_eq!(
+            ad_marker(GregorianDate::new(2024, 4, 2).expect("AD date")),
+            None
+        );
+
+        // No BS month in 1901..=2199 starts on an AD 1st: the first day is always the 10th to
+        // the 20th of an AD month. The old code special-cased that first cell, so the branch
+        // was unreachable; this assertion records the data fact and fails if the data changes.
+        let mut starts_on_first = Vec::new();
+        for year in 1901..=2199 {
+            for month in Month::ALL {
+                if NepaliDate::new(year, month.number(), 1)
+                    .is_ok_and(|first| first.to_gregorian().day() == 1)
+                {
+                    starts_on_first.push((year, month));
+                }
+            }
+        }
+        assert!(
+            starts_on_first.is_empty(),
+            "a BS month now starts on an AD 1st: {starts_on_first:?}"
+        );
+
+        // Every cell whose AD day is 1 has the marker, and no other cell does.
+        for year in 1901..=2199 {
+            for month in Month::ALL {
+                let view = month_view(year, month, date(year, month.number(), 1), Lang::En);
+                for cell in &view.cells {
+                    let Some(bs) = cell.date else {
+                        continue;
+                    };
+                    let ad = bs.to_gregorian();
+                    assert_eq!(cell.ad_month_marker.is_some(), ad.day() == 1, "{bs} / {ad}");
+                }
+            }
+        }
     }
 
     #[test]
