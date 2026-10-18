@@ -47,6 +47,8 @@ struct AppState {
     hidden_on: NepaliDate,
     /// The open day detail, if any (WR-04); cleared on hide and navigation.
     detail: Option<month_view::DayDetail>,
+    /// The fixed local date for a snapshot (`--today`); `None` in the normal app (W2 review).
+    today_override: Option<NepaliDate>,
 }
 
 /// A tray click within this long after focus loss hid the popup was the click that took the focus
@@ -60,6 +62,12 @@ struct Cli {
     popup: bool,
     #[cfg(feature = "snapshot")]
     snapshot: Option<PathBuf>,
+    /// A fixed BS date for the popup snapshot; never accepted by the normal app (W2 review).
+    #[cfg(feature = "snapshot")]
+    today: Option<NepaliDate>,
+    /// A BS date whose day-detail card the snapshot opens (W2 review).
+    #[cfg(feature = "snapshot")]
+    detail: Option<NepaliDate>,
     theme: Option<ThemeChoice>,
     lang: Option<Lang>,
     no_taskbar_text: bool,
@@ -69,6 +77,20 @@ struct Cli {
     taskbar_theme: Option<bool>, // Some(true) = dark taskbar
     #[cfg(all(windows, feature = "snapshot"))]
     taskbar_scale: Option<f32>,
+}
+
+/// Reads one `--today` or `--detail` value. Both flags are snapshot tools, so this helper is too.
+#[cfg(feature = "snapshot")]
+fn parse_bs_date(
+    args: &mut impl Iterator<Item = String>,
+    flag: &str,
+) -> anyhow::Result<NepaliDate> {
+    let value = args
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("{flag} needs a BS date YYYY-MM-DD"))?;
+    value
+        .parse()
+        .map_err(|err| anyhow::anyhow!("{flag} must be a BS date YYYY-MM-DD: {err}"))
 }
 
 impl Cli {
@@ -87,6 +109,10 @@ impl Cli {
                         .ok_or_else(|| anyhow::anyhow!("--snapshot needs a path"))?;
                     cli.snapshot = Some(PathBuf::from(path));
                 }
+                #[cfg(feature = "snapshot")]
+                "--today" => cli.today = Some(parse_bs_date(&mut args, "--today")?),
+                #[cfg(feature = "snapshot")]
+                "--detail" => cli.detail = Some(parse_bs_date(&mut args, "--detail")?),
                 "--theme" => {
                     let value = args
                         .next()
@@ -153,6 +179,13 @@ impl Cli {
             if cli.popup && cli.snapshot.is_none() {
                 anyhow::bail!("--popup needs --snapshot");
             }
+            // Both flags are snapshot tools only: the normal app must never pin its date.
+            if cli.today.is_some() && !cli.popup {
+                anyhow::bail!("--today needs --popup --snapshot");
+            }
+            if cli.detail.is_some() && !cli.popup {
+                anyhow::bail!("--detail needs --popup --snapshot");
+            }
         }
         if cli.font_test && cli.popup {
             anyhow::bail!("--font-test and --popup are exclusive");
@@ -211,13 +244,21 @@ fn main() -> anyhow::Result<()> {
             .select()?;
     }
 
+    #[cfg(feature = "snapshot")]
+    let today = cli.today.unwrap_or_else(today_local);
+    #[cfg(not(feature = "snapshot"))]
     let today = today_local();
+    #[cfg(feature = "snapshot")]
+    let today_override = cli.today;
+    #[cfg(not(feature = "snapshot"))]
+    let today_override = None;
     let state = Rc::new(RefCell::new(AppState {
         settings,
         popup_hidden_at: None,
         viewed_month: (today.year(), today.month()),
         hidden_on: today,
         detail: None,
+        today_override,
     }));
     // The `--no-taskbar-text` flag turns WR-12 off for this run (W3 builds the settings UI).
     if cli.no_taskbar_text {
@@ -242,12 +283,7 @@ fn main() -> anyhow::Result<()> {
     // Snapshot the popup (W1 test tool): fill it with today's header and clocks, then render.
     #[cfg(feature = "snapshot")]
     if cli.popup {
-        let path = cli
-            .snapshot
-            .clone()
-            .ok_or_else(|| anyhow::anyhow!("--popup needs --snapshot"))?;
-        update_popup(&state, &popup.as_weak());
-        return snapshot(&popup, &path);
+        return snapshot_popup(&cli, &state, &popup, lang);
     }
 
     let popup_weak = popup.as_weak();
@@ -288,6 +324,26 @@ fn main() -> anyhow::Result<()> {
 
     slint::run_event_loop()?;
     Ok(())
+}
+
+/// Renders one popup snapshot. `--today` and `--detail` are snapshot-only (W2 review); the normal
+/// path never reaches this function, and the parser rejects both without `--popup`.
+#[cfg(feature = "snapshot")]
+fn snapshot_popup(
+    cli: &Cli,
+    state: &Rc<RefCell<AppState>>,
+    popup: &PopupWindow,
+    lang: Lang,
+) -> anyhow::Result<()> {
+    let path = cli
+        .snapshot
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("--popup needs --snapshot"))?;
+    if let Some(detail) = cli.detail {
+        state.borrow_mut().detail = Some(month_view::day_detail(detail, lang));
+    }
+    update_popup(state, &popup.as_weak());
+    snapshot(popup, &path)
 }
 
 /// Handles a WR-01 tray event. `Settings` opens no panel in W1 (W3 builds it).
@@ -383,7 +439,7 @@ fn update_popup(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>) {
         return;
     };
     let s = state.borrow();
-    let now = jiff::Zoned::now();
+    let now = popup_now(&s);
     let lang = s.settings.lang();
     let header = clock::header(&now, lang);
     let lines = clock::clock_lines(&now, &s.settings);
@@ -405,6 +461,19 @@ fn update_popup(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>) {
 fn today_local() -> NepaliDate {
     let now = jiff::Zoned::now();
     NepaliDate::try_from(now.date()).unwrap_or(NepaliDate::MIN)
+}
+
+/// The local time the popup renders. A snapshot can pin the date with `--today` and the clock to
+/// noon, so re-rendering the same image does not change it (W2 review).
+fn popup_now(s: &AppState) -> jiff::Zoned {
+    let now = jiff::Zoned::now();
+    let Some(today) = s.today_override else {
+        return now;
+    };
+    let ad: jiff::civil::Date = today.into();
+    // Noon is a valid local time in nearly every zone, so a pinned date still builds a Zoned.
+    let noon = jiff::civil::Time::new(12, 0, 0, 0).unwrap_or(now.time());
+    now.with().date(ad).time(noon).build().unwrap_or(now)
 }
 
 /// Records that the popup hid on today's BS date, so a reopen on a later date resets the month

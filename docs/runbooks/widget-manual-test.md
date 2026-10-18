@@ -3,7 +3,9 @@
 Copy this file per release/OS and tick. OS: Windows 11 Home Version: (agent run) Tester: agent Date: 2026-10-15
 
 W2 agent run 2026-10-18: unit tests and the `--popup --snapshot` tool at 1x/2x, light/dark and
-en/ne. No UI click, keyboard or screen-reader run was made; those lines stay unticked.
+en/ne, with `--today` pinning the date and the clock to 12:00. 12 snapshots are in
+`docs/plan/spike-results/w2/`. No UI click, keyboard or screen-reader run was made; those lines
+stay unticked.
 
 ## Tray (WR-01)
 - [x] AC1 Icon/title visible after start (app stayed running with the popup hidden, which Slint only does while a `SystemTrayIcon` is visible)
@@ -19,11 +21,12 @@ en/ne. No UI click, keyboard or screen-reader run was made; those lines stay unt
 - [x] AC4 Light/dark/system themes; Devanagari renders per `docs/plan/devanagari-test-strings.md` (light+dark and en+ne popup snapshots in `docs/plan/spike-results/w1/`)
 
 ## Month grid (WR-03) / Day detail (WR-04)
-- [x] Grid shape, AD numbers, today outline, Saturday/holiday tint (unit tests `wr03_ac1_rows` to `wr03_ac3_saturday_and_holiday_tint`; 8 snapshots in `docs/plan/spike-results/w2/`, not verified)
-- [x] Tithi + event dots in 2081; nothing shown (no error) in 2090 (unit test `wr03_ac4_no_event_data_outside_coverage`; the snapshots show 2083, not verified)
+- [x] Grid shape, AD numbers, today outline, Saturday/holiday tint, 44 px rows (unit tests `wr03_ac1_rows` to `wr03_ac3_saturday_and_holiday_tint`; 12 snapshots in `docs/plan/spike-results/w2/`, not verified)
+- [x] Tithi + event dots in 2081; nothing shown (no error) in 2090 (unit test `wr03_ac4_no_event_data_outside_coverage`; the month snapshots show 2083, the 6-row pair 2081, not verified)
 - [ ] Prev/next/today/pickers/wheel; disabled at 1901-01 and 2199-12 (model and `step_month` unit tests pass; the controls were not clicked)
 - [x] Next-holiday line (the snapshots show `Next holiday: Tula Sankranti today`; unit tests `wr03_ac8_*`; not verified)
-- [ ] Day detail content + copy buttons; Escape order (the card rendered in a local preview; the copy buttons and the Escape order were not run, not verified)
+- [x] Day detail content (snapshots `day-detail-light-en-1x.png` and `day-detail-dark-ne-2x.png`, not verified)
+- [ ] Day detail copy buttons; Escape order (the card rendered, but the buttons and the Escape order were not run)
 
 ## Clock (WR-05)
 - [x] Local + Kathmandu shown; Kathmandu hidden when the machine is set to Asia/Kathmandu (unit test `wr05_ac1_hides_extra_zone_with_same_offset`)
