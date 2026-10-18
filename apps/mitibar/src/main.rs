@@ -70,10 +70,16 @@ struct AppState {
     popup: Weak<PopupWindow>,
     /// The one settings debounce timer (W3-04), created once and shared by the popup.
     save_timer: Rc<slint::Timer>,
+    /// The `--theme` flag, applied when the popup is created (W5 review: the lazy popup must
+    /// still honour it, as the eager popup did).
+    theme_override: Option<ThemeChoice>,
 }
 
-/// The strong popup handle. `main` and the tray/taskbar closures hold this slot, never
-/// `AppState`, so the component's callbacks (which capture `AppState`) cannot form a cycle.
+/// The strong popup handle. `AppState` keeps only a `Weak`, so the popup's own callbacks (which
+/// capture `AppState`) do not keep the popup alive through the state. The tray and taskbar
+/// closures do hold this slot and the state, and `AppState` holds the tray, so a reference cycle
+/// exists; it lives exactly as long as the process, which never drops these objects before exit
+/// (W5 review).
 type PopupSlot = Rc<RefCell<Option<PopupWindow>>>;
 
 impl AppState {
@@ -97,6 +103,7 @@ impl AppState {
             settings_path: None,
             popup: Weak::default(),
             save_timer: Rc::new(slint::Timer::default()),
+            theme_override: None,
         }
     }
 }
@@ -170,7 +177,11 @@ fn ensure_popup(slot: &PopupSlot, state: &Rc<RefCell<AppState>>) -> Option<Popup
         }
     };
     ui_bridge::set_app_name(&popup);
-    let choice = ui_bridge::theme_choice(&state.borrow().settings.theme);
+    let choice = {
+        let s = state.borrow();
+        s.theme_override
+            .unwrap_or_else(|| ui_bridge::theme_choice(&s.settings.theme))
+    };
     theme::apply(&popup, choice);
     let weak = popup.as_weak();
     state.borrow_mut().popup = weak.clone();
@@ -553,6 +564,7 @@ fn main() -> anyhow::Result<()> {
         Rc::new(SystemClipboard),
     )));
     state.borrow_mut().zones = ui_bridge::all_time_zones();
+    state.borrow_mut().theme_override = cli.theme;
     if let Some(path) = &cli.settings_file {
         state.borrow_mut().settings_path = Some(path.clone());
     } else if !cli.is_snapshot_tool() {

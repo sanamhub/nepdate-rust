@@ -597,6 +597,41 @@ mod tests {
         expect_failure(&text, "does not codesign dist/MitiBar.app");
     }
 
+    /// W5 review: signing the binary after packaging would ship an unsigned binary inside a
+    /// signed installer and an unsigned portable zip; the order check must catch it.
+    #[test]
+    fn signing_the_windows_binary_after_packaging_fails() {
+        let text = workflow_text();
+        let sign = text
+            .find(
+                "      - name: Sign Windows binary
+",
+            )
+            .expect("sign step");
+        let package = text
+            .find(
+                "      - name: Package (Windows)
+",
+            )
+            .expect("package step");
+        let linux = text
+            .find(
+                "      - name: Package (Linux)
+",
+            )
+            .expect("linux step");
+        assert!(
+            sign < package && package < linux,
+            "expected step order in the workflow"
+        );
+        let mut moved = String::new();
+        moved.push_str(&text[..sign]);
+        moved.push_str(&text[package..linux]);
+        moved.push_str(&text[sign..package]);
+        moved.push_str(&text[linux..]);
+        expect_failure(&moved, "must build, sign the binary, package");
+    }
+
     #[test]
     fn windows_arm64_missing_fails() {
         let text = mutated(

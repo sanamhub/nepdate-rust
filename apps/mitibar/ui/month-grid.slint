@@ -188,7 +188,7 @@ export component MonthGrid inherits Rectangle {
             // `root.year-text` from Rust, keeps the 1901 to 2199 range, and steps by keyboard,
             // mouse wheel or the accessibility increment/decrement actions. The range edges
             // disable those actions instead of wrapping.
-            FocusScope {
+            year-scope := FocusScope {
                 width: 112px;
                 height: 32px;
                 accessible-role: spinbox;
@@ -223,8 +223,10 @@ export component MonthGrid inherits Rectangle {
                 Rectangle {
                     border-radius: 4px;
                     background: Palette.control-background;
-                    border-width: 1px;
-                    border-color: Palette.border;
+                    // W5 review: a keyboard user must see where focus is, as with the
+                    // standard SpinBox this control replaced.
+                    border-width: year-scope.has-focus ? 2px : 1px;
+                    border-color: year-scope.has-focus ? Palette.accent-background : Palette.border;
 
                     Text {
                         text: root.year-text;
@@ -236,6 +238,7 @@ export component MonthGrid inherits Rectangle {
                     }
 
                     TouchArea {
+                        clicked => { year-scope.focus(); }
                         scroll-event(event) => {
                             if (event.delta-y != 0) {
                                 if (event.delta-y > 0) {

@@ -399,6 +399,33 @@ fn the_popup_is_created_on_first_open_not_at_startup() {
 }
 
 #[test]
+fn the_lazy_popup_is_created_once_and_honours_the_theme_flag() {
+    crate::test_support::init_platform();
+    let today = NepaliDate::new(2081, 1, 1).expect("date");
+    let state = Rc::new(RefCell::new(AppState::new(
+        Settings::default(),
+        today,
+        Some(today),
+        Rc::new(FakeClipboard::default()),
+    )));
+    // W5 review: `--theme` reached the eager popup; the lazy one must still apply it.
+    state.borrow_mut().theme_override = Some(crate::ThemeChoice::Dark);
+    let slot: crate::PopupSlot = Rc::new(RefCell::new(None));
+    let first = crate::ensure_popup(&slot, &state).expect("popup");
+    assert_eq!(
+        first.global::<crate::Theme>().get_choice(),
+        crate::ThemeChoice::Dark
+    );
+    first.set_month_title("kept".into());
+    let second = crate::ensure_popup(&slot, &state).expect("popup again");
+    assert_eq!(
+        second.get_month_title().as_str(),
+        "kept",
+        "the second open reuses the first component, not a new one"
+    );
+}
+
+#[test]
 fn wr09_ac1_second_launch_opens_the_first_instance_popup() {
     let (popup, state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
     popup.hide().expect("hide");
