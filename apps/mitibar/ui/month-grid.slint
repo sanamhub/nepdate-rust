@@ -170,14 +170,16 @@ export component MonthGrid inherits Rectangle {
         }
 
         // Month and year pickers plus Today (WR-03 AC6, WR-10 AC2). The pickers keep their range;
-        // the prev/next buttons are the controls that disable at the range edges.
+        // the prev/next buttons are the controls that disable at the range edges. The pickers have
+        // fixed widths so Today stays inside the 24 px margins at 360 px in both languages (W2
+        // review); the spacer keeps Today at the right edge.
         HorizontalLayout {
             spacing: 4px;
             ComboBox {
                 model: root.month-names;
                 current-index <=> root.month-index;
                 accessible-label: @tr("Month");
-                horizontal-stretch: 1;
+                width: 128px;
                 selected(_value) => { root.month-picked(root.month-index); }
             }
             SpinBox {
@@ -185,9 +187,10 @@ export component MonthGrid inherits Rectangle {
                 maximum: 2199;
                 value <=> root.year;
                 accessible-label: @tr("Year");
-                horizontal-stretch: 1;
+                width: 112px;
                 edited(value) => { root.year-picked(value); }
             }
+            Rectangle { horizontal-stretch: 1; }
             Button {
                 text: @tr("Today");
                 accessible-label: @tr("Today");
