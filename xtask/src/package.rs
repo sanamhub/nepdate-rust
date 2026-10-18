@@ -1,5 +1,6 @@
 //! `cargo xtask package` (W4-03, ADR-0012): builds the widget in the `release-widget` profile
-//! through `apps/mitibar/Packager.toml` and runs `cargo-packager` with the formats for this OS.
+//! (unless `MITIBAR_BINARIES_DIR` points at a prebuilt one, as the macOS universal job does) and
+//! runs `cargo-packager` with `apps/mitibar/Packager.toml` and the formats for this OS.
 //! Windows also gets the portable `.zip` that ADR-0012 lists next to the NSIS installer.
 
 use std::path::{Path, PathBuf};
@@ -28,8 +29,20 @@ pub(crate) fn run() -> Result<()> {
         },
     );
     // The macOS workflow joins both arches with lipo into target/universal/release-widget and
-    // points here; every other build uses the profile directory.
-    let binaries = std::env::var_os("MITIBAR_BINARIES_DIR").map_or_else(
+    // points here. Every other build compiles the release-widget profile now, so the package
+    // can never hold a stale binary from an earlier build.
+    let prebuilt = std::env::var_os("MITIBAR_BINARIES_DIR");
+    if prebuilt.is_none() {
+        let status = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
+            .args(["build", "-p", "mitibar", "--profile", "release-widget"])
+            .current_dir(&root)
+            .status()
+            .context("run cargo build for the release-widget profile")?;
+        if !status.success() {
+            bail!("cargo build -p mitibar --profile release-widget exited with {status}");
+        }
+    }
+    let binaries = prebuilt.map_or_else(
         || target.join("release-widget"),
         |dir| {
             let dir = PathBuf::from(dir);
@@ -43,7 +56,7 @@ pub(crate) fn run() -> Result<()> {
     let binary = binaries.join(exe_name());
     if !binary.is_file() {
         bail!(
-            "{} is missing; run `cargo build -p mitibar --profile release-widget` first",
+            "{} is missing after the build (or in MITIBAR_BINARIES_DIR)",
             binary.display()
         );
     }
@@ -160,5 +173,47 @@ fn arch() -> &'static str {
         "arm64"
     } else {
         "x64"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::expect_used)]
+
+    use super::*;
+
+    /// The NSIS template is a copy of cargo-packager's. It must keep the per-user default under
+    /// `Programs` (W4 review), be the one Packager.toml uses, and name the cargo-packager
+    /// version the release workflow installs, so an upgrade cannot leave a stale copy behind.
+    #[test]
+    fn nsis_template_installs_under_programs_and_matches_the_packager_version() {
+        let root = workspace_root();
+        let read =
+            |path: &str| std::fs::read_to_string(root.join(path)).expect("read a packaging file");
+        let template = read("apps/mitibar/packaging/installer.nsi");
+        let config = read("apps/mitibar/Packager.toml");
+        let workflow = read(".github/workflows/release-mitibar.yml");
+
+        assert!(config.contains("template = \"packaging/installer.nsi\""));
+        assert!(!config.contains("preinstallSection"));
+        assert_eq!(
+            template
+                .matches(r#"StrCpy $INSTDIR "$LOCALAPPDATA\Programs\${PRODUCTNAME}""#)
+                .count(),
+            1
+        );
+        assert!(!template.contains(r#"StrCpy $INSTDIR "$LOCALAPPDATA\${PRODUCTNAME}""#));
+        // The default is only applied when /D left $INSTDIR empty.
+        let on_init = template
+            .split("Function .onInit")
+            .nth(1)
+            .and_then(|rest| rest.split("FunctionEnd").next())
+            .expect(".onInit");
+        assert!(on_init.contains("${If} $INSTDIR == \"\""));
+        assert!(on_init.contains("Programs"));
+
+        let version = "0.11.8";
+        assert!(template.contains(&format!("cargo-packager {version}")));
+        assert!(workflow.contains(&format!("cargo install cargo-packager --version {version}")));
     }
 }
