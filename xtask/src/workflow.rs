@@ -157,6 +157,7 @@ fn check_permissions(root: &Mapping) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 fn check_jobs(root: &Mapping) -> Result<()> {
     let jobs = map_field(root, "jobs")?;
     for name in [
@@ -185,14 +186,28 @@ fn check_jobs(root: &Mapping) -> Result<()> {
 
     let build = job(jobs, "build")?;
     let matrix = map_field(map_field(build, "strategy")?, "matrix")?;
-    let os = seq_field(matrix, "os")?;
-    let names: Vec<&str> = os.iter().filter_map(Value::as_str).collect();
-    if names.len() != 3
-        || !names.contains(&"ubuntu-latest")
-        || !names.contains(&"windows-latest")
-        || !names.contains(&"macos-latest")
-    {
-        bail!("build matrix must be exactly the three OS runners");
+    let include = seq_field(matrix, "include")?;
+    let mut rows = Vec::new();
+    for item in include {
+        let row = map(item)?;
+        let os = field(row, "os")?.as_str().unwrap_or_default();
+        let target = field(row, "target")?.as_str().unwrap_or_default();
+        let arch = field(row, "arch")?.as_str().unwrap_or_default();
+        rows.push((os, target, arch));
+    }
+    let expected = [
+        ("ubuntu-latest", "x86_64-unknown-linux-gnu", "x64"),
+        ("windows-latest", "x86_64-pc-windows-msvc", "x64"),
+        ("windows-latest", "aarch64-pc-windows-msvc", "arm64"),
+        ("macos-latest", "universal-apple-darwin", "universal"),
+    ];
+    for row in expected {
+        if !rows.contains(&row) {
+            bail!("build matrix is missing {} {} {}", row.0, row.1, row.2);
+        }
+    }
+    if rows.len() != expected.len() {
+        bail!("build matrix must have exactly four jobs");
     }
     let build_text = run_text(build)?;
     for command in [
@@ -206,6 +221,9 @@ fn check_jobs(root: &Mapping) -> Result<()> {
     }
     check_signing_gate(build, "Windows", "WINDOWS_SIGNING_ENABLED")?;
     check_signing_gate(build, "macOS", "MACOS_SIGNING_ENABLED")?;
+    check_windows_signing(build)?;
+    check_macos_signing(build)?;
+    check_windows_arm64(build)?;
 
     if !run_text(job(jobs, "sbom")?)?.contains("cargo cyclonedx") {
         bail!("sbom job does not run cargo cyclonedx");
@@ -296,6 +314,154 @@ fn check_signing_gate(job: &Mapping, os: &str, variable: &str) -> Result<()> {
         bail!("no {os} signing step gated on vars.{variable} == 'true'");
     }
     Ok(())
+}
+
+/// W5-05: the Windows binary is signed before `cargo xtask package`, and the NSIS setup is
+/// signed after it, so the installer and the portable zip carry a signed `mitibar.exe`.
+fn check_windows_signing(job: &Mapping) -> Result<()> {
+    let sign_binary = step_named(job, "Sign Windows binary")?;
+    let sign_binary_if = get(map(sign_binary)?, "if")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if !sign_binary_if.contains("WINDOWS_SIGNING_ENABLED") || !sign_binary_if.contains("== 'true'")
+    {
+        bail!("the Windows binary signing step is not gated on WINDOWS_SIGNING_ENABLED");
+    }
+    let sign_binary_run = get(map(sign_binary)?, "run")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if !sign_binary_run.contains("signtool sign")
+        || !sign_binary_run.contains("$env:MITIBAR_BINARY")
+    {
+        bail!("the Windows binary step does not signtool the binary");
+    }
+    let binary_path = env_value(sign_binary, "MITIBAR_BINARY")?;
+    if !binary_path.contains("release-widget/mitibar.exe") {
+        bail!("the Windows binary step signs `{binary_path}`, not the release-widget binary");
+    }
+
+    let package = step_named(job, "Package (Windows)")?;
+    let package_text = run_text(job)?;
+    if !package_text.contains("cargo xtask package") {
+        bail!("the Windows package step does not run cargo xtask package");
+    }
+    let binaries_dir = env_value(package, "MITIBAR_BINARIES_DIR")?;
+    if !binaries_dir.contains("release-widget") {
+        bail!("the Windows package step does not use the signed release-widget binary");
+    }
+
+    let setup = step_named(job, "Sign Windows installer")?;
+    let setup_run = get(map(setup)?, "run")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if !setup_run.contains("signtool sign") || !setup_run.contains("*-setup.exe") {
+        bail!("the Windows installer step does not signtool the NSIS setup");
+    }
+
+    let build = step_position(job, "Build the Windows binary")?;
+    let sign = step_position(job, "Sign Windows binary")?;
+    let package = step_position(job, "Package (Windows)")?;
+    let setup = step_position(job, "Sign Windows installer")?;
+    if !(build < sign && sign < package && package < setup) {
+        bail!("the Windows steps must build, sign the binary, package, then sign the installer");
+    }
+    Ok(())
+}
+
+/// W5-05: the macOS `.app` is signed before the DMG is built, then the DMG is notarized and
+/// stapled. The old step mounted a compressed DMG read-only and signed the app inside it.
+fn check_macos_signing(job: &Mapping) -> Result<()> {
+    let package = step_named(job, "Package (macOS app)")?;
+    if env_value(package, "MITIBAR_PACKAGE_FORMATS")? != "app" {
+        bail!("the macOS package step must ask for the app format only");
+    }
+
+    let sign = step_named(job, "Sign macOS app")?;
+    let sign_run = get(map(sign)?, "run")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if !sign_run.contains(r#"--sign "$MACOS_SIGNING_IDENTITY" dist/MitiBar.app"#) {
+        bail!("the macOS step does not codesign dist/MitiBar.app before the DMG");
+    }
+    if sign_run.contains("dist/*.dmg") || sign_run.contains("MitiBar-*.dmg") {
+        bail!("the macOS step signs the DMG instead of the .app inside it");
+    }
+
+    let dmg = step_named(job, "Build macOS DMG")?;
+    let dmg_run = get(map(dmg)?, "run")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if !dmg_run.contains("hdiutil create") || !dmg_run.contains("dist/MitiBar.app") {
+        bail!("the macOS DMG step does not build the DMG around the signed .app");
+    }
+
+    let notarize = step_named(job, "Notarize and staple macOS DMG")?;
+    let notarize_run = get(map(notarize)?, "run")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if !notarize_run.contains("notarytool") || !notarize_run.contains("stapler staple") {
+        bail!("the macOS step does not notarize and staple the DMG");
+    }
+
+    let package = step_position(job, "Package (macOS app)")?;
+    let sign = step_position(job, "Sign macOS app")?;
+    let dmg = step_position(job, "Build macOS DMG")?;
+    let notarize = step_position(job, "Notarize and staple macOS DMG")?;
+    if !(package < sign && sign < dmg && dmg < notarize) {
+        bail!("the macOS steps must package the app, sign it, build the DMG, then notarize");
+    }
+    Ok(())
+}
+
+/// W5-05: the Windows matrix builds `aarch64-pc-windows-msvc`, and the package step tells
+/// cargo-packager and the portable zip which architecture it is.
+fn check_windows_arm64(job: &Mapping) -> Result<()> {
+    let build = step_named(job, "Build the Windows binary")?;
+    let build_run = get(map(build)?, "run")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if !build_run.contains("rustup target add") || !build_run.contains("--target") {
+        bail!("the Windows build step does not add and build the matrix target");
+    }
+    let package = step_named(job, "Package (Windows)")?;
+    if !env_value(package, "MITIBAR_TARGET")?.contains("matrix.target") {
+        bail!("the Windows package step does not pass the matrix target to cargo-packager");
+    }
+    if !env_value(package, "MITIBAR_ARCH")?.contains("matrix.arch") {
+        bail!("the Windows package step does not pass the matrix arch to the portable zip");
+    }
+    Ok(())
+}
+
+fn step_named<'a>(job: &'a Mapping, name: &str) -> Result<&'a Value> {
+    for step in steps(job)? {
+        let mapping = map(step)?;
+        if get(mapping, "name").and_then(Value::as_str) == Some(name) {
+            return Ok(step);
+        }
+    }
+    bail!("workflow has no `{name}` step")
+}
+
+fn step_position(job: &Mapping, name: &str) -> Result<usize> {
+    steps(job)?
+        .iter()
+        .position(|step| {
+            map(step)
+                .ok()
+                .and_then(|step| get(step, "name"))
+                .and_then(Value::as_str)
+                == Some(name)
+        })
+        .ok_or_else(|| anyhow::anyhow!("workflow has no `{name}` step"))
+}
+
+fn env_value<'a>(step: &'a Value, key: &str) -> Result<&'a str> {
+    let step = map(step)?;
+    let env = map_field(step, "env")?;
+    field(env, key)?
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("`{key}` must be a string"))
 }
 
 fn job<'a>(jobs: &'a Mapping, name: &str) -> Result<&'a Mapping> {
@@ -414,10 +580,72 @@ mod tests {
     }
 
     #[test]
+    fn an_unsigned_windows_binary_fails() {
+        let text = mutated(
+            "      - name: Sign Windows binary\n",
+            "      - name: Sign Windows binary missing\n",
+        );
+        expect_failure(&text, "Sign Windows binary");
+    }
+
+    #[test]
+    fn a_macos_app_signed_inside_the_dmg_fails() {
+        let text = mutated(
+            r#"codesign --force --options runtime --sign "$MACOS_SIGNING_IDENTITY" dist/MitiBar.app"#,
+            r#"codesign --force --options runtime --sign "$MACOS_SIGNING_IDENTITY" dist/MitiBar-*.dmg"#,
+        );
+        expect_failure(&text, "does not codesign dist/MitiBar.app");
+    }
+
+    /// W5 review: signing the binary after packaging would ship an unsigned binary inside a
+    /// signed installer and an unsigned portable zip; the order check must catch it.
+    #[test]
+    fn signing_the_windows_binary_after_packaging_fails() {
+        let text = workflow_text();
+        let sign = text
+            .find(
+                "      - name: Sign Windows binary
+",
+            )
+            .expect("sign step");
+        let package = text
+            .find(
+                "      - name: Package (Windows)
+",
+            )
+            .expect("package step");
+        let linux = text
+            .find(
+                "      - name: Package (Linux)
+",
+            )
+            .expect("linux step");
+        assert!(
+            sign < package && package < linux,
+            "expected step order in the workflow"
+        );
+        let mut moved = String::new();
+        moved.push_str(&text[..sign]);
+        moved.push_str(&text[package..linux]);
+        moved.push_str(&text[sign..package]);
+        moved.push_str(&text[linux..]);
+        expect_failure(&moved, "must build, sign the binary, package");
+    }
+
+    #[test]
+    fn windows_arm64_missing_fails() {
+        let text = mutated(
+            "            target: aarch64-pc-windows-msvc\n",
+            "            target: x86_64-pc-windows-msvc\n",
+        );
+        expect_failure(&text, "build matrix is missing");
+    }
+
+    #[test]
     fn an_ungated_signing_step_fails() {
         let text = mutated(
-            "if: matrix.os == 'windows-latest' && vars.WINDOWS_SIGNING_ENABLED == 'true'",
-            "if: matrix.os == 'windows-latest'",
+            "      - name: Sign Windows binary\n        if: matrix.os == 'windows-latest' && vars.WINDOWS_SIGNING_ENABLED == 'true'\n",
+            "      - name: Sign Windows binary\n        if: matrix.os == 'windows-latest'\n",
         );
         expect_failure(&text, "WINDOWS_SIGNING_ENABLED");
     }

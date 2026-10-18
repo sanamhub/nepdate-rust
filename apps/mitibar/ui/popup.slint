@@ -35,6 +35,7 @@ export component PopupWindow inherits Window {
     in property <[string]> month-names: [];
     in property <int> month-index: 0;
     in property <int> year: 1901;
+    in property <string> year-text: "";
     in property <string> month-title: "";
     in property <bool> can-prev: false;
     in property <bool> can-next: false;
@@ -211,6 +212,7 @@ export component PopupWindow inherits Window {
                 month-names: root.month-names;
                 month-index: root.month-index;
                 year: root.year;
+                year-text: root.year-text;
                 title: root.month-title;
                 can-prev: root.can-prev;
                 can-next: root.can-next;

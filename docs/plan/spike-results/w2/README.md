@@ -9,6 +9,10 @@ Baishakh 1, 2081, a Saturday and a public holiday (`--today 2081-01-01 --detail 
 max-events pair shows Ashoj 1, 2081 (`--today 2081-06-01 --detail 2081-06-01`), the day with nine
 events.
 
+All 14 images were re-rendered on 2026-10-18 for the W5-04 year control: the year box now shows
+`२०८३` in Nepali and `2083` in English. Every verdict below stays **not verified**; the reviewer
+looks at the new images.
+
 `--today` and `--detail` exist only in the `snapshot` feature, and the parser rejects them without
 `--popup --snapshot`, so the normal app can never pin its date.
 

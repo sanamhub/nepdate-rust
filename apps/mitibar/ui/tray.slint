@@ -16,6 +16,13 @@ export component TrayComponent inherits SystemTrayIcon {
     in property <bool> dark-taskbar: Palette.color-scheme == ColorScheme.dark;
     in-out property <string> title-text: "";
     in-out property <string> tooltip-text: "";
+    // W5-03: the taskbar text's menu uses the same translated labels, and it exists before the
+    // popup. These read the one `MenuText` global the tray menu also reads.
+    out property <string> menu-open: MenuText.open;
+    out property <string> menu-copy-bs: MenuText.copy-bs;
+    out property <string> menu-copy-ad: MenuText.copy-ad;
+    out property <string> menu-settings: MenuText.settings;
+    out property <string> menu-quit: MenuText.quit;
 
     // Windows/Linux render the icon; macOS shows the title instead (WR-01 AC2).
     icon: root.is-ne

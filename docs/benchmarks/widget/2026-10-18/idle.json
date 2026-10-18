@@ -1,0 +1,519 @@
+{
+  "all_cpu_load": {
+    "before_mean_percent": 30.622004050162207,
+    "during_mean_percent": 34.683510541872124,
+    "max_percent": 72.4715854363321,
+    "min_percent": 5.026097042335202
+  },
+  "arch": "x86_64",
+  "command": "cargo xtask widget-idle --minutes 5",
+  "cpu_percent_of_one_core": 1.4550029506530284,
+  "date": "2026-10-18",
+  "loaded": true,
+  "machine": "SANAM",
+  "minutes": 5,
+  "os": "Microsoft Windows 11 Home 10.0.26300",
+  "private_bytes": 64651264,
+  "process_cpu_seconds": 4.421875,
+  "profile": "release-widget",
+  "sample_seconds": 5,
+  "samples": [
+    {
+      "all_cpu_load_percent": 31.096153846153847,
+      "private_bytes": 64638976,
+      "process_cpu_seconds": 0.34375,
+      "seconds": 5.0,
+      "threads": 18,
+      "working_set_bytes": 113131520
+    },
+    {
+      "all_cpu_load_percent": 13.157384048127305,
+      "private_bytes": 64638976,
+      "process_cpu_seconds": 0.34375,
+      "seconds": 10.0,
+      "threads": 18,
+      "working_set_bytes": 113131520
+    },
+    {
+      "all_cpu_load_percent": 16.258741258741257,
+      "private_bytes": 64638976,
+      "process_cpu_seconds": 0.359375,
+      "seconds": 15.0,
+      "threads": 18,
+      "working_set_bytes": 113127424
+    },
+    {
+      "all_cpu_load_percent": 13.268671193016491,
+      "private_bytes": 64638976,
+      "process_cpu_seconds": 0.375,
+      "seconds": 20.0,
+      "threads": 18,
+      "working_set_bytes": 113127424
+    },
+    {
+      "all_cpu_load_percent": 26.625266834853484,
+      "private_bytes": 64733184,
+      "process_cpu_seconds": 0.453125,
+      "seconds": 25.0,
+      "threads": 19,
+      "working_set_bytes": 113364992
+    },
+    {
+      "all_cpu_load_percent": 58.95897832817337,
+      "private_bytes": 64733184,
+      "process_cpu_seconds": 0.546875,
+      "seconds": 30.0,
+      "threads": 19,
+      "working_set_bytes": 113364992
+    },
+    {
+      "all_cpu_load_percent": 23.91304347826087,
+      "private_bytes": 64733184,
+      "process_cpu_seconds": 0.59375,
+      "seconds": 35.0,
+      "threads": 19,
+      "working_set_bytes": 113364992
+    },
+    {
+      "all_cpu_load_percent": 30.68137824235385,
+      "private_bytes": 64753664,
+      "process_cpu_seconds": 0.703125,
+      "seconds": 40.0,
+      "threads": 19,
+      "working_set_bytes": 113405952
+    },
+    {
+      "all_cpu_load_percent": 46.85692248360972,
+      "private_bytes": 64618496,
+      "process_cpu_seconds": 0.734375,
+      "seconds": 45.0,
+      "threads": 15,
+      "working_set_bytes": 113336320
+    },
+    {
+      "all_cpu_load_percent": 47.74305555555556,
+      "private_bytes": 64618496,
+      "process_cpu_seconds": 0.78125,
+      "seconds": 50.0,
+      "threads": 15,
+      "working_set_bytes": 113336320
+    },
+    {
+      "all_cpu_load_percent": 63.03464292626282,
+      "private_bytes": 64618496,
+      "process_cpu_seconds": 0.828125,
+      "seconds": 55.0,
+      "threads": 15,
+      "working_set_bytes": 113336320
+    },
+    {
+      "all_cpu_load_percent": 31.605415860735008,
+      "private_bytes": 64618496,
+      "process_cpu_seconds": 0.90625,
+      "seconds": 60.0,
+      "threads": 15,
+      "working_set_bytes": 113336320
+    },
+    {
+      "all_cpu_load_percent": 11.016785645379123,
+      "private_bytes": 64618496,
+      "process_cpu_seconds": 0.90625,
+      "seconds": 65.0,
+      "threads": 15,
+      "working_set_bytes": 113336320
+    },
+    {
+      "all_cpu_load_percent": 23.993028659953524,
+      "private_bytes": 64618496,
+      "process_cpu_seconds": 0.953125,
+      "seconds": 70.0,
+      "threads": 15,
+      "working_set_bytes": 113336320
+    },
+    {
+      "all_cpu_load_percent": 47.50241080038573,
+      "private_bytes": 64618496,
+      "process_cpu_seconds": 1.0,
+      "seconds": 75.0,
+      "threads": 15,
+      "working_set_bytes": 113340416
+    },
+    {
+      "all_cpu_load_percent": 72.4715854363321,
+      "private_bytes": 64618496,
+      "process_cpu_seconds": 1.125,
+      "seconds": 80.0,
+      "threads": 15,
+      "working_set_bytes": 113340416
+    },
+    {
+      "all_cpu_load_percent": 67.12509419743783,
+      "private_bytes": 64618496,
+      "process_cpu_seconds": 1.234375,
+      "seconds": 85.0,
+      "threads": 15,
+      "working_set_bytes": 113356800
+    },
+    {
+      "all_cpu_load_percent": 64.62806748466258,
+      "private_bytes": 64618496,
+      "process_cpu_seconds": 1.3125,
+      "seconds": 90.0,
+      "threads": 15,
+      "working_set_bytes": 113360896
+    },
+    {
+      "all_cpu_load_percent": 70.33639143730886,
+      "private_bytes": 64618496,
+      "process_cpu_seconds": 1.390625,
+      "seconds": 95.0,
+      "threads": 15,
+      "working_set_bytes": 113360896
+    },
+    {
+      "all_cpu_load_percent": 58.068225373706404,
+      "private_bytes": 64618496,
+      "process_cpu_seconds": 1.421875,
+      "seconds": 100.0,
+      "threads": 15,
+      "working_set_bytes": 113360896
+    },
+    {
+      "all_cpu_load_percent": 70.65339842283139,
+      "private_bytes": 64618496,
+      "process_cpu_seconds": 1.609375,
+      "seconds": 105.0,
+      "threads": 15,
+      "working_set_bytes": 113360896
+    },
+    {
+      "all_cpu_load_percent": 65.82692307692307,
+      "private_bytes": 64585728,
+      "process_cpu_seconds": 1.8125,
+      "seconds": 110.0,
+      "threads": 14,
+      "working_set_bytes": 113348608
+    },
+    {
+      "all_cpu_load_percent": 58.81900365454895,
+      "private_bytes": 64585728,
+      "process_cpu_seconds": 1.828125,
+      "seconds": 115.0,
+      "threads": 14,
+      "working_set_bytes": 113348608
+    },
+    {
+      "all_cpu_load_percent": 59.90375360923965,
+      "private_bytes": 64557056,
+      "process_cpu_seconds": 2.0625,
+      "seconds": 120.0,
+      "threads": 13,
+      "working_set_bytes": 113332224
+    },
+    {
+      "all_cpu_load_percent": 36.481017537097706,
+      "private_bytes": 64557056,
+      "process_cpu_seconds": 2.234375,
+      "seconds": 125.0,
+      "threads": 13,
+      "working_set_bytes": 113332224
+    },
+    {
+      "all_cpu_load_percent": 47.67598842815815,
+      "private_bytes": 64557056,
+      "process_cpu_seconds": 2.390625,
+      "seconds": 130.0,
+      "threads": 13,
+      "working_set_bytes": 113332224
+    },
+    {
+      "all_cpu_load_percent": 49.25685975609756,
+      "private_bytes": 64557056,
+      "process_cpu_seconds": 2.515625,
+      "seconds": 135.0,
+      "threads": 13,
+      "working_set_bytes": 113332224
+    },
+    {
+      "all_cpu_load_percent": 52.76179516685846,
+      "private_bytes": 64557056,
+      "process_cpu_seconds": 2.640625,
+      "seconds": 140.0,
+      "threads": 13,
+      "working_set_bytes": 113332224
+    },
+    {
+      "all_cpu_load_percent": 41.722745625841185,
+      "private_bytes": 64557056,
+      "process_cpu_seconds": 2.734375,
+      "seconds": 145.0,
+      "threads": 13,
+      "working_set_bytes": 113336320
+    },
+    {
+      "all_cpu_load_percent": 30.55394711445667,
+      "private_bytes": 64557056,
+      "process_cpu_seconds": 2.828125,
+      "seconds": 150.0,
+      "threads": 13,
+      "working_set_bytes": 113336320
+    },
+    {
+      "all_cpu_load_percent": 33.8553750966744,
+      "private_bytes": 64557056,
+      "process_cpu_seconds": 2.90625,
+      "seconds": 155.0,
+      "threads": 13,
+      "working_set_bytes": 113336320
+    },
+    {
+      "all_cpu_load_percent": 59.00848765432099,
+      "private_bytes": 64557056,
+      "process_cpu_seconds": 3.109375,
+      "seconds": 160.0,
+      "threads": 13,
+      "working_set_bytes": 113336320
+    },
+    {
+      "all_cpu_load_percent": 40.219907407407405,
+      "private_bytes": 64557056,
+      "process_cpu_seconds": 3.140625,
+      "seconds": 165.0,
+      "threads": 13,
+      "working_set_bytes": 113336320
+    },
+    {
+      "all_cpu_load_percent": 45.69473484128493,
+      "private_bytes": 64557056,
+      "process_cpu_seconds": 3.1875,
+      "seconds": 170.0,
+      "threads": 13,
+      "working_set_bytes": 113336320
+    },
+    {
+      "all_cpu_load_percent": 37.27079714340861,
+      "private_bytes": 64557056,
+      "process_cpu_seconds": 3.265625,
+      "seconds": 175.0,
+      "threads": 13,
+      "working_set_bytes": 113340416
+    },
+    {
+      "all_cpu_load_percent": 39.253962118283724,
+      "private_bytes": 64557056,
+      "process_cpu_seconds": 3.359375,
+      "seconds": 180.0,
+      "threads": 13,
+      "working_set_bytes": 113340416
+    },
+    {
+      "all_cpu_load_percent": 24.517746913580247,
+      "private_bytes": 64557056,
+      "process_cpu_seconds": 3.46875,
+      "seconds": 185.0,
+      "threads": 13,
+      "working_set_bytes": 113344512
+    },
+    {
+      "all_cpu_load_percent": 36.882716049382715,
+      "private_bytes": 64557056,
+      "process_cpu_seconds": 3.5625,
+      "seconds": 190.0,
+      "threads": 13,
+      "working_set_bytes": 113344512
+    },
+    {
+      "all_cpu_load_percent": 35.828362516836634,
+      "private_bytes": 64557056,
+      "process_cpu_seconds": 3.59375,
+      "seconds": 195.0,
+      "threads": 13,
+      "working_set_bytes": 113344512
+    },
+    {
+      "all_cpu_load_percent": 37.32353509959389,
+      "private_bytes": 64557056,
+      "process_cpu_seconds": 3.703125,
+      "seconds": 200.0,
+      "threads": 13,
+      "working_set_bytes": 113344512
+    },
+    {
+      "all_cpu_load_percent": 34.855815753822334,
+      "private_bytes": 64557056,
+      "process_cpu_seconds": 3.8125,
+      "seconds": 205.0,
+      "threads": 13,
+      "working_set_bytes": 113352704
+    },
+    {
+      "all_cpu_load_percent": 42.131589072720274,
+      "private_bytes": 64557056,
+      "process_cpu_seconds": 3.953125,
+      "seconds": 210.0,
+      "threads": 13,
+      "working_set_bytes": 113352704
+    },
+    {
+      "all_cpu_load_percent": 41.19922630560928,
+      "private_bytes": 64561152,
+      "process_cpu_seconds": 4.03125,
+      "seconds": 215.0,
+      "threads": 13,
+      "working_set_bytes": 113356800
+    },
+    {
+      "all_cpu_load_percent": 34.73481195756991,
+      "private_bytes": 64561152,
+      "process_cpu_seconds": 4.078125,
+      "seconds": 220.0,
+      "threads": 13,
+      "working_set_bytes": 113356800
+    },
+    {
+      "all_cpu_load_percent": 40.50925925925926,
+      "private_bytes": 64561152,
+      "process_cpu_seconds": 4.109375,
+      "seconds": 225.0,
+      "threads": 13,
+      "working_set_bytes": 113356800
+    },
+    {
+      "all_cpu_load_percent": 19.772376543209877,
+      "private_bytes": 64561152,
+      "process_cpu_seconds": 4.171875,
+      "seconds": 230.0,
+      "threads": 13,
+      "working_set_bytes": 113356800
+    },
+    {
+      "all_cpu_load_percent": 14.603912453999612,
+      "private_bytes": 64589824,
+      "process_cpu_seconds": 4.21875,
+      "seconds": 235.0,
+      "threads": 13,
+      "working_set_bytes": 113414144
+    },
+    {
+      "all_cpu_load_percent": 10.644041650597764,
+      "private_bytes": 64589824,
+      "process_cpu_seconds": 4.25,
+      "seconds": 240.0,
+      "threads": 13,
+      "working_set_bytes": 113414144
+    },
+    {
+      "all_cpu_load_percent": 7.214700193423599,
+      "private_bytes": 64589824,
+      "process_cpu_seconds": 4.296875,
+      "seconds": 245.0,
+      "threads": 13,
+      "working_set_bytes": 113414144
+    },
+    {
+      "all_cpu_load_percent": 8.742004264392325,
+      "private_bytes": 64552960,
+      "process_cpu_seconds": 4.328125,
+      "seconds": 250.0,
+      "threads": 12,
+      "working_set_bytes": 113393664
+    },
+    {
+      "all_cpu_load_percent": 15.863803443606114,
+      "private_bytes": 64552960,
+      "process_cpu_seconds": 4.359375,
+      "seconds": 255.0,
+      "threads": 12,
+      "working_set_bytes": 113393664
+    },
+    {
+      "all_cpu_load_percent": 14.992272024729521,
+      "private_bytes": 64585728,
+      "process_cpu_seconds": 4.40625,
+      "seconds": 260.0,
+      "threads": 13,
+      "working_set_bytes": 113410048
+    },
+    {
+      "all_cpu_load_percent": 8.357515960533952,
+      "private_bytes": 64585728,
+      "process_cpu_seconds": 4.4375,
+      "seconds": 265.0,
+      "threads": 13,
+      "working_set_bytes": 113410048
+    },
+    {
+      "all_cpu_load_percent": 6.807602792862684,
+      "private_bytes": 64585728,
+      "process_cpu_seconds": 4.484375,
+      "seconds": 270.0,
+      "threads": 13,
+      "working_set_bytes": 113410048
+    },
+    {
+      "all_cpu_load_percent": 9.159420289855072,
+      "private_bytes": 64585728,
+      "process_cpu_seconds": 4.53125,
+      "seconds": 275.0,
+      "threads": 13,
+      "working_set_bytes": 113410048
+    },
+    {
+      "all_cpu_load_percent": 5.026097042335202,
+      "private_bytes": 64585728,
+      "process_cpu_seconds": 4.53125,
+      "seconds": 280.0,
+      "threads": 13,
+      "working_set_bytes": 113410048
+    },
+    {
+      "all_cpu_load_percent": 7.742807491793783,
+      "private_bytes": 64651264,
+      "process_cpu_seconds": 4.546875,
+      "seconds": 285.0,
+      "threads": 15,
+      "working_set_bytes": 113741824
+    },
+    {
+      "all_cpu_load_percent": 9.835430784123911,
+      "private_bytes": 64651264,
+      "process_cpu_seconds": 4.59375,
+      "seconds": 290.0,
+      "threads": 15,
+      "working_set_bytes": 113741824
+    },
+    {
+      "all_cpu_load_percent": 16.469905167408555,
+      "private_bytes": 64651264,
+      "process_cpu_seconds": 4.671875,
+      "seconds": 295.0,
+      "threads": 15,
+      "working_set_bytes": 113741824
+    },
+    {
+      "all_cpu_load_percent": 10.495739736638265,
+      "private_bytes": 64651264,
+      "process_cpu_seconds": 4.765625,
+      "seconds": 300.0,
+      "threads": 15,
+      "working_set_bytes": 113741824
+    }
+  ],
+  "settings": {
+    "clock_24h": false,
+    "extra_time_zone": "Asia/Kathmandu",
+    "language": "en",
+    "launch_at_login": false,
+    "show_seconds": false,
+    "taskbar_text": true,
+    "theme": "system"
+  },
+  "threads": 15,
+  "verdicts": {
+    "cpu": "LOADED (no verdict)",
+    "working_set": "LOADED (no verdict)"
+  },
+  "wall_seconds": 303.9083184,
+  "warmup_seconds": 15,
+  "working_set_bytes": 113741824
+}

@@ -6458,6 +6458,7 @@ dependencies = [
  "fontdb",
  "resvg",
  "serde_json",
+ "windows",
  "yaml-rust2",
 ]
 

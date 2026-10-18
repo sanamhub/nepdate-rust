@@ -65,7 +65,22 @@ struct AppState {
     /// Where the settings panel saves (W3-04): the per-user file in the app, a temporary file in
     /// a test, `None` in a snapshot run or without a config directory.
     settings_path: Option<PathBuf>,
+    /// The popup once it exists (W5-03). It is created on the first open, not at startup, so the
+    /// femtovg OpenGL context is not loaded while the popup has never been shown.
+    popup: Weak<PopupWindow>,
+    /// The one settings debounce timer (W3-04), created once and shared by the popup.
+    save_timer: Rc<slint::Timer>,
+    /// The `--theme` flag, applied when the popup is created (W5 review: the lazy popup must
+    /// still honour it, as the eager popup did).
+    theme_override: Option<ThemeChoice>,
 }
+
+/// The strong popup handle. `AppState` keeps only a `Weak`, so the popup's own callbacks (which
+/// capture `AppState`) do not keep the popup alive through the state. The tray and taskbar
+/// closures do hold this slot and the state, and `AppState` holds the tray, so a reference cycle
+/// exists; it lives exactly as long as the process, which never drops these objects before exit
+/// (W5 review).
+type PopupSlot = Rc<RefCell<Option<PopupWindow>>>;
 
 impl AppState {
     fn new(
@@ -86,6 +101,9 @@ impl AppState {
             tray: None,
             taskbar: None,
             settings_path: None,
+            popup: Weak::default(),
+            save_timer: Rc::new(slint::Timer::default()),
+            theme_override: None,
         }
     }
 }
@@ -93,6 +111,115 @@ impl AppState {
 /// A tray click within this long after focus loss hid the popup was the click that took the focus
 /// away, so it means "close", not "open again".
 const REOPEN_GUARD: std::time::Duration = std::time::Duration::from_millis(400);
+
+thread_local! {
+    /// The UI-thread action a second launch runs. A thread-local holds the non-`Send` `Rc`, so
+    /// the listener thread can wake the loop with a closure that captures nothing.
+    static OPEN_REQUEST: RefCell<Option<Rc<dyn Fn()>>> = const { RefCell::new(None) };
+}
+
+/// Installs the second-launch handler on the UI thread (W5-02).
+pub(crate) fn install_open_request(slot: &PopupSlot, state: &Rc<RefCell<AppState>>) {
+    let slot = slot.clone();
+    let state = state.clone();
+    let handler: Rc<dyn Fn()> = Rc::new(move || {
+        open_popup(&slot, &state, ui_bridge::PopupAnchor::TrayCorner);
+    });
+    OPEN_REQUEST.with(|slot| *slot.borrow_mut() = Some(handler));
+}
+
+/// Runs the installed second-launch handler on the UI thread.
+pub(crate) fn run_open_request() {
+    note_wake();
+    // Clone the handler out before calling it: the handler borrows state and may run a callback
+    // that reaches this thread-local again.
+    let handler = OPEN_REQUEST.with(|slot| slot.borrow().clone());
+    if let Some(handler) = handler {
+        handler();
+    }
+}
+
+/// Called on the listener thread when a second instance connects.
+fn wake_ui() {
+    if let Err(err) = slint::invoke_from_event_loop(run_open_request) {
+        log::warn!("single instance: could not wake the UI thread: {err}");
+    }
+}
+
+/// W5-02's idle-wake counter, present only in a `snapshot` build.
+#[cfg(feature = "snapshot")]
+static IDLE_WAKES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Counts one UI wake: a timer tick or a second-launch open. A no-op in the shipped build.
+fn note_wake() {
+    #[cfg(feature = "snapshot")]
+    {
+        IDLE_WAKES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+#[cfg(feature = "snapshot")]
+fn idle_wakes() -> u64 {
+    IDLE_WAKES.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Creates the popup the first time it is needed (W5-03). Until then `PopupWindow::new` has not
+/// run, so femtovg has not loaded the OpenGL driver for a window nobody has seen.
+fn ensure_popup(slot: &PopupSlot, state: &Rc<RefCell<AppState>>) -> Option<PopupWindow> {
+    if let Some(popup) = slot.borrow().as_ref() {
+        return Some(popup.clone_strong());
+    }
+    let popup = match PopupWindow::new() {
+        Ok(popup) => popup,
+        Err(err) => {
+            log::warn!("could not create the popup: {err}");
+            return None;
+        }
+    };
+    ui_bridge::set_app_name(&popup);
+    let choice = {
+        let s = state.borrow();
+        s.theme_override
+            .unwrap_or_else(|| ui_bridge::theme_choice(&s.settings.theme))
+    };
+    theme::apply(&popup, choice);
+    let weak = popup.as_weak();
+    state.borrow_mut().popup = weak.clone();
+    wire_popup(&popup, state, &weak);
+    let save_timer = state.borrow().save_timer.clone();
+    wire_settings(&popup, state, &save_timer);
+    *slot.borrow_mut() = Some(popup.clone_strong());
+    Some(popup)
+}
+
+/// Shows the popup, creating it first on the first open.
+fn open_popup(slot: &PopupSlot, state: &Rc<RefCell<AppState>>, anchor: ui_bridge::PopupAnchor) {
+    let Some(popup) = ensure_popup(slot, state) else {
+        return;
+    };
+    prepare_show(state);
+    update_popup(state);
+    if let Err(err) = ui_bridge::show_popup_at(&popup, anchor) {
+        log::warn!("could not show the popup: {err}");
+    }
+}
+
+/// Whether the popup exists and is visible.
+fn popup_visible(state: &Rc<RefCell<AppState>>) -> bool {
+    state
+        .borrow()
+        .popup
+        .upgrade()
+        .is_some_and(|popup| popup.window().is_visible())
+}
+
+/// Hides the popup if it exists, recording the hide for the reopen guard.
+fn hide_popup(state: &Rc<RefCell<AppState>>) {
+    if let Some(popup) = state.borrow().popup.upgrade() {
+        record_hidden(state);
+        let _ = popup.hide();
+    }
+}
 
 /// Command-line flags. `theme` and `lang` override the settings, for snapshot determinism.
 #[derive(Debug, Default)]
@@ -115,9 +242,19 @@ struct Cli {
     /// Opens the settings panel in a snapshot (W3-04).
     #[cfg(feature = "snapshot")]
     settings_panel: bool,
+    /// W5-02: run for this many seconds, then write the UI-wake count and quit. A test tool,
+    /// available only with the `snapshot` feature.
+    #[cfg(feature = "snapshot")]
+    wake_probe: Option<u64>,
+    /// Where `--wake-probe` writes its count.
+    #[cfg(feature = "snapshot")]
+    wake_out: Option<PathBuf>,
     theme: Option<ThemeChoice>,
     lang: Option<Lang>,
     no_taskbar_text: bool,
+    /// W5-01: use this settings file instead of the per-user one, and do not touch the login item
+    /// or the single-instance socket. It is how the idle harness starts a measured process.
+    settings_file: Option<PathBuf>,
     #[cfg(all(windows, feature = "snapshot"))]
     taskbar_snapshot: Option<PathBuf>,
     #[cfg(all(windows, feature = "snapshot"))]
@@ -151,6 +288,12 @@ impl Cli {
                 "--font-test" => cli.font_test = true,
                 "--popup" => cli.popup = true,
                 "--no-taskbar-text" => cli.no_taskbar_text = true,
+                "--settings-file" => {
+                    let path = args
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("--settings-file needs a path"))?;
+                    cli.settings_file = Some(PathBuf::from(path));
+                }
                 #[cfg(feature = "snapshot")]
                 "--snapshot" => {
                     let path = args
@@ -166,6 +309,24 @@ impl Cli {
                 "--converter" => cli.converter = true,
                 #[cfg(feature = "snapshot")]
                 "--settings" => cli.settings_panel = true,
+                #[cfg(feature = "snapshot")]
+                "--wake-probe" => {
+                    let value = args
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("--wake-probe needs a number of seconds"))?;
+                    cli.wake_probe = Some(
+                        value
+                            .parse()
+                            .map_err(|_| anyhow::anyhow!("--wake-probe needs whole seconds"))?,
+                    );
+                }
+                #[cfg(feature = "snapshot")]
+                "--wake-out" => {
+                    let path = args
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("--wake-out needs a path"))?;
+                    cli.wake_out = Some(PathBuf::from(path));
+                }
                 "--theme" => {
                     let value = args
                         .next()
@@ -246,6 +407,20 @@ impl Cli {
                 anyhow::bail!("--settings needs --popup --snapshot");
             }
         }
+        #[cfg(feature = "snapshot")]
+        {
+            if cli.wake_probe.is_some() != cli.wake_out.is_some() {
+                anyhow::bail!("--wake-probe and --wake-out go together");
+            }
+            if cli.wake_probe.is_some() && cli.settings_file.is_none() {
+                anyhow::bail!(
+                    "--wake-probe needs --settings-file, so it never touches the user's file"
+                );
+            }
+            if cli.wake_probe.is_some() && (cli.popup || cli.font_test || cli.snapshot.is_some()) {
+                anyhow::bail!("--wake-probe does not combine with a snapshot window");
+            }
+        }
         if cli.font_test && cli.popup {
             anyhow::bail!("--font-test and --popup are exclusive");
         }
@@ -255,8 +430,13 @@ impl Cli {
     /// Whether this run is a review/snapshot tool, which must not touch the user's login item or
     /// settings file.
     fn is_snapshot_tool(&self) -> bool {
+        // W5-01: a settings-file run is isolated like a snapshot tool: no login item, no socket,
+        // and no read or write of the real settings file unless the flag points at it.
+        if self.settings_file.is_some() {
+            return true;
+        }
         #[cfg(feature = "snapshot")]
-        if self.popup {
+        if self.popup || self.wake_probe.is_some() {
             return true;
         }
         #[cfg(all(windows, feature = "snapshot"))]
@@ -270,6 +450,11 @@ impl Cli {
 /// The settings for this run: the per-user file, or the defaults for a snapshot tool so a
 /// review image neither reads nor writes `settings.toml`.
 fn load_settings(cli: &Cli) -> (Settings, Vec<String>) {
+    // W5-01: the idle harness points at its own file, so the real `%APPDATA%\mitibar` is never
+    // read or written. A missing file is created there, which is also what the harness expects.
+    if let Some(path) = &cli.settings_file {
+        return platform::settings_store::load(path);
+    }
     #[cfg(feature = "snapshot")]
     if cli.popup {
         return (Settings::default(), Vec::new());
@@ -379,17 +564,39 @@ fn main() -> anyhow::Result<()> {
         Rc::new(SystemClipboard),
     )));
     state.borrow_mut().zones = ui_bridge::all_time_zones();
-    if !cli.is_snapshot_tool() {
+    state.borrow_mut().theme_override = cli.theme;
+    if let Some(path) = &cli.settings_file {
+        state.borrow_mut().settings_path = Some(path.clone());
+    } else if !cli.is_snapshot_tool() {
         state.borrow_mut().settings_path = platform::settings_store::default_path();
     }
-    let popup = PopupWindow::new()?;
-    // The popup title (Alt+Tab) and every later window title share this one value (ADR-0017).
-    ui_bridge::set_app_name(&popup);
-    theme::apply(
-        &popup,
-        cli.theme
-            .unwrap_or_else(|| ui_bridge::theme_choice(&state.borrow().settings.theme)),
-    );
+    // W5-03: the popup is created on the first open, not here. The slot holds the one strong
+    // handle; `AppState` keeps only a weak one, so the component's callbacks cannot form a cycle.
+    let slot: PopupSlot = Rc::new(RefCell::new(None));
+
+    // The snapshot tool needs a window now; the normal app creates it later.
+    #[cfg(feature = "snapshot")]
+    if cli.popup {
+        let popup = PopupWindow::new()?;
+        ui_bridge::set_app_name(&popup);
+        theme::apply(
+            &popup,
+            cli.theme
+                .unwrap_or_else(|| ui_bridge::theme_choice(&state.borrow().settings.theme)),
+        );
+        state.borrow_mut().popup = popup.as_weak();
+        if lang == Lang::Ne {
+            slint::select_bundled_translation("ne")?;
+        }
+        return snapshot_popup(&cli, &state, &popup, lang);
+    }
+
+    // Tray (W1-03): WR-01 events delivered back here.
+    let tray = Rc::new(SlintTray::new(lang, {
+        let state = state.clone();
+        let slot = slot.clone();
+        move |event| handle_tray_event(event, &state, &slot)
+    })?);
 
     // Switch the language after the first component exists so the runtime context is up
     // (ADR-0008 A.3). English is the source language, so only Nepali has a bundle; the `@tr`
@@ -398,36 +605,21 @@ fn main() -> anyhow::Result<()> {
         slint::select_bundled_translation("ne")?;
     }
 
-    // Snapshot the popup (W1 test tool): fill it with today's header and clocks, then render.
-    #[cfg(feature = "snapshot")]
-    if cli.popup {
-        return snapshot_popup(&cli, &state, &popup, lang);
-    }
-
-    let popup_weak = popup.as_weak();
-    wire_popup(&popup, &state, &popup_weak);
-
-    // Tray (W1-03): WR-01 events delivered back here.
-    let tray = Rc::new(SlintTray::new(lang, {
-        let state = state.clone();
-        let popup_weak = popup_weak.clone();
-        move |event| handle_tray_event(event, &state, &popup_weak)
-    })?);
-
     // Taskbar text (W1B-03): WR-12 on Windows 11, a no-op elsewhere. Its events run the same
     // actions as the tray menu; its scheme callback keeps the tray icon ink in step.
     let taskbar: Rc<dyn TaskbarText> = Rc::from(platform::taskbar::create(
         {
             let state = state.clone();
-            let popup_weak = popup_weak.clone();
-            move |event| handle_taskbar_event(event, &state, &popup_weak)
+            let slot = slot.clone();
+            move |event| handle_taskbar_event(event, &state, &slot)
         },
         {
             let tray = tray.clone();
             move |dark| tray.set_dark_taskbar(dark)
         },
     ));
-    taskbar.set_menu_labels(&ui_bridge::menu_labels(&popup));
+    // The labels come from the tray component, which exists before the popup (W5-03).
+    taskbar.set_menu_labels(&tray.menu_labels());
     taskbar.set_enabled(state.borrow().settings.taskbar_text);
     // First taskbar lines, then the timer updates them each tick (WR-12 AC1).
     {
@@ -437,45 +629,43 @@ fn main() -> anyhow::Result<()> {
     }
 
     // W3-04: the settings panel needs the live tray and taskbar for language and taskbar-text
-    // changes, and one debounce timer for the 300 ms save.
+    // changes. The debounce timer lives in `AppState`, so a lazily created popup shares it.
     state.borrow_mut().tray = Some(tray.clone());
     state.borrow_mut().taskbar = Some(taskbar.clone());
-    let save_timer = Rc::new(slint::Timer::default());
-    wire_settings(&popup, &state, &popup_weak, &save_timer);
 
     // First paint of the tray, then the once-per-minute (or per-second) timer (W1-05).
     update_tray(&state, &tray);
     // W4-05: the benchmark in docs/benchmarks-widget.md reads this line for cold start.
     log::info!("tray ready in {:?}", startup.elapsed());
 
-    // WR-09 AC1: the listener thread sets a flag; this small timer turns it into an open popup
-    // on the UI thread. It only runs in the first instance.
-    let single_timer = slint::Timer::default();
+    // WR-09 AC1: the listener thread wakes the event loop with `invoke_from_event_loop`; the UI
+    // thread then runs the same open path as before. No polling timer remains (W5-02).
     if let Some(listener) = primary {
-        platform::single_instance::start(listener);
-        let state = state.clone();
-        let popup_weak = popup_weak.clone();
-        single_timer.start(
-            slint::TimerMode::Repeated,
-            std::time::Duration::from_millis(250),
-            move || {
-                if !platform::single_instance::take_request() {
-                    return;
-                }
-                let Some(popup) = popup_weak.upgrade() else {
-                    return;
-                };
-                prepare_show(&state);
-                update_popup(&state, &popup_weak);
-                let _ = ui_bridge::show_popup_at(&popup, ui_bridge::PopupAnchor::TrayCorner);
-            },
-        );
+        install_open_request(&slot, &state);
+        platform::single_instance::start(listener, wake_ui);
     }
 
-    arm_timer(state.clone(), popup_weak.clone(), tray, taskbar);
+    arm_timer(state.clone(), tray, taskbar);
+
+    // W5-02: count UI wakes in a headless window, write the count and quit. Snapshot tool only.
+    #[cfg(feature = "snapshot")]
+    if let Some(seconds) = cli.wake_probe {
+        let out = cli
+            .wake_out
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("--wake-probe needs --wake-out"))?;
+        slint::Timer::single_shot(std::time::Duration::from_secs(seconds), move || {
+            let text = format!("seconds={seconds}\nwakes={}\n", idle_wakes());
+            if let Err(err) = std::fs::write(&out, text) {
+                log::warn!("wake probe: could not write {}: {err}", out.display());
+            }
+            let _ = slint::quit_event_loop();
+        });
+    }
 
     slint::run_event_loop()?;
     // A change made in the last 300 ms before Quit is still waiting for the debounce timer.
+    let save_timer = state.borrow().save_timer.clone();
     if save_timer.running() {
         save_settings(&state);
     }
@@ -498,7 +688,7 @@ fn snapshot_popup(
     if let Some(detail) = cli.detail {
         state.borrow_mut().detail = Some(month_view::day_detail(detail, lang));
     }
-    update_popup(state, &popup.as_weak());
+    update_popup(state);
     if cli.converter {
         let today = today_of(&state.borrow());
         ui_bridge::reset_converter(popup, today, lang);
@@ -523,32 +713,22 @@ fn snapshot_popup(
 }
 
 /// Handles a WR-01 tray event. `Settings` opens no panel in W1 (W3 builds it).
-fn handle_tray_event(
-    event: TrayEvent,
-    state: &Rc<RefCell<AppState>>,
-    popup_weak: &Weak<PopupWindow>,
-) {
+fn handle_tray_event(event: TrayEvent, state: &Rc<RefCell<AppState>>, slot: &PopupSlot) {
     match event {
         TrayEvent::Open => {
-            let Some(popup) = popup_weak.upgrade() else {
-                return;
-            };
             let just_hidden = state
                 .borrow()
                 .popup_hidden_at
                 .is_some_and(|at| at.elapsed() < REOPEN_GUARD);
-            if popup.window().is_visible() {
-                record_hidden(state);
-                let _ = popup.hide();
+            if popup_visible(state) {
+                hide_popup(state);
             } else if !just_hidden {
-                prepare_show(state);
-                update_popup(state, popup_weak);
-                let _ = ui_bridge::show_popup_at(&popup, ui_bridge::PopupAnchor::TrayCorner);
+                open_popup(slot, state, ui_bridge::PopupAnchor::TrayCorner);
             }
         }
         TrayEvent::CopyBs => copy_bs(state),
         TrayEvent::CopyAd => copy_ad(state),
-        TrayEvent::Settings => open_settings(state, popup_weak),
+        TrayEvent::Settings => open_settings(state, slot),
         TrayEvent::Quit => {
             let _ = slint::quit_event_loop();
         }
@@ -557,24 +737,13 @@ fn handle_tray_event(
 
 /// Handles a WR-12 taskbar event. `Toggle` opens or hides the popup above the text; `Menu` runs
 /// the same actions as the tray menu (ADR-0016 point 7).
-fn handle_taskbar_event(
-    event: TaskbarEvent,
-    state: &Rc<RefCell<AppState>>,
-    popup_weak: &Weak<PopupWindow>,
-) {
+fn handle_taskbar_event(event: TaskbarEvent, state: &Rc<RefCell<AppState>>, slot: &PopupSlot) {
     match event {
         TaskbarEvent::Toggle { anchor } => {
-            let Some(popup) = popup_weak.upgrade() else {
-                return;
-            };
-            if popup.window().is_visible() {
-                record_hidden(state);
-                let _ = popup.hide();
+            if popup_visible(state) {
+                hide_popup(state);
             } else {
-                prepare_show(state);
-                update_popup(state, popup_weak);
-                let _ =
-                    ui_bridge::show_popup_at(&popup, ui_bridge::PopupAnchor::Above(anchor.into()));
+                open_popup(slot, state, ui_bridge::PopupAnchor::Above(anchor.into()));
             }
         }
         TaskbarEvent::Menu(item) => {
@@ -585,7 +754,7 @@ fn handle_taskbar_event(
                 MenuItem::Settings => TrayEvent::Settings,
                 MenuItem::Quit => TrayEvent::Quit,
             };
-            handle_tray_event(tray_event, state, popup_weak);
+            handle_tray_event(tray_event, state, slot);
         }
     }
 }
@@ -605,17 +774,18 @@ fn copy_bs(state: &Rc<RefCell<AppState>>) {
     let _ = state.clipboard.set_text(&text);
 }
 
-/// Writes today's AD date as `YYYY-MM-DD` to the clipboard (WR-01 AC5).
+/// Writes today's AD date as `YYYY-MM-DD` to the clipboard, in the language's digits like Copy
+/// BS, so the clipboard is exactly what the header shows (WR-01 AC5, W5-04).
 fn copy_ad(state: &Rc<RefCell<AppState>>) {
     let state = state.borrow();
-    let _ = state
-        .clipboard
-        .set_text(&today_of(&state).to_gregorian().to_string());
+    let text = app::format::ad_short(today_of(&state).to_gregorian(), state.settings.lang());
+    let _ = state.clipboard.set_text(&text);
 }
 
 /// Refreshes the popup header, clocks and month grid from the local date and viewed month.
-fn update_popup(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>) {
-    let Some(popup) = popup_weak.upgrade() else {
+fn update_popup(state: &Rc<RefCell<AppState>>) {
+    let weak = state.borrow().popup.clone();
+    let Some(popup) = weak.upgrade() else {
         return;
     };
     let s = state.borrow();
@@ -681,24 +851,19 @@ fn prepare_show(state: &Rc<RefCell<AppState>>) {
 }
 
 /// Sets the viewed month and repaints the popup.
-fn set_month(
-    state: &Rc<RefCell<AppState>>,
-    popup_weak: &Weak<PopupWindow>,
-    year: u16,
-    month: Month,
-) {
+fn set_month(state: &Rc<RefCell<AppState>>, year: u16, month: Month) {
     state.borrow_mut().viewed_month = (year, month);
     state.borrow_mut().detail = None;
-    update_popup(state, popup_weak);
+    update_popup(state);
 }
 
 /// Moves the viewed month by `delta`, stopping at the range edges (WR-03 AC6).
-fn change_month(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>, delta: i32) {
+fn change_month(state: &Rc<RefCell<AppState>>, delta: i32) {
     let (year, month) = state.borrow().viewed_month;
     let Some((year, month)) = month_view::step_month(year, month, delta) else {
         return;
     };
-    set_month(state, popup_weak, year, month);
+    set_month(state, year, month);
 }
 
 /// Wires the popup's hide notification (WR-02 AC2) and month navigation (W2-02). Kept out of
@@ -723,13 +888,11 @@ fn wire_popup(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, popup_weak: &W
     // the same clipboard path as the tray.
     popup.on_day_clicked({
         let state = state.clone();
-        let popup_weak = popup_weak.clone();
-        move |index| open_detail(&state, &popup_weak, index)
+        move |index| open_detail(&state, index)
     });
     popup.on_detail_closed({
         let state = state.clone();
-        let popup_weak = popup_weak.clone();
-        move || clear_detail(&state, &popup_weak)
+        move || clear_detail(&state)
     });
     popup.on_copy_detail_bs({
         let state = state.clone();
@@ -744,25 +907,21 @@ fn wire_popup(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, popup_weak: &W
 
     popup.on_prev_month({
         let state = state.clone();
-        let popup_weak = popup_weak.clone();
-        move || change_month(&state, &popup_weak, -1)
+        move || change_month(&state, -1)
     });
     popup.on_next_month({
         let state = state.clone();
-        let popup_weak = popup_weak.clone();
-        move || change_month(&state, &popup_weak, 1)
+        move || change_month(&state, 1)
     });
     popup.on_today({
         let state = state.clone();
-        let popup_weak = popup_weak.clone();
         move || {
             let today = today_of(&state.borrow());
-            set_month(&state, &popup_weak, today.year(), today.month());
+            set_month(&state, today.year(), today.month());
         }
     });
     popup.on_month_picked({
         let state = state.clone();
-        let popup_weak = popup_weak.clone();
         move |index| {
             let Some(month) = u8::try_from(index + 1)
                 .ok()
@@ -771,12 +930,11 @@ fn wire_popup(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, popup_weak: &W
                 return;
             };
             let year = state.borrow().viewed_month.0;
-            set_month(&state, &popup_weak, year, month);
+            set_month(&state, year, month);
         }
     });
     popup.on_year_picked({
         let state = state.clone();
-        let popup_weak = popup_weak.clone();
         move |year| {
             let Ok(year) = u16::try_from(year) else {
                 return;
@@ -785,17 +943,16 @@ fn wire_popup(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, popup_weak: &W
                 return;
             }
             let month = state.borrow().viewed_month.1;
-            set_month(&state, &popup_weak, year, month);
+            set_month(&state, year, month);
         }
     });
     popup.on_wheel({
         let state = state.clone();
-        let popup_weak = popup_weak.clone();
         move |delta| {
             if delta == 0 {
                 return;
             }
-            change_month(&state, &popup_weak, if delta > 0 { 1 } else { -1 });
+            change_month(&state, if delta > 0 { 1 } else { -1 });
         }
     });
 }
@@ -857,12 +1014,10 @@ fn wire_converter(
 fn wire_settings(
     popup: &PopupWindow,
     state: &Rc<RefCell<AppState>>,
-    popup_weak: &Weak<PopupWindow>,
     save_timer: &Rc<slint::Timer>,
 ) {
     popup.on_settings_language({
         let state = state.clone();
-        let popup_weak = popup_weak.clone();
         let save_timer = save_timer.clone();
         let popup = popup.as_weak();
         move |index| {
@@ -870,12 +1025,14 @@ fn wire_settings(
             language.clone_into(&mut state.borrow_mut().settings.language);
             let _ = slint::select_bundled_translation(language);
             if let Some(popup) = popup.upgrade() {
-                update_popup(&state, &popup_weak);
+                update_popup(&state);
                 if let Some(tray) = state.borrow().tray.clone() {
                     update_tray(&state, &tray);
                 }
                 if let Some(taskbar) = state.borrow().taskbar.clone() {
-                    taskbar.set_menu_labels(&ui_bridge::menu_labels(&popup));
+                    if let Some(tray) = state.borrow().tray.clone() {
+                        taskbar.set_menu_labels(&tray.menu_labels());
+                    }
                     let s = state.borrow();
                     let now = jiff::Zoned::now();
                     taskbar.set_lines(&taskbar_lines(&now, &s.settings));
@@ -904,32 +1061,29 @@ fn wire_settings(
     });
     popup.on_settings_clock({
         let state = state.clone();
-        let popup_weak = popup_weak.clone();
         let save_timer = save_timer.clone();
         move |value| {
             state.borrow_mut().settings.clock_24h = value;
-            update_popup(&state, &popup_weak);
+            update_popup(&state);
             schedule_save(&save_timer, &state);
         }
     });
     popup.on_settings_seconds({
         let state = state.clone();
-        let popup_weak = popup_weak.clone();
         let save_timer = save_timer.clone();
         move |value| {
             state.borrow_mut().settings.show_seconds = value;
-            update_popup(&state, &popup_weak);
+            update_popup(&state);
             schedule_save(&save_timer, &state);
         }
     });
     popup.on_settings_zone({
         let state = state.clone();
-        let popup_weak = popup_weak.clone();
         let save_timer = save_timer.clone();
         let popup = popup.as_weak();
         move |zone| {
             state.borrow_mut().settings.extra_time_zone = zone.to_string();
-            update_popup(&state, &popup_weak);
+            update_popup(&state);
             if let Some(popup) = popup.upgrade() {
                 refresh_settings(&popup, &state);
             }
@@ -1003,13 +1157,13 @@ fn save_settings(state: &Rc<RefCell<AppState>>) {
 }
 
 /// Opens the settings panel, showing the popup first if it was hidden.
-fn open_settings(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>) {
-    let Some(popup) = popup_weak.upgrade() else {
+fn open_settings(state: &Rc<RefCell<AppState>>, slot: &PopupSlot) {
+    let Some(popup) = ensure_popup(slot, state) else {
         return;
     };
     if !popup.window().is_visible() {
         prepare_show(state);
-        update_popup(state, popup_weak);
+        update_popup(state);
         let _ = ui_bridge::show_popup_at(&popup, ui_bridge::PopupAnchor::TrayCorner);
     }
     popup.set_settings_filter("".into());
@@ -1019,7 +1173,7 @@ fn open_settings(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>) 
 }
 
 /// Opens the detail for a grid cell, if it is a real day (W2-03).
-fn open_detail(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>, index: i32) {
+fn open_detail(state: &Rc<RefCell<AppState>>, index: i32) {
     let (year, month, lang) = {
         let state = state.borrow();
         (
@@ -1032,13 +1186,13 @@ fn open_detail(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>, in
         return;
     };
     state.borrow_mut().detail = Some(month_view::day_detail(date, lang));
-    update_popup(state, popup_weak);
+    update_popup(state);
 }
 
 /// Clears the detail without changing the month (WR-04 AC3).
-fn clear_detail(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>) {
+fn clear_detail(state: &Rc<RefCell<AppState>>) {
     state.borrow_mut().detail = None;
-    if let Some(popup) = popup_weak.upgrade() {
+    if let Some(popup) = state.borrow().popup.upgrade() {
         ui_bridge::set_detail(&popup, None);
     }
 }
@@ -1087,14 +1241,10 @@ fn update_tray(state: &Rc<RefCell<AppState>>, tray: &Rc<SlintTray>) {
 }
 
 /// One tick of the W1 timer: tray, popup, taskbar text, then re-arms (WR-05 AC5/AC6).
-fn update_tick(
-    state: &Rc<RefCell<AppState>>,
-    popup_weak: &Weak<PopupWindow>,
-    tray: &Rc<SlintTray>,
-    taskbar: &Rc<dyn TaskbarText>,
-) {
+fn update_tick(state: &Rc<RefCell<AppState>>, tray: &Rc<SlintTray>, taskbar: &Rc<dyn TaskbarText>) {
+    note_wake();
     update_tray(state, tray);
-    update_popup(state, popup_weak);
+    update_popup(state);
     let s = state.borrow();
     let now = jiff::Zoned::now();
     taskbar.set_lines(&taskbar_lines(&now, &s.settings));
@@ -1102,18 +1252,13 @@ fn update_tick(
 
 /// Schedules the next single-shot tick. The closure re-arms itself, so the process sleeps about
 /// 60 s between wakes when seconds are hidden (WR-05 AC5).
-fn arm_timer(
-    state: Rc<RefCell<AppState>>,
-    popup_weak: Weak<PopupWindow>,
-    tray: Rc<SlintTray>,
-    taskbar: Rc<dyn TaskbarText>,
-) {
+fn arm_timer(state: Rc<RefCell<AppState>>, tray: Rc<SlintTray>, taskbar: Rc<dyn TaskbarText>) {
     let now = jiff::Zoned::now();
     let show_seconds = state.borrow().settings.show_seconds;
     let delay = clock::next_wakeup(&now, show_seconds);
     slint::Timer::single_shot(delay, move || {
-        update_tick(&state, &popup_weak, &tray, &taskbar);
-        arm_timer(state, popup_weak, tray, taskbar);
+        update_tick(&state, &tray, &taskbar);
+        arm_timer(state, tray, taskbar);
     });
 }
 
@@ -1236,4 +1381,24 @@ fn write_snapshot<C: ComponentHandle>(ui: &C, path: &std::path::Path) -> anyhow:
     img.save_with_format(path, image::ImageFormat::Png)?;
     println!("wrote {}", path.display());
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn settings_file_flag_is_parsed_and_isolates_the_run() {
+        let cli = Cli::parse(
+            ["--settings-file", "C:\\temp\\mitibar-settings.toml"]
+                .into_iter()
+                .map(str::to_owned),
+        )
+        .expect("parse");
+        assert_eq!(
+            cli.settings_file.as_deref(),
+            Some(std::path::Path::new("C:\\temp\\mitibar-settings.toml"))
+        );
+        assert!(cli.is_snapshot_tool());
+    }
 }

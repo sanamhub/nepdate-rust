@@ -38,8 +38,9 @@ fn app(today: NepaliDate) -> (PopupWindow, Rc<RefCell<AppState>>, Rc<FakeClipboa
     )));
     let popup = PopupWindow::new().expect("popup component");
     let weak = popup.as_weak();
+    state.borrow_mut().popup = weak.clone();
     wire_popup(&popup, &state, &weak);
-    update_popup(&state, &weak);
+    update_popup(&state);
     popup.show().expect("show popup");
     popup.invoke_focus();
     (popup, state, clipboard)
@@ -58,10 +59,10 @@ fn element(popup: &PopupWindow, label: &str) -> ElementHandle {
 }
 
 /// Sets the month without going through the UI, then repaints.
-fn show_month(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, year: u16, month: Month) {
+fn show_month(state: &Rc<RefCell<AppState>>, year: u16, month: Month) {
     state.borrow_mut().viewed_month = (year, month);
     state.borrow_mut().detail = None;
-    update_popup(state, &popup.as_weak());
+    update_popup(state);
 }
 
 /// The accessible label of the cell whose BS day is `day` in the shown month.
@@ -96,7 +97,7 @@ fn previous_next_and_today_follow_the_range_edges() {
     click(&popup, "Previous month");
     assert!(popup.get_month_title().starts_with("Baishakh 2081"));
 
-    show_month(&popup, &state, 1901, Month::Baishakh);
+    show_month(&state, 1901, Month::Baishakh);
     assert_eq!(
         element(&popup, "Previous month").accessible_enabled(),
         Some(false)
@@ -107,7 +108,7 @@ fn previous_next_and_today_follow_the_range_edges() {
         "Baishakh 1901 · Apr/May 1844"
     );
 
-    show_month(&popup, &state, 2199, Month::Chaitra);
+    show_month(&state, 2199, Month::Chaitra);
     assert_eq!(
         element(&popup, "Next month").accessible_enabled(),
         Some(false)
@@ -191,14 +192,32 @@ fn a_day_click_opens_the_detail_and_escape_closes_detail_then_popup() {
 
 #[test]
 fn copy_buttons_write_the_exact_strings_to_the_injected_clipboard() {
-    let (popup, _state, clipboard) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+    let (popup, state, clipboard) = app(NepaliDate::new(2081, 1, 1).expect("date"));
     let label = day_label(&popup, "1");
     click(&popup, &label);
     click(&popup, "Copy BS");
     click(&popup, "Copy AD");
+    // The tray copies use the same date and, like the detail buttons, the language digits.
+    crate::copy_bs(&state);
+    crate::copy_ad(&state);
     assert_eq!(
         *clipboard.texts.borrow(),
-        vec!["2081/01/01".to_owned(), "2024-04-13".to_owned()]
+        vec![
+            "2081/01/01".to_owned(),
+            "2024-04-13".to_owned(),
+            "2081/01/01".to_owned(),
+            "2024-04-13".to_owned()
+        ]
+    );
+
+    // W5-04: Nepali gets Devanagari digits in both copies, not only Copy BS.
+    state.borrow_mut().settings.language = "ne".to_owned();
+    let _ = slint::select_bundled_translation("ne");
+    crate::copy_bs(&state);
+    crate::copy_ad(&state);
+    assert_eq!(
+        clipboard.texts.borrow()[4..],
+        ["२०८१/०१/०१".to_owned(), "२०२४-०४-१३".to_owned()]
     );
 }
 
@@ -309,7 +328,7 @@ fn a_settings_switch_applies_at_once_and_saves_after_300_ms() {
     let path = dir.path().join("settings.toml");
     state.borrow_mut().settings_path = Some(path.clone());
     let save_timer = Rc::new(slint::Timer::default());
-    wire_settings(&popup, &state, &popup.as_weak(), &save_timer);
+    wire_settings(&popup, &state, &save_timer);
     crate::refresh_settings(&popup, &state);
     popup.set_settings_visible(true);
     assert!(!state.borrow().settings.clock_24h);
@@ -323,4 +342,99 @@ fn a_settings_switch_applies_at_once_and_saves_after_300_ms() {
     let (saved, warnings) = crate::platform::settings_store::load(&path);
     assert!(warnings.is_empty(), "{warnings:?}");
     assert!(saved.clock_24h, "saved after 300 ms");
+}
+
+#[test]
+fn the_year_control_shows_language_digits_and_stops_at_the_edges() {
+    let (popup, state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+    let year = element(&popup, "Year");
+    assert_eq!(year.accessible_role(), Some(AccessibleRole::Spinbox));
+    assert_eq!(year.accessible_value().as_deref(), Some("2081"));
+    assert_eq!(popup.get_year_text().as_str(), "2081");
+
+    state.borrow_mut().settings.language = "ne".to_owned();
+    let _ = slint::select_bundled_translation("ne");
+    update_popup(&state);
+    assert_eq!(popup.get_year_text().as_str(), "२०८१");
+    assert_eq!(
+        element(&popup, "वर्ष").accessible_value().as_deref(),
+        Some("२०८१")
+    );
+
+    state.borrow_mut().settings.language = "en".to_owned();
+    let _ = slint::select_bundled_translation("en");
+    update_popup(&state);
+
+    show_month(&state, 1901, Month::Baishakh);
+    element(&popup, "Year").invoke_accessible_decrement_action();
+    assert_eq!(popup.get_year(), 1901, "1901 is the lower edge");
+    element(&popup, "Year").invoke_accessible_increment_action();
+    assert_eq!(popup.get_year(), 1902);
+
+    show_month(&state, 2199, Month::Chaitra);
+    element(&popup, "Year").invoke_accessible_increment_action();
+    assert_eq!(popup.get_year(), 2199, "2199 is the upper edge");
+    element(&popup, "Year").invoke_accessible_decrement_action();
+    assert_eq!(popup.get_year(), 2198);
+}
+
+#[test]
+fn the_popup_is_created_on_first_open_not_at_startup() {
+    crate::test_support::init_platform();
+    let today = NepaliDate::new(2081, 1, 1).expect("date");
+    let state = Rc::new(RefCell::new(AppState::new(
+        Settings::default(),
+        today,
+        Some(today),
+        Rc::new(FakeClipboard::default()),
+    )));
+    let slot: crate::PopupSlot = Rc::new(RefCell::new(None));
+    let popup = crate::ensure_popup(&slot, &state).expect("popup");
+    assert!(!popup.window().is_visible(), "created hidden");
+    assert!(slot.borrow().is_some(), "the slot owns the strong handle");
+    assert!(
+        state.borrow().popup.upgrade().is_some(),
+        "state has the weak handle"
+    );
+}
+
+#[test]
+fn the_lazy_popup_is_created_once_and_honours_the_theme_flag() {
+    crate::test_support::init_platform();
+    let today = NepaliDate::new(2081, 1, 1).expect("date");
+    let state = Rc::new(RefCell::new(AppState::new(
+        Settings::default(),
+        today,
+        Some(today),
+        Rc::new(FakeClipboard::default()),
+    )));
+    // W5 review: `--theme` reached the eager popup; the lazy one must still apply it.
+    state.borrow_mut().theme_override = Some(crate::ThemeChoice::Dark);
+    let slot: crate::PopupSlot = Rc::new(RefCell::new(None));
+    let first = crate::ensure_popup(&slot, &state).expect("popup");
+    assert_eq!(
+        first.global::<crate::Theme>().get_choice(),
+        crate::ThemeChoice::Dark
+    );
+    first.set_month_title("kept".into());
+    let second = crate::ensure_popup(&slot, &state).expect("popup again");
+    assert_eq!(
+        second.get_month_title().as_str(),
+        "kept",
+        "the second open reuses the first component, not a new one"
+    );
+}
+
+#[test]
+fn wr09_ac1_second_launch_opens_the_first_instance_popup() {
+    let (popup, state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+    popup.hide().expect("hide");
+    assert!(!popup.window().is_visible());
+    let slot = Rc::new(RefCell::new(Some(popup.clone_strong())));
+    crate::install_open_request(&slot, &state);
+    crate::run_open_request();
+    assert!(
+        popup.window().is_visible(),
+        "the second-launch wake shows the popup"
+    );
 }

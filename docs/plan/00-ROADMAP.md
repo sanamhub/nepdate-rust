@@ -10,7 +10,7 @@ L0 workspace+CI ─► L1 core types+codegen ─► L2 conversion ─► L3 arit
                                                    │
                                                    └──────► L4 format+parse ─► L5 patro+features ─► L6 release 0.1.0
                                                                                                  │
-W0 skeleton+font spike ─► W1 tray+popup+clock ─► W1B Windows taskbar text ─► W1R rename to MitiBar ─► W2 month grid ─► W3 converter/settings/lifecycle ─► W4 package+release ─► W5 idle footprint
+W0 skeleton+font spike ─► W1 tray+popup+clock ─► W1B Windows taskbar text ─► W1R rename to MitiBar ─► W2 month grid ─► W3 converter/settings/lifecycle ─► W4 package+release ─► W5 idle footprint ─► W6 software renderer
 ```
 
 L3 and L4 both depend only on L2 and may run in parallel (separate agents/branches).
@@ -40,6 +40,7 @@ are part of the tasks listed.
 | W3 | – | `W3-converter-settings-lifecycle.md` | converter, settings, persistence, autostart, single instance | `learn/11-io-and-platform.md` |
 | W4 | – | `W4-package-and-release.md` | installers, perf check, manual test, release 0.1.0 | `learn/12-shipping.md` |
 | W5 | – | `W5-idle-footprint.md` | idle memory and wake-ups, year digits, release workflow gaps, quiet re-run | `learn/12-shipping.md` |
+| W6 | – | `W6-software-renderer.md` | software renderer per ADR-0018 with a Devanagari exit check, visible year buttons, quiet 5-minute row | `learn/12-shipping.md` |
 
 ## Task IDs and traceability (org §2 "code ties to a ticket")
 
@@ -112,4 +113,4 @@ checked against the file.
 | M2 "parity" | L3–L4 | all C# golden rows pass except ADR-0009 deviations |
 | M3 "lib 0.1.0" | L5–L6 | `nepdate` and `nepdate-patro` 0.1.0 published to crates.io (after human approval) |
 | M4 "widget preview" | W0–W3 | runs on Win/macOS/Linux from `cargo run` |
-| M5 "widget 0.1.0" | W4–W5 | signed-or-flagged installers on GitHub Releases, ADR-0008 §C met on a quiet machine |
+| M5 "widget 0.1.0" | W4–W6 | signed-or-flagged installers on GitHub Releases, ADR-0008 §C met on a quiet machine |

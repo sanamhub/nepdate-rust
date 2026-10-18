@@ -267,7 +267,7 @@ pub fn day_detail(date: NepaliDate, lang: Lang) -> DayDetail {
         copy_bs: date
             .short(DateOrder::Ymd, Separator::Slash, true, lang)
             .to_string(),
-        copy_ad: date.to_gregorian().to_string(),
+        copy_ad: format::ad_short(ad, lang),
     }
 }
 
@@ -573,6 +573,11 @@ mod tests {
         let detail = day_detail(date(2081, 1, 1), Lang::En);
         assert_eq!(detail.copy_bs, "2081/01/01");
         assert_eq!(detail.copy_ad, "2024-04-13");
+
+        // W5-04: Copy AD follows the language's digits, like Copy BS.
+        let detail = day_detail(date(2081, 1, 1), Lang::Ne);
+        assert_eq!(detail.copy_bs, "२०८१/०१/०१");
+        assert_eq!(detail.copy_ad, "२०२४-०४-१३");
     }
 
     #[test]
