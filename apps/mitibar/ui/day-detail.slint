@@ -3,7 +3,7 @@
 // live in `popup.slint`.
 
 import { Theme } from "theme.slint";
-import { Button } from "std-widgets.slint";
+import { Button, ScrollView } from "std-widgets.slint";
 
 export struct DayDetailData {
     bs-long: string,
@@ -34,7 +34,6 @@ export component DayDetail inherits Rectangle {
     VerticalLayout {
         padding: 12px;
         spacing: 6px;
-        alignment: start;
 
         Text { text: data.bs-long; color: Theme.ink; font-size: 16px; }
         Text { text: data.weekday; color: Theme.ink-muted; font-size: 12px; }
@@ -42,28 +41,33 @@ export component DayDetail inherits Rectangle {
 
         Rectangle { height: 1px; background: Theme.hairline; }
 
-        HorizontalLayout {
-            visible: data.tithi != "";
+        // `if`, not `visible`: a hidden element still takes its slot and spacing in the layout,
+        // which left a blank gap above Events on a day without a tithi or a holiday.
+        if data.tithi != "": HorizontalLayout {
             spacing: 8px;
             Text { text: @tr("Tithi"); color: Theme.ink-muted; font-size: 12px; width: 48px; }
             Text { text: data.tithi; color: Theme.ink; font-size: 12px; }
         }
-        Text {
+        if data.is-holiday: Text {
             text: @tr("Public holiday");
             color: Theme.sindoor;
             font-size: 12px;
-            visible: data.is-holiday;
         }
 
-        Text {
+        if data.events.length > 0: Text {
             text: @tr("Events");
             color: Theme.ink-muted;
             font-size: 12px;
-            visible: data.events.length > 0;
         }
-        Flickable {
-            height: data.events.length > 0 ? 120px : 0px;
-            content-width: self.width;
+        // A ScrollView, not a bare Flickable: a long list is cut at the box edge, and the scroll
+        // bar is the only sign that more events follow.
+        // The list takes the free height of the card. A fixed box made the Nepali card taller
+        // than 320 px, which pushed the buttons onto the card's bottom edge.
+        if data.events.length > 0: ScrollView {
+            vertical-stretch: 1;
+            min-height: 40px;
+            horizontal-scrollbar-policy: always-off;
+            content-width: self.visible-width;
             // The natural height of the list, not the box: short lists do not scroll, long ones do.
             content-height: events-list.preferred-height;
             events-list := VerticalLayout {
@@ -78,6 +82,9 @@ export component DayDetail inherits Rectangle {
                 }
             }
         }
+
+        // Without events nothing else stretches, so this keeps the buttons at the bottom.
+        if data.events.length == 0: Rectangle { vertical-stretch: 1; }
 
         HorizontalLayout {
             spacing: 8px;

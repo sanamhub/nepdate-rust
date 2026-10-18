@@ -6,7 +6,7 @@ Generated on Windows 11 with the MSVC toolchain on 2026-10-18. Each PNG is the p
 re-rendering an image does not change it. The eight month grids show Kartik 2083 (`--today
 2083-07-01`); the six-row pair shows Baishakh 2081 (`--today 2081-01-15`); the detail pair shows
 Baishakh 1, 2081, a Saturday and a public holiday (`--today 2081-01-01 --detail 2081-01-01`); the
-max-events card shows Ashoj 1, 2081 (`--today 2081-06-01 --detail 2081-06-01`), the day with nine
+max-events pair shows Ashoj 1, 2081 (`--today 2081-06-01 --detail 2081-06-01`), the day with nine
 events.
 
 `--today` and `--detail` exist only in the `snapshot` feature, and the parser rejects them without
@@ -29,6 +29,7 @@ The agent cannot judge the images, so every verdict is **not verified**: the rev
 | `day-detail-light-en-1x.png` | day detail, 3 events, light, English, 100 % | not verified |
 | `day-detail-dark-ne-2x.png` | day detail, 3 events, dark, Nepali, 200 % | not verified |
 | `day-detail-max-light-en-1x.png` | day detail, 9 events, light, English, 100 % | not verified |
+| `day-detail-max-light-ne-2x.png` | day detail, 9 events, light, Nepali, 200 % | not verified |
 
 Layout: a two-line header, the title row (previous / title / next), the month and year pickers plus
 Today, the Sunday-first weekday row, the 7-column grid, and the next-holiday line. The popup is
@@ -41,5 +42,7 @@ which keeps Today inside the 24 px margins in both languages.
 
 The day detail is an inline card over a scrim, not a new window. The cards show the BS and AD long
 dates, weekday, tithi, the public-holiday badge and the event list. The event items sit at the top
-with 2 px spacing and the list scrolls inside its 120 px box only when it is taller; the max card
-shows nine events. The copy buttons and the Escape order were not run.
+with 2 px spacing and take the free height of the card; a longer list scrolls and shows a scroll
+bar. Rows without data (tithi, holiday badge, events) are removed, not hidden, so they leave no gap,
+and the copy buttons stay at the bottom of the card. The max cards show nine events in English and
+Nepali. The copy buttons and the Escape order were not run.
