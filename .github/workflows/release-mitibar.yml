@@ -78,7 +78,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            arch: x64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            arch: x64
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            arch: arm64
+          - os: macos-latest
+            target: universal-apple-darwin
+            arch: universal
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
@@ -95,6 +107,16 @@ jobs:
       # The version is the ADR-0012 one; a newer release is a decision, not a float.
       - name: Install cargo-packager
         run: cargo install cargo-packager --version 0.11.8 --locked
+      # W5-05: build the Windows binary before packaging, so the signing step can sign the exact
+      # file that NSIS and the portable zip carry. Both Windows arches cross-compile where needed.
+      - name: Build the Windows binary
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          rustup target add $env:TARGET
+          cargo build -p mitibar --profile release-widget --target $env:TARGET
       # macOS must ship one universal binary: build both arches and join them with lipo.
       - name: Build the universal macOS binary
         if: matrix.os == 'macos-latest'
@@ -107,58 +129,88 @@ jobs:
           lipo -create -output target/universal/release-widget/mitibar \
             target/aarch64-apple-darwin/release-widget/mitibar \
             target/x86_64-apple-darwin/release-widget/mitibar
-      # The xtask builds the release-widget binary itself here; on macOS it packages the lipo
-      # output instead.
-      - name: Package (Windows and Linux)
-        if: matrix.os != 'macos-latest'
-        run: cargo xtask package
-      - name: Package (macOS)
-        if: matrix.os == 'macos-latest'
-        env:
-          MITIBAR_BINARIES_DIR: target/universal/release-widget
-        run: cargo xtask package
       # Signing is optional for 0.x. These steps are skipped unless the repository variable is
       # true, so an unsigned preview is never faked as signed (ADR-0012).
-      - name: Sign Windows artifacts
+      - name: Sign Windows binary
         if: matrix.os == 'windows-latest' && vars.WINDOWS_SIGNING_ENABLED == 'true'
         shell: pwsh
         env:
+          MITIBAR_BINARY: target/${{ matrix.target }}/release-widget/mitibar.exe
           SIGNING_CERT_SHA1: ${{ secrets.WINDOWS_SIGNING_CERT_SHA1 }}
         run: |
           if (-not $env:SIGNING_CERT_SHA1) { throw "WINDOWS_SIGNING_ENABLED is true but WINDOWS_SIGNING_CERT_SHA1 is empty" }
-          Get-ChildItem dist -Filter *.exe | ForEach-Object {
-            & signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /sha1 $env:SIGNING_CERT_SHA1 $_.FullName
-            if ($LASTEXITCODE -ne 0) { throw "signtool failed for $($_.Name)" }
-          }
-      - name: Sign macOS artifacts
+          if (-not (Test-Path $env:MITIBAR_BINARY)) { throw "the Windows binary is missing: $env:MITIBAR_BINARY" }
+          & signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /sha1 $env:SIGNING_CERT_SHA1 $env:MITIBAR_BINARY
+          if ($LASTEXITCODE -ne 0) { throw "signtool failed for $env:MITIBAR_BINARY" }
+      # The xtask uses the already built binary; ARM64 needs --target so cargo-packager names
+      # the installer arm64, and MITIBAR_ARCH names the portable zip.
+      - name: Package (Windows)
+        if: matrix.os == 'windows-latest'
+        env:
+          MITIBAR_BINARIES_DIR: target/${{ matrix.target }}/release-widget
+          MITIBAR_TARGET: ${{ matrix.target }}
+          MITIBAR_ARCH: ${{ matrix.arch }}
+        run: cargo xtask package
+      - name: Package (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo xtask package
+      # W5-05: package the .app only, sign it, then build the DMG around the signed bundle.
+      - name: Package (macOS app)
+        if: matrix.os == 'macos-latest'
+        env:
+          MITIBAR_BINARIES_DIR: target/universal/release-widget
+          MITIBAR_PACKAGE_FORMATS: app
+        run: cargo xtask package
+      - name: Sign macOS app
         if: matrix.os == 'macos-latest' && vars.MACOS_SIGNING_ENABLED == 'true'
         env:
           MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
-          MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
-          MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
-          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
         run: |
           set -euo pipefail
           if [[ -z "${MACOS_SIGNING_IDENTITY:-}" ]]; then
             echo "::error::MACOS_SIGNING_ENABLED is true but MACOS_SIGNING_IDENTITY is empty"
             exit 1
           fi
-          dmg="$(ls dist/*.dmg | head -n1)"
-          # The .app lives inside the DMG; mount it, sign the bundle and rebuild the DMG. The
-          # Developer ID and notarization secrets are only present when signing is enabled.
-          mountpoint="$(mktemp -d)"
-          hdiutil attach "$dmg" -mountpoint "$mountpoint" -nobrowse -quiet
-          app="$(find "$mountpoint" -maxdepth 1 -name '*.app' -print -quit)"
-          codesign --deep --force --options runtime --sign "$MACOS_SIGNING_IDENTITY" "$app"
-          codesign --verify --deep --strict --verbose=2 "$app"
-          hdiutil detach "$mountpoint" -quiet
-          rm -rf "$mountpoint"
+          test -d dist/MitiBar.app
+          codesign --force --options runtime --sign "$MACOS_SIGNING_IDENTITY" dist/MitiBar.app
+          codesign --verify --strict --verbose=2 dist/MitiBar.app
+      - name: Build macOS DMG
+        if: matrix.os == 'macos-latest'
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          set -euo pipefail
+          test -d dist/MitiBar.app
+          hdiutil create -volname "MitiBar" -srcfolder dist/MitiBar.app -ov -format UDZO \
+            "dist/MitiBar-${VERSION}.dmg"
+      - name: Notarize and staple macOS DMG
+        if: matrix.os == 'macos-latest' && vars.MACOS_SIGNING_ENABLED == 'true'
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+          MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          dmg="dist/MitiBar-${VERSION}.dmg"
           xcrun notarytool submit "$dmg" --apple-id "$MACOS_NOTARY_APPLE_ID" \
             --team-id "$MACOS_NOTARY_TEAM_ID" --password "$MACOS_NOTARY_PASSWORD" --wait
           xcrun stapler staple "$dmg"
+          xcrun stapler validate "$dmg"
+      - name: Sign Windows installer
+        if: matrix.os == 'windows-latest' && vars.WINDOWS_SIGNING_ENABLED == 'true'
+        shell: pwsh
+        env:
+          SIGNING_CERT_SHA1: ${{ secrets.WINDOWS_SIGNING_CERT_SHA1 }}
+        run: |
+          if (-not $env:SIGNING_CERT_SHA1) { throw "WINDOWS_SIGNING_ENABLED is true but WINDOWS_SIGNING_CERT_SHA1 is empty" }
+          $installer = Get-ChildItem dist -Filter *-setup.exe
+          if (-not $installer) { throw "no NSIS installer in dist" }
+          & signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /sha1 $env:SIGNING_CERT_SHA1 $installer.FullName
+          if ($LASTEXITCODE -ne 0) { throw "signtool failed for $($installer.Name)" }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: packages-${{ matrix.os }}
+          name: packages-${{ matrix.os }}-${{ matrix.arch }}
           path: dist/*
           if-no-files-found: error
 

@@ -68,18 +68,25 @@ pub(crate) fn run() -> Result<()> {
     let packaged_binary = out.join(exe_name());
     std::fs::copy(&binary, &packaged_binary)
         .with_context(|| format!("copy {} to {}", binary.display(), packaged_binary.display()))?;
-    let formats = formats();
+    let formats = formats()?;
     println!(
         "packaging {} for {formats} into {}",
         packaged_binary.display(),
         out.display()
     );
-    let status = Command::new("cargo")
+    let mut command = Command::new("cargo");
+    command
         .args(["packager", "--config"])
         .arg(&config)
         .arg("--out-dir")
         .arg(&out)
-        .args(["--formats", formats])
+        .args(["--formats", &formats]);
+    // W5-05: the Windows ARM64 job cross-compiles, so cargo-packager must name the installer
+    // arm64. The universal macOS build leaves this unset.
+    if let Some(target) = std::env::var_os("MITIBAR_TARGET") {
+        command.arg("--target").arg(target);
+    }
+    let status = command
         .current_dir(&root)
         .status()
         .context("run cargo-packager (install it with `cargo install cargo-packager --locked`)")?;
@@ -101,14 +108,39 @@ pub(crate) fn run() -> Result<()> {
 
 /// The package formats for this OS, per the ADR-0012 table. cargo-packager gets one list, and
 /// passing only this OS's formats keeps it from trying another OS's tools.
-fn formats() -> &'static str {
-    if cfg!(target_os = "windows") {
+///
+/// W5-05: the macOS workflow asks for `app` only, signs `dist/MitiBar.app`, and builds the DMG
+/// itself, so the `.app` inside the DMG is signed. `MITIBAR_PACKAGE_FORMATS` is a test/release
+/// override, not a user setting.
+fn formats() -> Result<String> {
+    let default = if cfg!(target_os = "windows") {
         "nsis"
     } else if cfg!(target_os = "macos") {
         "app,dmg"
     } else {
         "appimage,deb"
+    };
+    let Some(value) = std::env::var_os("MITIBAR_PACKAGE_FORMATS") else {
+        return Ok(default.to_owned());
+    };
+    parse_formats(&value.to_string_lossy())
+}
+
+/// Validates a comma-separated `MITIBAR_PACKAGE_FORMATS` value.
+fn parse_formats(value: &str) -> Result<String> {
+    let allowed = ["app", "dmg", "nsis", "appimage", "deb"];
+    if value.trim().is_empty() {
+        bail!("MITIBAR_PACKAGE_FORMATS must not be empty");
     }
+    for part in value.split(',') {
+        if !allowed.contains(&part.trim()) {
+            bail!(
+                "MITIBAR_PACKAGE_FORMATS has unknown format `{part}`; allowed: {}",
+                allowed.join(", ")
+            );
+        }
+    }
+    Ok(value.to_owned())
 }
 
 fn exe_name() -> &'static str {
@@ -166,14 +198,18 @@ fn package_version(manifest: &Path) -> Result<String> {
         .with_context(|| format!("{} has no package version", manifest.display()))
 }
 
-/// `x64` or `arm64`, the names the release assets use.
+/// `x64` or `arm64`, the names the release assets use. W5-05: the cross-compiled ARM64 job sets
+/// `MITIBAR_ARCH=arm64`; otherwise the host arch decides.
 #[cfg(windows)]
-fn arch() -> &'static str {
-    if cfg!(target_arch = "aarch64") {
-        "arm64"
-    } else {
-        "x64"
-    }
+fn arch() -> String {
+    std::env::var("MITIBAR_ARCH").unwrap_or_else(|_| {
+        if cfg!(target_arch = "aarch64") {
+            "arm64"
+        } else {
+            "x64"
+        }
+        .to_owned()
+    })
 }
 
 #[cfg(test)]
@@ -215,5 +251,17 @@ mod tests {
         let version = "0.11.8";
         assert!(template.contains(&format!("cargo-packager {version}")));
         assert!(workflow.contains(&format!("cargo install cargo-packager --version {version}")));
+    }
+
+    #[test]
+    fn package_formats_accept_the_release_lists_and_reject_typos() {
+        assert_eq!(parse_formats("app").expect("app"), "app");
+        assert_eq!(
+            parse_formats("appimage,deb").expect("linux"),
+            "appimage,deb"
+        );
+        assert!(parse_formats("app,dmg").is_ok());
+        assert!(parse_formats("").is_err());
+        assert!(parse_formats("nsis,msi").is_err());
     }
 }
