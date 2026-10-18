@@ -88,7 +88,7 @@ pub fn month_view(year: u16, month: Month, today: NepaliDate, lang: Lang) -> Mon
             bs_day: lang.digits(u32::from(day), 1).to_string(),
             ad_day: lang.digits(u32::from(ad.day()), 1).to_string(),
             // WR-03 AC2: every AD 1st carries the short month; the UI shows it in place of the
-            // AD day. A 32-day month can contain two.
+            // AD day.
             ad_month_marker: ad_marker(ad),
             is_today: date == today,
             is_saturday: date.weekday() == Weekday::Saturday,

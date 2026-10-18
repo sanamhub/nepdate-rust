@@ -46,8 +46,8 @@ Glossary: **BS** = Bikram Sambat (Nepali) date. **AD** = Gregorian date.
   (`ceil((first_weekday + month_length) / 7)`).
 - AC2: Each cell shows the BS day (large) and the AD day of month (small). On the cell for
   day 1 of an AD month, the short AD month name replaces the AD day number.
-- AC3: Today's cell is outlined. Saturday cells and public holidays (from `nepdate-patro`)
-  use the holiday colour.
+- AC3: Today's cell is outlined. Saturday cells use the Saturday colour; public holidays
+  (from `nepdate-patro`) use the holiday colour, which wins on a Saturday.
 - AC4: When patro data exists: tithi shown small under the day; a dot marks days with
   events. Outside `nepdate_patro::coverage()` nothing is shown and nothing errors.
 - AC5: Title: `Ashoj 2083 · Sep/Oct 2026` (ne: `असोज २०८३ · Sep/Oct 2026`).
