@@ -6,7 +6,8 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
-use serde_yaml_ng::{Mapping, Value};
+use yaml_rust2::yaml::Hash as Mapping;
+use yaml_rust2::{Yaml as Value, YamlLoader};
 
 use crate::codegen::workspace_root;
 
@@ -16,9 +17,20 @@ pub(crate) fn check(root: &Path) -> Result<()> {
     let path = root.join(WORKFLOW);
     let text =
         std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
-    let value: Value = serde_yaml_ng::from_str(&text)
-        .with_context(|| format!("parse {} as YAML", path.display()))?;
-    check_value(&value)
+    check_text(&text).with_context(|| format!("check {}", path.display()))
+}
+
+/// Parses one YAML document and checks it.
+fn check_text(text: &str) -> Result<()> {
+    check_value(&parse(text)?)
+}
+
+fn parse(text: &str) -> Result<Value> {
+    let mut docs = YamlLoader::load_from_str(text).context("parse the workflow as YAML")?;
+    if docs.len() != 1 {
+        bail!("expected one YAML document, found {}", docs.len());
+    }
+    Ok(docs.remove(0))
 }
 
 fn check_value(value: &Value) -> Result<()> {
@@ -30,6 +42,7 @@ fn check_value(value: &Value) -> Result<()> {
     check_triggers(root)?;
     check_permissions(root)?;
     check_jobs(root)?;
+    check_no_expressions_in_run(root)?;
     Ok(())
 }
 
@@ -55,7 +68,7 @@ fn check_pinned_actions(value: &Value) -> Result<()> {
 
 fn collect_uses<'a>(value: &'a Value, out: &mut Vec<&'a str>) {
     match value {
-        Value::Mapping(map) => {
+        Value::Hash(map) => {
             for (key, child) in map {
                 if key.as_str() == Some("uses") {
                     if let Some(action) = child.as_str() {
@@ -66,7 +79,7 @@ fn collect_uses<'a>(value: &'a Value, out: &mut Vec<&'a str>) {
                 }
             }
         }
-        Value::Sequence(items) => {
+        Value::Array(items) => {
             for item in items {
                 collect_uses(item, out);
             }
@@ -77,6 +90,11 @@ fn collect_uses<'a>(value: &'a Value, out: &mut Vec<&'a str>) {
 
 fn check_triggers(root: &Mapping) -> Result<()> {
     let on = map_field(root, "on")?;
+    let mut triggers: Vec<&str> = on.keys().filter_map(Value::as_str).collect();
+    triggers.sort_unstable();
+    if triggers != ["push", "workflow_dispatch"] || triggers.len() != on.len() {
+        bail!("triggers must be exactly push (tags) and workflow_dispatch");
+    }
     let push = map_field(on, "push")?;
     let tags = seq_field(push, "tags")?;
     if !tags.iter().any(|tag| tag.as_str() == Some("mitibar-v*")) {
@@ -105,7 +123,7 @@ fn check_permissions(root: &Mapping) -> Result<()> {
             continue;
         };
         let job = map(job)?;
-        let Some(permissions) = job.get("permissions") else {
+        let Some(permissions) = get(job, "permissions") else {
             continue;
         };
         let permissions = map(permissions)?;
@@ -117,19 +135,21 @@ fn check_permissions(root: &Mapping) -> Result<()> {
             ];
             if permissions.len() != expected.len()
                 || !expected.iter().all(|(key, value)| {
-                    permissions.get(*key).and_then(Value::as_str) == Some(*value)
+                    get(permissions, key).and_then(Value::as_str) == Some(*value)
                 })
             {
                 bail!(
                     "attest job permissions must be contents read, id-token write and attestations write"
                 );
             }
-        } else if permissions.contains_key("id-token") || permissions.contains_key("attestations") {
+        } else if get(permissions, "id-token").is_some()
+            || get(permissions, "attestations").is_some()
+        {
             bail!("only the attest job may have id-token or attestations");
         }
         if name == "release"
             && (permissions.len() != 1
-                || permissions.get("contents").and_then(Value::as_str) != Some("write"))
+                || get(permissions, "contents").and_then(Value::as_str) != Some("write"))
         {
             bail!("release job permissions must be exactly contents: write");
         }
@@ -147,7 +167,7 @@ fn check_jobs(root: &Mapping) -> Result<()> {
         "attest",
         "release",
     ] {
-        if !jobs.contains_key(name) {
+        if get(jobs, name).is_none() {
             bail!("workflow has no `{name}` job");
         }
     }
@@ -198,13 +218,12 @@ fn check_jobs(root: &Mapping) -> Result<()> {
         let Ok(step) = map(step) else {
             return false;
         };
-        step.get("uses")
+        get(step, "uses")
             .and_then(Value::as_str)
             .is_some_and(|action| action.starts_with("actions/attest@"))
-            && step
-                .get("with")
+            && get(step, "with")
                 .and_then(|with| map(with).ok())
-                .is_some_and(|with| with.contains_key("subject-path"))
+                .is_some_and(|with| get(with, "subject-path").is_some())
     });
     if !attests {
         bail!("attest job does not attest the artifacts");
@@ -230,16 +249,30 @@ fn check_jobs(root: &Mapping) -> Result<()> {
         let Ok(step) = map(step) else {
             return false;
         };
-        step.get("uses")
+        get(step, "uses")
             .and_then(Value::as_str)
             .is_some_and(|action| action.starts_with("softprops/action-gh-release@"))
-            && step
-                .get("with")
+            && get(step, "with")
                 .and_then(|with| map(with).ok())
-                .is_some_and(|with| with.get("draft").and_then(Value::as_bool) == Some(true))
+                .is_some_and(|with| get(with, "draft").and_then(Value::as_bool) == Some(true))
     });
     if !draft {
         bail!("release job must create a draft");
+    }
+    Ok(())
+}
+
+/// Scripts read values from `env`, never from an expression spliced into the shell text, so a
+/// tag name or variable cannot inject a command.
+fn check_no_expressions_in_run(root: &Mapping) -> Result<()> {
+    let jobs = map_field(root, "jobs")?;
+    for (name, job) in jobs {
+        if run_text(map(job)?)?.contains("${{") {
+            bail!(
+                "job `{}` puts a ${{{{ }}}} expression inside run; pass it through env",
+                name.as_str().unwrap_or("?")
+            );
+        }
     }
     Ok(())
 }
@@ -250,8 +283,10 @@ fn check_signing_gate(job: &Mapping, os: &str, variable: &str) -> Result<()> {
         let Ok(step) = map(step) else {
             return false;
         };
-        let name = step.get("name").and_then(Value::as_str).unwrap_or_default();
-        let condition = step.get("if").and_then(Value::as_str).unwrap_or_default();
+        let name = get(step, "name")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let condition = get(step, "if").and_then(Value::as_str).unwrap_or_default();
         name.contains("Sign")
             && name.contains(os)
             && condition.contains(variable)
@@ -264,9 +299,7 @@ fn check_signing_gate(job: &Mapping, os: &str, variable: &str) -> Result<()> {
 }
 
 fn job<'a>(jobs: &'a Mapping, name: &str) -> Result<&'a Mapping> {
-    let job = jobs
-        .get(name)
-        .ok_or_else(|| anyhow::anyhow!("workflow has no `{name}` job"))?;
+    let job = get(jobs, name).ok_or_else(|| anyhow::anyhow!("workflow has no `{name}` job"))?;
     map(job)
 }
 
@@ -278,7 +311,7 @@ fn steps(job: &Mapping) -> Result<Vec<&Value>> {
 fn run_text(job: &Mapping) -> Result<String> {
     let mut out = String::new();
     for step in steps(job)? {
-        if let Some(run) = map(step)?.get("run").and_then(Value::as_str) {
+        if let Some(run) = get(map(step)?, "run").and_then(Value::as_str) {
             out.push_str(run);
             out.push('\n');
         }
@@ -286,16 +319,19 @@ fn run_text(job: &Mapping) -> Result<String> {
     Ok(out)
 }
 
+/// The value at string key `name`, if any.
+fn get<'a>(value: &'a Mapping, name: &str) -> Option<&'a Value> {
+    value.get(&Value::String(name.to_owned()))
+}
+
 fn map(value: &Value) -> Result<&Mapping> {
     value
-        .as_mapping()
+        .as_hash()
         .ok_or_else(|| anyhow::anyhow!("expected a YAML mapping"))
 }
 
 fn field<'a>(value: &'a Mapping, name: &str) -> Result<&'a Value> {
-    value
-        .get(name)
-        .ok_or_else(|| anyhow::anyhow!("missing `{name}`"))
+    get(value, name).ok_or_else(|| anyhow::anyhow!("missing `{name}`"))
 }
 
 fn map_field<'a>(value: &'a Mapping, name: &str) -> Result<&'a Mapping> {
@@ -304,7 +340,7 @@ fn map_field<'a>(value: &'a Mapping, name: &str) -> Result<&'a Mapping> {
 
 fn seq_field<'a>(value: &'a Mapping, name: &str) -> Result<&'a Vec<Value>> {
     field(value, name)?
-        .as_sequence()
+        .as_vec()
         .ok_or_else(|| anyhow::anyhow!("`{name}` must be a list"))
 }
 
@@ -313,6 +349,27 @@ mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used)]
 
     use super::*;
+
+    fn workflow_text() -> String {
+        // A Windows checkout may have CRLF line ends; the edits below are written with LF.
+        std::fs::read_to_string(workspace_root().join(WORKFLOW))
+            .expect("read the workflow")
+            .replace("\r\n", "\n")
+    }
+
+    /// The real workflow with one exact edit; the edit must apply, so a later change to the
+    /// workflow cannot silently turn a negative control into a no-op.
+    fn mutated(from: &str, to: &str) -> String {
+        let text = workflow_text();
+        assert_eq!(text.matches(from).count(), 1, "`{from}` must occur once");
+        text.replacen(from, to, 1)
+    }
+
+    fn expect_failure(text: &str, needle: &str) {
+        let error = check_text(text).expect_err("the mutated workflow must fail");
+        let chain = format!("{error:#}");
+        assert!(chain.contains(needle), "unexpected error: {chain}");
+    }
 
     #[test]
     fn release_workflow_matches_the_plan() {
@@ -323,12 +380,61 @@ mod tests {
     fn an_unpinned_action_fails_the_negative_fixture() {
         let fixture = workspace_root().join("xtask/tests/fixtures/release-mitibar-unpinned.yml");
         let text = std::fs::read_to_string(&fixture).expect("read negative fixture");
-        let value: Value = serde_yaml_ng::from_str(&text).expect("parse negative fixture");
-        let error = check_value(&value).expect_err("an unpinned action must fail");
-        assert!(
-            error.to_string().contains("not pinned"),
-            "unexpected error: {error}"
+        expect_failure(&text, "not pinned");
+    }
+
+    #[test]
+    fn id_token_outside_the_attest_job_fails() {
+        let text = mutated(
+            "    permissions:\n      contents: write\n",
+            "    permissions:\n      contents: write\n      id-token: write\n",
         );
+        expect_failure(&text, "only the attest job");
+    }
+
+    #[test]
+    fn dry_run_defaulting_to_false_fails() {
+        let text = mutated("        default: true\n", "        default: false\n");
+        expect_failure(&text, "dry-run input must default to true");
+    }
+
+    #[test]
+    fn a_published_release_fails() {
+        let text = mutated("          draft: true\n", "          draft: false\n");
+        expect_failure(&text, "must create a draft");
+    }
+
+    #[test]
+    fn a_release_without_the_production_environment_fails() {
+        let text = mutated(
+            "    environment: production\n",
+            "    environment: staging\n",
+        );
+        expect_failure(&text, "production environment");
+    }
+
+    #[test]
+    fn an_ungated_signing_step_fails() {
+        let text = mutated(
+            "if: matrix.os == 'windows-latest' && vars.WINDOWS_SIGNING_ENABLED == 'true'",
+            "if: matrix.os == 'windows-latest'",
+        );
+        expect_failure(&text, "WINDOWS_SIGNING_ENABLED");
+    }
+
+    #[test]
+    fn a_pull_request_trigger_fails() {
+        let text = mutated("on:\n  push:\n", "on:\n  pull_request_target:\n  push:\n");
+        expect_failure(&text, "triggers must be exactly");
+    }
+
+    #[test]
+    fn an_expression_inside_run_fails() {
+        let text = mutated(
+            r#"cargo xtask changelog mitibar "$VERSION" > notes.md"#,
+            r#"cargo xtask changelog mitibar "${{ needs.preflight.outputs.version }}" > notes.md"#,
+        );
+        expect_failure(&text, "pass it through env");
     }
 
     #[test]
@@ -348,7 +454,7 @@ permissions:
   contents: read
 jobs: {}
 "#;
-        let value: Value = serde_yaml_ng::from_str(text).expect("parse");
+        let value = parse(text).expect("parse");
         let root = map(&value).expect("mapping");
         check_pinned_actions(&value).expect("the comment is not a `uses`");
         assert!(check_jobs(root).is_err(), "the fixture has no real jobs");

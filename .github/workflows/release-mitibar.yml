@@ -107,6 +107,8 @@ jobs:
           lipo -create -output target/universal/release-widget/mitibar \
             target/aarch64-apple-darwin/release-widget/mitibar \
             target/x86_64-apple-darwin/release-widget/mitibar
+      # The xtask builds the release-widget binary itself here; on macOS it packages the lipo
+      # output instead.
       - name: Package (Windows and Linux)
         if: matrix.os != 'macos-latest'
         run: cargo xtask package
@@ -252,10 +254,12 @@ jobs:
       - name: Build release notes
         env:
           VERSION: ${{ needs.preflight.outputs.version }}
+          WINDOWS_SIGNING_ENABLED: ${{ vars.WINDOWS_SIGNING_ENABLED }}
+          MACOS_SIGNING_ENABLED: ${{ vars.MACOS_SIGNING_ENABLED }}
         run: |
           set -euo pipefail
           cargo xtask changelog mitibar "$VERSION" > notes.md
-          if [[ "${{ vars.WINDOWS_SIGNING_ENABLED }}" != "true" || "${{ vars.MACOS_SIGNING_ENABLED }}" != "true" ]]; then
+          if [[ "$WINDOWS_SIGNING_ENABLED" != "true" || "$MACOS_SIGNING_ENABLED" != "true" ]]; then
             printf '\n> This preview is unsigned. Windows SmartScreen and macOS Gatekeeper will warn.\n' >> notes.md
           fi
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3

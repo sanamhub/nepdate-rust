@@ -16,7 +16,6 @@ yanked = "deny"
 # XML from the trusted system accessibility bus, and ttf-parser is only in the Linux window
 # decoration path. On Windows and macOS none of them is compiled.
 ignore = [
-    "RUSTSEC-2024-0449", # unsafe-libyaml unmaintained; xtask-only parse of our own workflow
     "RUSTSEC-2026-0192", # ttf-parser unmaintained, no safe upgrade
     "RUSTSEC-2026-0194", # quick-xml quadratic run time (DoS), fixed in 0.41, pinned to 0.38
     "RUSTSEC-2026-0195", # quick-xml unbounded namespace allocation, fixed in 0.41
