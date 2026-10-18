@@ -24,22 +24,31 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use nepdate::{DateOrder, Lang, LongDate, NepaliDate, Separator};
+use nepdate::{DateOrder, Lang, LongDate, Month, NepaliDate, Separator};
 use slint::{ComponentHandle, Weak};
 
 use crate::app::settings::Settings;
 use crate::app::taskbar::taskbar_lines;
-use crate::app::{APP_NAME, clock};
+use crate::app::{APP_NAME, clock, holidays, month_view};
 use crate::platform::taskbar::{MenuItem, TaskbarEvent, TaskbarText};
 use crate::platform::tray::{SlintTray, Tray, TrayEvent};
 
 slint::include_modules!();
 
-/// The shared state (ADR-0015): settings now, the viewed month and selection from W2 on.
+/// The shared state (ADR-0015): settings, the viewed month and the popup's last hide.
 struct AppState {
     settings: Settings,
     /// When focus loss last hid the popup; see `handle_tray_event`.
     popup_hidden_at: Option<std::time::Instant>,
+    /// The month the grid shows (WR-03 AC6).
+    viewed_month: (u16, Month),
+    /// The local BS date when the popup last hid; a different date on reopen resets the month
+    /// (WR-02 AC2, W2-06).
+    hidden_on: NepaliDate,
+    /// The open day detail, if any (WR-04); cleared on hide and navigation.
+    detail: Option<month_view::DayDetail>,
+    /// The fixed local date for a snapshot (`--today`); `None` in the normal app (W2 review).
+    today_override: Option<NepaliDate>,
 }
 
 /// A tray click within this long after focus loss hid the popup was the click that took the focus
@@ -53,6 +62,12 @@ struct Cli {
     popup: bool,
     #[cfg(feature = "snapshot")]
     snapshot: Option<PathBuf>,
+    /// A fixed BS date for the popup snapshot; never accepted by the normal app (W2 review).
+    #[cfg(feature = "snapshot")]
+    today: Option<NepaliDate>,
+    /// A BS date whose day-detail card the snapshot opens (W2 review).
+    #[cfg(feature = "snapshot")]
+    detail: Option<NepaliDate>,
     theme: Option<ThemeChoice>,
     lang: Option<Lang>,
     no_taskbar_text: bool,
@@ -62,6 +77,20 @@ struct Cli {
     taskbar_theme: Option<bool>, // Some(true) = dark taskbar
     #[cfg(all(windows, feature = "snapshot"))]
     taskbar_scale: Option<f32>,
+}
+
+/// Reads one `--today` or `--detail` value. Both flags are snapshot tools, so this helper is too.
+#[cfg(feature = "snapshot")]
+fn parse_bs_date(
+    args: &mut impl Iterator<Item = String>,
+    flag: &str,
+) -> anyhow::Result<NepaliDate> {
+    let value = args
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("{flag} needs a BS date YYYY-MM-DD"))?;
+    value
+        .parse()
+        .map_err(|err| anyhow::anyhow!("{flag} must be a BS date YYYY-MM-DD: {err}"))
 }
 
 impl Cli {
@@ -80,6 +109,10 @@ impl Cli {
                         .ok_or_else(|| anyhow::anyhow!("--snapshot needs a path"))?;
                     cli.snapshot = Some(PathBuf::from(path));
                 }
+                #[cfg(feature = "snapshot")]
+                "--today" => cli.today = Some(parse_bs_date(&mut args, "--today")?),
+                #[cfg(feature = "snapshot")]
+                "--detail" => cli.detail = Some(parse_bs_date(&mut args, "--detail")?),
                 "--theme" => {
                     let value = args
                         .next()
@@ -146,6 +179,13 @@ impl Cli {
             if cli.popup && cli.snapshot.is_none() {
                 anyhow::bail!("--popup needs --snapshot");
             }
+            // Both flags are snapshot tools only: the normal app must never pin its date.
+            if cli.today.is_some() && !cli.popup {
+                anyhow::bail!("--today needs --popup --snapshot");
+            }
+            if cli.detail.is_some() && !cli.popup {
+                anyhow::bail!("--detail needs --popup --snapshot");
+            }
         }
         if cli.font_test && cli.popup {
             anyhow::bail!("--font-test and --popup are exclusive");
@@ -204,9 +244,21 @@ fn main() -> anyhow::Result<()> {
             .select()?;
     }
 
+    #[cfg(feature = "snapshot")]
+    let today = cli.today.unwrap_or_else(today_local);
+    #[cfg(not(feature = "snapshot"))]
+    let today = today_local();
+    #[cfg(feature = "snapshot")]
+    let today_override = cli.today;
+    #[cfg(not(feature = "snapshot"))]
+    let today_override = None;
     let state = Rc::new(RefCell::new(AppState {
         settings,
         popup_hidden_at: None,
+        viewed_month: (today.year(), today.month()),
+        hidden_on: today,
+        detail: None,
+        today_override,
     }));
     // The `--no-taskbar-text` flag turns WR-12 off for this run (W3 builds the settings UI).
     if cli.no_taskbar_text {
@@ -231,19 +283,11 @@ fn main() -> anyhow::Result<()> {
     // Snapshot the popup (W1 test tool): fill it with today's header and clocks, then render.
     #[cfg(feature = "snapshot")]
     if cli.popup {
-        let path = cli
-            .snapshot
-            .clone()
-            .ok_or_else(|| anyhow::anyhow!("--popup needs --snapshot"))?;
-        update_popup(&state, &popup.as_weak());
-        return snapshot(&popup, &path);
+        return snapshot_popup(&cli, &state, &popup, lang);
     }
 
     let popup_weak = popup.as_weak();
-    popup.on_hidden_by_focus_loss({
-        let state = state.clone();
-        move || state.borrow_mut().popup_hidden_at = Some(std::time::Instant::now())
-    });
+    wire_popup(&popup, &state, &popup_weak);
 
     // Tray (W1-03): WR-01 events delivered back here.
     let tray = Rc::new(SlintTray::new(lang, {
@@ -282,6 +326,26 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Renders one popup snapshot. `--today` and `--detail` are snapshot-only (W2 review); the normal
+/// path never reaches this function, and the parser rejects both without `--popup`.
+#[cfg(feature = "snapshot")]
+fn snapshot_popup(
+    cli: &Cli,
+    state: &Rc<RefCell<AppState>>,
+    popup: &PopupWindow,
+    lang: Lang,
+) -> anyhow::Result<()> {
+    let path = cli
+        .snapshot
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("--popup needs --snapshot"))?;
+    if let Some(detail) = cli.detail {
+        state.borrow_mut().detail = Some(month_view::day_detail(detail, lang));
+    }
+    update_popup(state, &popup.as_weak());
+    snapshot(popup, &path)
+}
+
 /// Handles a WR-01 tray event. `Settings` opens no panel in W1 (W3 builds it).
 fn handle_tray_event(
     event: TrayEvent,
@@ -298,8 +362,10 @@ fn handle_tray_event(
                 .popup_hidden_at
                 .is_some_and(|at| at.elapsed() < REOPEN_GUARD);
             if popup.window().is_visible() {
+                record_hidden(state);
                 let _ = popup.hide();
             } else if !just_hidden {
+                prepare_show(state);
                 update_popup(state, popup_weak);
                 let _ = ui_bridge::show_popup_at(&popup, ui_bridge::PopupAnchor::TrayCorner);
             }
@@ -326,8 +392,10 @@ fn handle_taskbar_event(
                 return;
             };
             if popup.window().is_visible() {
+                record_hidden(state);
                 let _ = popup.hide();
             } else {
+                prepare_show(state);
                 update_popup(state, popup_weak);
                 let _ =
                     ui_bridge::show_popup_at(&popup, ui_bridge::PopupAnchor::Above(anchor.into()));
@@ -365,17 +433,214 @@ fn copy_ad() {
     }
 }
 
-/// Refreshes the popup header and clock lines from the local date and time.
+/// Refreshes the popup header, clocks and month grid from the local date and viewed month.
 fn update_popup(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>) {
     let Some(popup) = popup_weak.upgrade() else {
         return;
     };
     let s = state.borrow();
-    let now = jiff::Zoned::now();
-    let header = clock::header(&now, s.settings.lang());
+    let now = popup_now(&s);
+    let lang = s.settings.lang();
+    let header = clock::header(&now, lang);
     let lines = clock::clock_lines(&now, &s.settings);
     ui_bridge::set_header(&popup, &header);
     ui_bridge::set_clocks(&popup, &lines);
+
+    let today = NepaliDate::try_from(now.date()).unwrap_or(NepaliDate::MIN);
+    let (year, month) = s.viewed_month;
+    let started = std::time::Instant::now();
+    let view = month_view::month_view(year, month, today, lang);
+    log::debug!("month view {} built in {:?}", view.title, started.elapsed());
+    ui_bridge::set_month(&popup, &view, lang);
+    let holiday = holidays::next_holiday(today, lang);
+    ui_bridge::set_next_holiday(&popup, holiday.as_ref());
+    ui_bridge::set_detail(&popup, s.detail.as_ref());
+}
+
+/// The local BS date, or `MIN` if the system clock is outside 1901..=2199.
+fn today_local() -> NepaliDate {
+    let now = jiff::Zoned::now();
+    NepaliDate::try_from(now.date()).unwrap_or(NepaliDate::MIN)
+}
+
+/// The local time the popup renders. A snapshot can pin the date with `--today` and the clock to
+/// noon, so re-rendering the same image does not change it (W2 review).
+fn popup_now(s: &AppState) -> jiff::Zoned {
+    let now = jiff::Zoned::now();
+    let Some(today) = s.today_override else {
+        return now;
+    };
+    let ad: jiff::civil::Date = today.into();
+    // Noon is a valid local time in nearly every zone, so a pinned date still builds a Zoned.
+    let noon = jiff::civil::Time::new(12, 0, 0, 0).unwrap_or(now.time());
+    now.with().date(ad).time(noon).build().unwrap_or(now)
+}
+
+/// Records that the popup hid on today's BS date, so a reopen on a later date resets the month
+/// (WR-02 AC2, W2-06). Only the focus-loss path sets `popup_hidden_at`, which guards the reopen.
+fn record_hidden(state: &Rc<RefCell<AppState>>) {
+    let today = today_local();
+    let mut state = state.borrow_mut();
+    state.hidden_on = today;
+    state.detail = None;
+}
+
+/// Prepares the popup for a show: keep the viewed month while the date is unchanged, otherwise
+/// jump to today's month (WR-02 AC2, W2-06), and start with the detail closed.
+fn prepare_show(state: &Rc<RefCell<AppState>>) {
+    let today = today_local();
+    let mut state = state.borrow_mut();
+    state.viewed_month = month_view::month_on_show(state.viewed_month, state.hidden_on, today);
+    state.hidden_on = today;
+    state.detail = None;
+}
+
+/// Sets the viewed month and repaints the popup.
+fn set_month(
+    state: &Rc<RefCell<AppState>>,
+    popup_weak: &Weak<PopupWindow>,
+    year: u16,
+    month: Month,
+) {
+    state.borrow_mut().viewed_month = (year, month);
+    state.borrow_mut().detail = None;
+    update_popup(state, popup_weak);
+}
+
+/// Moves the viewed month by `delta`, stopping at the range edges (WR-03 AC6).
+fn change_month(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>, delta: i32) {
+    let (year, month) = state.borrow().viewed_month;
+    let Some((year, month)) = month_view::step_month(year, month, delta) else {
+        return;
+    };
+    set_month(state, popup_weak, year, month);
+}
+
+/// Wires the popup's hide notification (WR-02 AC2) and month navigation (W2-02). Kept out of
+/// `main` so the composition root stays readable.
+fn wire_popup(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>) {
+    popup.on_hidden({
+        let state = state.clone();
+        move || {
+            let mut state = state.borrow_mut();
+            state.popup_hidden_at = Some(std::time::Instant::now());
+            state.hidden_on = today_local();
+            state.detail = None;
+        }
+    });
+
+    // W2-03: a day opens the inline detail; Escape or the scrim clears it. The copy buttons use
+    // the same clipboard path as the tray.
+    popup.on_day_clicked({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move |index| open_detail(&state, &popup_weak, index)
+    });
+    popup.on_detail_closed({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move || clear_detail(&state, &popup_weak)
+    });
+    popup.on_copy_detail_bs({
+        let state = state.clone();
+        move || copy_detail(&state, true)
+    });
+    popup.on_copy_detail_ad({
+        let state = state.clone();
+        move || copy_detail(&state, false)
+    });
+
+    popup.on_prev_month({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move || change_month(&state, &popup_weak, -1)
+    });
+    popup.on_next_month({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move || change_month(&state, &popup_weak, 1)
+    });
+    popup.on_today({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move || {
+            let today = today_local();
+            set_month(&state, &popup_weak, today.year(), today.month());
+        }
+    });
+    popup.on_month_picked({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move |index| {
+            let Some(month) = u8::try_from(index + 1)
+                .ok()
+                .and_then(|number| Month::try_from(number).ok())
+            else {
+                return;
+            };
+            let year = state.borrow().viewed_month.0;
+            set_month(&state, &popup_weak, year, month);
+        }
+    });
+    popup.on_year_picked({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move |year| {
+            let Ok(year) = u16::try_from(year) else {
+                return;
+            };
+            if !(1901..=2199).contains(&year) {
+                return;
+            }
+            let month = state.borrow().viewed_month.1;
+            set_month(&state, &popup_weak, year, month);
+        }
+    });
+    popup.on_wheel({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move |delta| {
+            if delta == 0 {
+                return;
+            }
+            change_month(&state, &popup_weak, if delta > 0 { 1 } else { -1 });
+        }
+    });
+}
+
+/// Opens the detail for a grid cell, if it is a real day (W2-03).
+fn open_detail(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>, index: i32) {
+    let (year, month, lang) = {
+        let state = state.borrow();
+        (
+            state.viewed_month.0,
+            state.viewed_month.1,
+            state.settings.lang(),
+        )
+    };
+    let Some(date) = month_view::date_at(year, month, index) else {
+        return;
+    };
+    state.borrow_mut().detail = Some(month_view::day_detail(date, lang));
+    update_popup(state, popup_weak);
+}
+
+/// Clears the detail without changing the month (WR-04 AC3).
+fn clear_detail(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>) {
+    state.borrow_mut().detail = None;
+    if let Some(popup) = popup_weak.upgrade() {
+        ui_bridge::set_detail(&popup, None);
+    }
+}
+
+/// Copies the detail's BS or AD date (WR-04 AC2).
+fn copy_detail(state: &Rc<RefCell<AppState>>, bs: bool) {
+    let state = state.borrow();
+    let Some(detail) = state.detail.as_ref() else {
+        return;
+    };
+    let text = if bs { &detail.copy_bs } else { &detail.copy_ad };
+    let _ = platform::clipboard::set_text(text);
 }
 
 /// Refreshes the tray title (macOS), day icon (Windows/Linux) and tooltip.

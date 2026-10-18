@@ -26,13 +26,14 @@ pub struct MonthView {
 pub struct Cell {
     pub date: Option<NepaliDate>,          // None = padding
     pub bs_day: String, pub ad_day: String, pub ad_month_marker: Option<&'static str>,
-    pub is_today: bool, pub is_holiday_tint: bool,  // Saturday or public holiday
+    pub is_today: bool, pub is_saturday: bool, pub is_public_holiday: bool,  // holiday wins
     pub tithi: Option<&'static str>, pub has_events: bool,
 }
 pub fn month_view(year: u16, month: Month, today: NepaliDate, lang: Lang) -> MonthView;
 ```
 AC as tests: `wr03_ac1_rows` (every month 2080–2084 has 35 or 42 cells, and padding count =
-first weekday index), `wr03_ac2_ad_month_marker`, `wr03_ac3_saturday_and_holiday_tint`,
+first weekday index), `wr03_ac2_ad_month_marker`, `wr03_ac2_ad_month_marker_on_every_first`,
+`wr03_ac3_saturday_and_holiday_tint`,
 `wr03_ac4_no_event_data_outside_coverage` (year 2090 → all tithi `None`, no panic),
 `wr03_ac5_title_en_ne`, `wr03_ac6_edges` (1901-01: `can_prev == false`; 2199-12: `can_next == false`).
 
@@ -41,6 +42,11 @@ first weekday index), `wr03_ac2_ad_month_marker`, `wr03_ac3_saturday_and_holiday
 (generated struct). Weekday header row. The today outline, holiday colour and event dot come from
 properties. Mouse wheel → `callback wheel(delta)`. Prev/next/today buttons. Month
 `ComboBox` + year `SpinBox` (1901–2199).
+The popup is 360×520 (WR-02 AC1; raised from 440 in the W2 review). Each cell is 44 px high with
+4 px padding and a 2 px grid gap (a 4 px gap left the 11 px AD month marker touching the 16 px
+numeral at 1x); line 1 is the BS day (16 px, left) and the AD day (13 px Latin,
+12 px Devanagari, right), with the short AD month (11 px) replacing the day on a 1st; line 2 is
+the tithi (12 px). A 6-row month and the holiday line fit.
 
 ### W2-03 Day detail (`ui/day-detail.slint`, `src/app/month_view.rs::day_detail`)
 Inline overlay (WR-04 AC1), with Copy BS / Copy AD buttons via `platform::clipboard` (`arboard`).

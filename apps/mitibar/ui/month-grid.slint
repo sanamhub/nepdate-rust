@@ -1,0 +1,247 @@
+// The month grid (WR-03): title, prev/next/today, month and year pickers, a Sunday-first
+// 7-column grid, and the next-holiday line. Presentation only: `app::MonthView` decides the
+// cells, `ui_bridge.rs` converts them, and this file never calls `nepdate`.
+
+import { Theme } from "theme.slint";
+import { Button, ComboBox, SpinBox } from "std-widgets.slint";
+
+/// One cell as the grid draws it. `date` stays in Rust; the label is data built from ISO dates,
+/// the weekday name and the tithi name, with no English sentence.
+export struct CellData {
+    bs-day: string,
+    ad-day: string,
+    ad-month: string,
+    is-today: bool,
+    is-holiday: bool,
+    is-saturday: bool,
+    tithi: string,
+    has-events: bool,
+    is-padding: bool,
+    accessible-label: string,
+}
+
+component DayCell inherits Rectangle {
+    in property <CellData> data;
+    in property <int> index;
+    /// The AD day's size: 13 px for Latin, 12 px for Devanagari (widget-design §3/§4).
+    in property <length> ad-day-size: 13px;
+    callback clicked(int);
+
+    horizontal-stretch: 1;
+    // Two lines on the 4 px grid: 4 px padding, a 20 px numeral line and a 16 px tithi line,
+    // 44 px in total. The grid gap is 2 px (see the GridLayout comment), so a 6-row month fits.
+    height: 44px;
+    border-radius: 4px;
+    border-width: data.is-today ? 2px : 0px;
+    border-color: Theme.sindoor;
+
+    fs := FocusScope {
+        width: 100%;
+        height: 100%;
+        enabled: !data.is-padding;
+        focus-on-tab-navigation: !data.is-padding;
+        accessible-role: button;
+        accessible-label: data.accessible-label;
+
+        // Enter or Space opens the day detail (WR-10 AC2). Tab order is the repeater order.
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == " ") {
+                root.clicked(root.index);
+                return accept;
+            }
+            reject
+        }
+
+        TouchArea {
+            clicked => { root.clicked(root.index); }
+        }
+
+        // Event dot, top-left, above the numeral's ink (WR-03 AC4). One logical pixel down from
+        // the ring's inner edge keeps it off the 2 px today ring.
+        Rectangle {
+            x: 4px;
+            y: 3px;
+            width: 4px;
+            height: 4px;
+            border-radius: 2px;
+            background: Theme.marigold;
+            visible: data.has-events;
+        }
+
+        // Line 1: the BS day at the left (16 px) and the AD day at the right (13 px Latin,
+        // 12 px Devanagari). On an AD 1st the short AD month replaces the day (WR-03 AC2).
+        Text {
+            x: 4px;
+            y: 4px;
+            width: parent.width - 8px;
+            height: 20px;
+            text: data.bs-day;
+            color: data.is-holiday ? Theme.sindoor : data.is-saturday ? Theme.saturday : Theme.ink;
+            font-size: 16px;
+            horizontal-alignment: left;
+            vertical-alignment: center;
+        }
+        Text {
+            x: 4px;
+            y: 4px;
+            width: parent.width - 8px;
+            height: 20px;
+            text: data.ad-month != "" ? data.ad-month : data.ad-day;
+            color: Theme.ink-muted;
+            font-size: data.ad-month != "" ? 11px : root.ad-day-size;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+        }
+
+        // Line 2: the tithi, full cell width, 12 px (the Devanagari minimum), elided when long.
+        Text {
+            x: 4px;
+            y: 24px;
+            width: parent.width - 8px;
+            height: 16px;
+            text: data.tithi;
+            color: Theme.ink-muted;
+            font-size: 12px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+            visible: data.tithi != "";
+        }
+    }
+}
+
+export component MonthGrid inherits Rectangle {
+    in property <[CellData]> cells;
+    in property <[string]> weekday-headers;
+    in property <[string]> month-names;
+    in-out property <int> month-index: 0;
+    in-out property <int> year: 1901;
+    in property <string> title: "";
+    in property <bool> can-prev: false;
+    in property <bool> can-next: false;
+    in property <string> holiday-name: "";
+    in property <int> holiday-days: -1;
+    /// 13 px for Latin, 12 px for Devanagari, set once from the language (WR-03 AC2).
+    in property <length> ad-day-size: 13px;
+
+    callback day-clicked(int);
+    callback prev-month();
+    callback next-month();
+    callback today();
+    callback month-picked(int);
+    callback year-picked(int);
+    callback wheel(int);
+
+    VerticalLayout {
+        spacing: 4px;
+
+        // Title with the previous and next buttons (WR-03 AC5, AC6).
+        HorizontalLayout {
+            spacing: 4px;
+            Button {
+                text: "<";
+                accessible-label: @tr("Previous month");
+                enabled: root.can-prev;
+                clicked => { root.prev-month(); }
+            }
+            Text {
+                text: root.title;
+                color: Theme.ink;
+                font-size: 16px;
+                horizontal-stretch: 1;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            Button {
+                text: ">";
+                accessible-label: @tr("Next month");
+                enabled: root.can-next;
+                clicked => { root.next-month(); }
+            }
+        }
+
+        // Month and year pickers plus Today (WR-03 AC6, WR-10 AC2). The pickers keep their range;
+        // the prev/next buttons are the controls that disable at the range edges. The pickers have
+        // fixed widths so Today stays inside the 24 px margins at 360 px in both languages (W2
+        // review); the spacer keeps Today at the right edge.
+        HorizontalLayout {
+            spacing: 4px;
+            ComboBox {
+                model: root.month-names;
+                current-index <=> root.month-index;
+                accessible-label: @tr("Month");
+                width: 128px;
+                selected(_value) => { root.month-picked(root.month-index); }
+            }
+            SpinBox {
+                minimum: 1901;
+                maximum: 2199;
+                value <=> root.year;
+                accessible-label: @tr("Year");
+                width: 112px;
+                edited(value) => { root.year-picked(value); }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Button {
+                text: @tr("Today");
+                accessible-label: @tr("Today");
+                clicked => { root.today(); }
+            }
+        }
+
+        // Weekday header, Sunday first (WR-03 AC1).
+        HorizontalLayout {
+            for header in root.weekday-headers: Text {
+                text: header;
+                color: Theme.ink-muted;
+                font-size: 11px;
+                horizontal-stretch: 1;
+                horizontal-alignment: center;
+            }
+        }
+
+        // The grid. One notch scrolls one month (WR-03 AC6); the parent TouchArea receives the
+        // scroll because the cells do not handle it.
+        TouchArea {
+            scroll-event(event) => {
+                if (event.delta-y != 0) {
+                    root.wheel(event.delta-y > 0 ? 1 : -1);
+                    return accept;
+                }
+                reject
+            }
+            GridLayout {
+                // 2 px, not 4: at 360 px, 4 px padding and a 4 px gap left the 11 px "Nov"
+                // marker touching the 16 px numeral at 1x. 2 px keeps 2 px clear.
+                spacing: 2px;
+                for cell[i] in root.cells: DayCell {
+                    data: cell;
+                    index: i;
+                    ad-day-size: root.ad-day-size;
+                    row: i / 7;
+                    col: mod(i, 7);
+                    clicked(index) => { root.day-clicked(index); }
+                }
+            }
+        }
+
+        // WR-03 AC8. The sentence is built here with @tr, never in Rust.
+        Text {
+            visible: root.holiday-days >= 0;
+            color: Theme.ink-muted;
+            font-size: 12px;
+            horizontal-alignment: center;
+            text: root.holiday-name == ""
+                ? (root.holiday-days == 0
+                    ? @tr("Public holiday today")
+                    : root.holiday-days == 1
+                        ? @tr("Public holiday tomorrow")
+                        : @tr("Public holiday in {0} days", root.holiday-days))
+                : (root.holiday-days == 0
+                    ? @tr("Next holiday: {0} today", root.holiday-name)
+                    : root.holiday-days == 1
+                        ? @tr("Next holiday: {0} tomorrow", root.holiday-name)
+                        : @tr("Next holiday: {0} in {1} days", root.holiday-name, root.holiday-days));
+        }
+    }
+}

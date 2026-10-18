@@ -21,6 +21,8 @@ snapshot = ["dep:image"]
 # (W1-04). No feature overrides: the plan (W0-01) spells `slint = "1.18"`.
 slint = { version = "1.18", features = ["unstable-winit-030"] }
 nepdate = { path = "../../crates/nepdate", features = ["jiff"] }
+# Tithi, holidays and events for the month grid and day detail (W2-01, W2-04, ADR-0015).
+nepdate-patro = { path = "../../crates/nepdate-patro" }
 jiff = "0.2"
 anyhow = "1"
 # Clipboard (WR-01 AC5). Already in the tree through Slint's winit backend, so no new crate;

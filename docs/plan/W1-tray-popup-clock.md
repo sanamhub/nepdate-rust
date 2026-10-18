@@ -53,7 +53,8 @@ AC (tests named after the requirement):
   The `.slint` file holds `[image]` arrays of `@image-url(...)`, and Rust sets the index. No runtime rendering.
 
 ### W1-04 Popup window (`ui/popup.slint`, `src/ui_bridge.rs`)
-- `no-frame: true`, `always-on-top: true`, fixed 360×440 logical px.
+- `no-frame: true`, `always-on-top: true`, fixed 360×520 logical px (440 until the W2 review
+  needed taller grid rows; WR-02 AC1 carries the current value).
 - Position (WR-02 AC1): Slint exposes no tray-icon position, so use a fixed corner of the
   primary monitor. Windows: bottom-right, 12 px from the right and 56 px (logical) from the bottom,
   above a standard taskbar. macOS: top-right, 32 px from the top. Linux X11: top-right. Wayland: the

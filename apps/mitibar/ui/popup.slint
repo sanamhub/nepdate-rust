@@ -1,6 +1,9 @@
-// The popup window (WR-02): borderless, always-on-top, fixed 360x440. It shows today's header
-// and the clock lines, hides on Escape and on focus loss (WR-02 AC2).
+// The popup window (WR-02): borderless, always-on-top, fixed 360x520. It shows today's header
+// and the clock lines, hides on Escape and on focus loss (WR-02 AC2). The height grew from 440 in
+// the W2 review: the 44 px day cells and a 6-row month need the extra 80 px (WR-02 AC1).
 import { AppInfo } from "app-info.slint";
+import { DayDetail, DayDetailData } from "day-detail.slint";
+import { MonthGrid, CellData } from "month-grid.slint";
 import { Theme } from "theme.slint";
 
 export struct PopupClockLine {
@@ -15,7 +18,7 @@ export component PopupWindow inherits Window {
     no-frame: true;
     always-on-top: true;
     width: 360px;
-    height: 440px;
+    height: 520px;
     background: Theme.surface;
     default-font-family: "Noto Sans";
 
@@ -24,36 +27,89 @@ export component PopupWindow inherits Window {
     in property <string> ad: "";
     in property <[PopupClockLine]> clocks: [];
 
+    // Month grid state, filled by `ui_bridge::set_month` (W2-02).
+    in property <[CellData]> cells: [];
+    in property <[string]> weekday-headers: [];
+    in property <[string]> month-names: [];
+    in property <int> month-index: 0;
+    in property <int> year: 1901;
+    in property <string> month-title: "";
+    in property <bool> can-prev: false;
+    in property <bool> can-next: false;
+    in property <string> holiday-name: "";
+    in property <int> holiday-days: -1;
+    /// 13 px for Latin, 12 px for Devanagari (WR-03 AC2), set by `ui_bridge::set_month`.
+    in property <length> ad-day-size: 13px;
+
+    // Day detail (W2-03): an overlay inside the popup, never a new OS window (WR-04 AC1).
+    in property <DayDetailData> detail;
+    in-out property <bool> detail-visible: false;
+
+    // Fired by the tray menu, the taskbar menu and the grid (W2-02).
+    callback day-clicked(int);
+    callback prev-month();
+    callback next-month();
+    callback today();
+    callback month-picked(int);
+    callback year-picked(int);
+    callback wheel(int);
+    // Fired by the day detail (W2-03).
+    callback detail-closed();
+    callback copy-detail-bs();
+    callback copy-detail-ad();
+
     // Forward the window focus to the FocusScope so it receives key events and its focus-lost
     // fires when the popup is deactivated (WR-02 AC2).
     forward-focus: fs;
 
-    // Fired when focus loss hides the popup. A click on the tray icon takes the focus first, so
-    // the app needs to know the popup was open a moment ago, or that click would reopen it.
-    callback hidden-by-focus-loss();
+    // Fired whenever the popup hides: focus loss, Escape, or the Rust hide path. A click on the
+    // tray icon takes the focus first, so the app needs to know the popup was open a moment ago,
+    // or that click would reopen it.
+    callback hidden();
 
     fs := FocusScope {
         focus-lost(_) => {
+            root.hidden();
             root.hide();
-            root.hidden-by-focus-loss();
         }
         key-pressed(event) => {
             if (event.text == Key.Escape) {
+                // WR-04 AC3: Escape closes the detail first, then the popup.
+                if (root.detail-visible) {
+                    root.detail-visible = false;
+                    root.detail-closed();
+                    return accept;
+                }
+                root.hidden();
                 root.hide();
+                return accept;
+            }
+            // WR-10 AC2: the grid shortcuts work wherever the focus is inside the popup.
+            if (event.text == Key.PageUp) {
+                grid.prev-month();
+                return accept;
+            }
+            if (event.text == Key.PageDown) {
+                grid.next-month();
+                return accept;
+            }
+            if (event.text == Key.Home) {
+                grid.today();
                 return accept;
             }
             reject
         }
 
-        // Content stacks from the top; W2's month grid takes the remaining height.
+        // Content stacks from the top; the month grid takes the remaining height.
         VerticalLayout {
             alignment: start;
             padding: 12px;
             spacing: 4px;
 
-            Text { text: root.weekday; color: Theme.ink-muted; font-size: 14px; }
+            // Two lines: the weekday and AD date share one, so a 6-row month still fits the grid
+            // and the WR-03 AC8 holiday line in 520 px (WR-02 AC3 keeps every field).
+            Text { text: root.weekday + " · " + root.ad; color: Theme.ink-muted; font-size: 13px; }
             Text { text: root.bs; color: Theme.ink; font-size: 22px; }
-            Text { text: root.ad; color: Theme.ink-muted; font-size: 14px; }
 
             Rectangle { height: 1px; background: Theme.hairline; }
 
@@ -67,6 +123,50 @@ export component PopupWindow inherits Window {
                     vertical-alignment: center;
                 }
                 Text { text: line.time; color: Theme.ink; font-size: 16px; vertical-alignment: center; }
+            }
+
+            grid := MonthGrid {
+                cells: root.cells;
+                weekday-headers: root.weekday-headers;
+                month-names: root.month-names;
+                month-index: root.month-index;
+                year: root.year;
+                title: root.month-title;
+                can-prev: root.can-prev;
+                can-next: root.can-next;
+                holiday-name: root.holiday-name;
+                holiday-days: root.holiday-days;
+                ad-day-size: root.ad-day-size;
+
+                day-clicked(index) => { root.day-clicked(index); }
+                prev-month => { root.prev-month(); }
+                next-month => { root.next-month(); }
+                today => { root.today(); }
+                month-picked(index) => { root.month-picked(index); }
+                year-picked(year) => { root.year-picked(year); }
+                wheel(delta) => { root.wheel(delta); }
+            }
+        }
+
+        // Day detail overlay (WR-04): the scrim closes only the detail; the card sits above it.
+        if root.detail-visible: Rectangle {
+            x: 0;
+            y: 0;
+            width: 100%;
+            height: 100%;
+            background: #40000000;
+            TouchArea {
+                clicked => {
+                    root.detail-visible = false;
+                    root.detail-closed();
+                }
+            }
+            DayDetail {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                data: root.detail;
+                copy-bs => { root.copy-detail-bs(); }
+                copy-ad => { root.copy-detail-ad(); }
             }
         }
     }

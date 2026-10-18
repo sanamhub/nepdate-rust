@@ -28,7 +28,7 @@ Glossary: **BS** = Bikram Sambat (Nepali) date. **AD** = Gregorian date.
 
 ## WR-02 Popup window
 
-- AC1: Borderless and non-resizable, with a fixed logical size (default 360×440). The window
+- AC1: Borderless and non-resizable, with a fixed logical size (default 360×520). The window
   title is `MitiBar` (shown in Alt+Tab). It opens at the primary monitor's tray corner (Windows
   bottom-right above the taskbar, macOS top-right below the menu bar, Linux X11 top-right;
   Wayland: compositor placement), fully on-screen, and doesn't show in the Windows taskbar.
@@ -44,11 +44,10 @@ Glossary: **BS** = Bikram Sambat (Nepali) date. **AD** = Gregorian date.
 - AC1: Shows one BS month as a 7-column grid, Sunday first. Leading and trailing cells
   outside the month are blank. The grid has 5 or 6 rows as needed
   (`ceil((first_weekday + month_length) / 7)`).
-- AC2: Each cell shows the BS day (large) and the AD day of month (small). When the
-  AD month changes within the BS month, the AD cell for day 1 of that AD month also
-  shows the short AD month name.
-- AC3: Today's cell is outlined. Saturday cells and public holidays (from `nepdate-patro`)
-  use the holiday colour.
+- AC2: Each cell shows the BS day (large) and the AD day of month (small). On the cell for
+  day 1 of an AD month, the short AD month name replaces the AD day number.
+- AC3: Today's cell is outlined. Saturday cells use the Saturday colour; public holidays
+  (from `nepdate-patro`) use the holiday colour, which wins on a Saturday.
 - AC4: When patro data exists: tithi shown small under the day; a dot marks days with
   events. Outside `nepdate_patro::coverage()` nothing is shown and nothing errors.
 - AC5: Title: `Ashoj 2083 · Sep/Oct 2026` (ne: `असोज २०८३ · Sep/Oct 2026`).

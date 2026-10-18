@@ -13,6 +13,14 @@ export enum ThemeChoice { system, light, dark }
 export global Theme {
     in property <ThemeChoice> choice: ThemeChoice.system;
 
+    // The standard widgets (Button, ComboBox, SpinBox) read `Palette`, not `Theme`. Keep their
+    // scheme on the same side as the app's explicit choice; "system" leaves it to the OS.
+    changed choice => {
+        if (choice != ThemeChoice.system) {
+            Palette.color-scheme = choice == ThemeChoice.dark ? ColorScheme.dark : ColorScheme.light;
+        }
+    }
+
     out property <bool> is-dark: choice == ThemeChoice.system
         ? Palette.color-scheme == ColorScheme.dark
         : choice == ThemeChoice.dark;
