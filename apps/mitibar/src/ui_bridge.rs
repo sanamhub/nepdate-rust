@@ -99,6 +99,9 @@ pub fn set_month(popup: &PopupWindow, view: &MonthView, lang: Lang) {
     // The AD day is body size (13 px); Devanagari needs 12 px minimum and is narrower at 12 px
     // (widget-design §3/§4). The UI only needs the size, not the language.
     popup.set_ad_day_size(if lang == Lang::Ne { 12.0 } else { 13.0 });
+    // The tithi is a Latin caption at 11 px in English; Devanagari needs 12 px or more
+    // (widget-design §3/§4, W3-00b).
+    popup.set_tithi_size(if lang == Lang::Ne { 12.0 } else { 11.0 });
 }
 
 /// One `Cell` to one `CellData` (WR-03 AC3). The model keeps Saturday and public holidays

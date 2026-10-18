@@ -46,7 +46,8 @@ The popup is 360×520 (WR-02 AC1; raised from 440 in the W2 review). Each cell i
 4 px padding and a 2 px grid gap (a 4 px gap left the 11 px AD month marker touching the 16 px
 numeral at 1x); line 1 is the BS day (16 px, left) and the AD day (13 px Latin,
 12 px Devanagari, right), with the short AD month (11 px) replacing the day on a 1st; line 2 is
-the tithi (12 px). A 6-row month and the holiday line fit.
+the tithi (full cell width, 11 px Latin, 12 px Devanagari; W3-00b). A 6-row month and the
+holiday line fit.
 
 ### W2-03 Day detail (`ui/day-detail.slint`, `src/app/month_view.rs::day_detail`)
 Inline overlay (WR-04 AC1), with Copy BS / Copy AD buttons via `platform::clipboard` (`arboard`).

@@ -25,6 +25,8 @@ component DayCell inherits Rectangle {
     in property <int> index;
     /// The AD day's size: 13 px for Latin, 12 px for Devanagari (widget-design §3/§4).
     in property <length> ad-day-size: 13px;
+    /// The tithi's size: the 11 px Latin caption step, 12 px for Devanagari (W3-00b).
+    in property <length> tithi-size: 12px;
     callback clicked(int);
 
     horizontal-stretch: 1;
@@ -93,15 +95,17 @@ component DayCell inherits Rectangle {
             vertical-alignment: center;
         }
 
-        // Line 2: the tithi, full cell width, 12 px (the Devanagari minimum), elided when long.
+        // Line 2: the tithi, full cell width (the W2 review's wording), 11 px Latin or 12 px
+        // Devanagari (widget-design §3/§4), elided when long. The full width is what lets the
+        // 11 px Latin caption fit "Saptami" at 1x (W3-00b).
         Text {
-            x: 4px;
+            x: 0;
             y: 24px;
-            width: parent.width - 8px;
+            width: parent.width;
             height: 16px;
             text: data.tithi;
             color: Theme.ink-muted;
-            font-size: 12px;
+            font-size: root.tithi-size;
             horizontal-alignment: center;
             vertical-alignment: center;
             overflow: elide;
@@ -123,6 +127,8 @@ export component MonthGrid inherits Rectangle {
     in property <int> holiday-days: -1;
     /// 13 px for Latin, 12 px for Devanagari, set once from the language (WR-03 AC2).
     in property <length> ad-day-size: 13px;
+    /// 11 px for Latin, 12 px for Devanagari, set once from the language (W3-00b).
+    in property <length> tithi-size: 12px;
 
     callback day-clicked(int);
     callback prev-month();
@@ -218,6 +224,7 @@ export component MonthGrid inherits Rectangle {
                     data: cell;
                     index: i;
                     ad-day-size: root.ad-day-size;
+                    tithi-size: root.tithi-size;
                     row: i / 7;
                     col: mod(i, 7);
                     clicked(index) => { root.day-clicked(index); }
