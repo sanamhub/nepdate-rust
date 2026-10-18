@@ -6,7 +6,7 @@
 pub const APP_NAME: &str = "MitiBar";
 
 pub mod clock;
-mod converter;
+pub mod converter;
 pub mod holidays;
 pub mod month_view;
 pub mod settings;

@@ -25,6 +25,8 @@ component DayCell inherits Rectangle {
     in property <int> index;
     /// The AD day's size: 13 px for Latin, 12 px for Devanagari (widget-design §3/§4).
     in property <length> ad-day-size: 13px;
+    /// The tithi's size: the 11 px Latin caption step, 12 px for Devanagari (W3-00b).
+    in property <length> tithi-size: 12px;
     callback clicked(int);
 
     horizontal-stretch: 1;
@@ -42,6 +44,8 @@ component DayCell inherits Rectangle {
         focus-on-tab-navigation: !data.is-padding;
         accessible-role: button;
         accessible-label: data.accessible-label;
+        // The same action a screen reader invokes (W3-00a).
+        accessible-action-default => { root.clicked(root.index); }
 
         // Enter or Space opens the day detail (WR-10 AC2). Tab order is the repeater order.
         key-pressed(event) => {
@@ -93,15 +97,17 @@ component DayCell inherits Rectangle {
             vertical-alignment: center;
         }
 
-        // Line 2: the tithi, full cell width, 12 px (the Devanagari minimum), elided when long.
+        // Line 2: the tithi, 11 px Latin or 12 px Devanagari (widget-design §3/§4), elided when
+        // long. The full cell width is what lets the 11 px Latin caption fit "Saptami" at 1x
+        // (W3-00b). Today keeps the 4 px inset so its 2 px ring stays clear of the glyphs.
         Text {
-            x: 4px;
+            x: data.is-today ? 4px : 0px;
             y: 24px;
-            width: parent.width - 8px;
+            width: parent.width - (data.is-today ? 8px : 0px);
             height: 16px;
             text: data.tithi;
             color: Theme.ink-muted;
-            font-size: 12px;
+            font-size: root.tithi-size;
             horizontal-alignment: center;
             vertical-alignment: center;
             overflow: elide;
@@ -123,6 +129,8 @@ export component MonthGrid inherits Rectangle {
     in property <int> holiday-days: -1;
     /// 13 px for Latin, 12 px for Devanagari, set once from the language (WR-03 AC2).
     in property <length> ad-day-size: 13px;
+    /// 11 px for Latin, 12 px for Devanagari, set once from the language (W3-00b).
+    in property <length> tithi-size: 12px;
 
     callback day-clicked(int);
     callback prev-month();
@@ -218,6 +226,7 @@ export component MonthGrid inherits Rectangle {
                     data: cell;
                     index: i;
                     ad-day-size: root.ad-day-size;
+                    tithi-size: root.tithi-size;
                     row: i / 7;
                     col: mod(i, 7);
                     clicked(index) => { root.day-clicked(index); }

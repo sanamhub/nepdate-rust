@@ -15,6 +15,11 @@ All notable changes to MitiBar. Format: [Keep a Changelog](https://keepachangelo
 - `--popup --snapshot <png> --theme light|dark --lang en|ne` to render the popup for the W1 spike; `cargo xtask icons` pre-renders the tray day icons.
 - Taskbar text (W1B, Windows 11): two lines of date and time inside the taskbar, left of the Start button, in the free area, redrawn only on change; left click toggles the popup above the text, right click opens the WR-01 AC5 menu. Hidden with one log line on Windows 10, a non-bottom or left-aligned taskbar, or when it does not fit. `--no-taskbar-text` disables it.
 - `--taskbar-snapshot <png> --taskbar-theme light|dark --lang en|ne --scale 1|1.5|2` (snapshot feature) renders the taskbar text over a taskbar-coloured strip for the W1B spike.
+- Month grid and day detail (W2): one BS month with AD days, tithi, event dots, today and holiday colours, prev/next/Today, month and year pickers, wheel navigation and the next-holiday line. Clicking a day opens the detail card with the copy buttons.
+- Converter (W3): BS → AD and AD → BS over the lenient BS parser and the strict AD form, plus days-between; results appear as the user types, and the range message follows WR-07 AC3.
+- Settings (W3): language, theme, 12/24-hour clock, seconds, extra IANA time zone with a filter, launch at login and the Windows 11 taskbar text. Changes apply at once and are saved atomically 300 ms after the last one; a corrupt file is moved aside.
+- Launch at login (W3) and single instance (W3): a second launch opens the running instance's popup and exits 0.
+- `--converter` and `--settings` (snapshot feature) open those cards for the W3 review images.
 
 ### Changed
 

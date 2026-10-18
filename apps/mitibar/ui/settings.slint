@@ -1,0 +1,165 @@
+// The settings panel (WR-06, W3-04): an inline card inside the popup, opened from the tray's
+// Settings item. Every WR-06 key has a control; `ui_bridge` fills the model and `main` applies
+// each change immediately and saves it after 300 ms.
+
+import { Theme } from "theme.slint";
+import { AboutSlint, Button, ComboBox, LineEdit, ListView, ScrollView, Switch } from "std-widgets.slint";
+
+export struct SettingsData {
+    language-index: int,
+    theme-index: int,
+    clock-24h: bool,
+    show-seconds: bool,
+    zone: string,
+    launch-at-login: bool,
+    taskbar-text: bool,
+    zones: [string],
+    version: string,
+    coverage: string,
+}
+
+export component SettingsPanel inherits Rectangle {
+    in-out property <SettingsData> data;
+    in-out property <string> zone-filter: "";
+
+    callback language-picked(int);
+    callback theme-picked(int);
+    callback clock-changed(bool);
+    callback seconds-changed(bool);
+    callback zone-picked(string);
+    callback launch-changed(bool);
+    callback taskbar-changed(bool);
+    callback filter-zones(string);
+    callback closed();
+
+    width: 330px;
+    height: 430px;
+    background: Theme.surface-raised;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: Theme.hairline;
+
+    // Swallow clicks on the card so they do not reach the scrim behind it.
+    TouchArea {}
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 8px;
+
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: @tr("Settings");
+                color: Theme.ink;
+                font-size: 16px;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            Button {
+                text: @tr("Close");
+                accessible-label: @tr("Close settings");
+                clicked => { root.closed(); }
+            }
+        }
+
+        ScrollView {
+            vertical-stretch: 1;
+            horizontal-scrollbar-policy: always-off;
+            content-width: self.visible-width;
+            content-height: content.preferred-height;
+
+            content := VerticalLayout {
+                width: parent.width;
+                spacing: 8px;
+
+                Text { text: @tr("Language"); color: Theme.ink-muted; font-size: 12px; }
+                ComboBox {
+                    model: ["English", "नेपाली"];
+                    current-index <=> root.data.language-index;
+                    accessible-label: @tr("Language");
+                    selected(_value) => { root.language-picked(root.data.language-index); }
+                }
+
+                Text { text: @tr("Theme"); color: Theme.ink-muted; font-size: 12px; }
+                ComboBox {
+                    model: [@tr("System"), @tr("Light"), @tr("Dark")];
+                    current-index <=> root.data.theme-index;
+                    accessible-label: @tr("Theme");
+                    selected(_value) => { root.theme-picked(root.data.theme-index); }
+                }
+
+                Switch {
+                    text: @tr("24-hour clock");
+                    checked <=> root.data.clock-24h;
+                    toggled => { root.clock-changed(root.data.clock-24h); }
+                }
+                Switch {
+                    text: @tr("Show seconds");
+                    checked <=> root.data.show-seconds;
+                    toggled => { root.seconds-changed(root.data.show-seconds); }
+                }
+
+                Text { text: @tr("Extra time zone"); color: Theme.ink-muted; font-size: 12px; }
+                LineEdit {
+                    text <=> root.zone-filter;
+                    placeholder-text: @tr("Filter zones");
+                    accessible-label: @tr("Filter zones");
+                    edited(text) => { root.filter-zones(text); }
+                }
+                ListView {
+                    height: 96px;
+                    for zone in root.data.zones: Rectangle {
+                        height: 24px;
+                        width: parent.width;
+                        background: zone == root.data.zone ? Theme.hairline : transparent;
+                        Text {
+                            text: zone;
+                            color: Theme.ink;
+                            font-size: 12px;
+                            vertical-alignment: center;
+                        }
+                        TouchArea {
+                            clicked => { root.zone-picked(zone); }
+                        }
+                    }
+                }
+                Button {
+                    text: @tr("No extra clock");
+                    clicked => { root.zone-picked(""); }
+                }
+
+                Switch {
+                    text: @tr("Launch at login");
+                    checked <=> root.data.launch-at-login;
+                    toggled => { root.launch-changed(root.data.launch-at-login); }
+                }
+                Switch {
+                    text: @tr("Taskbar text (Windows 11)");
+                    checked <=> root.data.taskbar-text;
+                    toggled => { root.taskbar-changed(root.data.taskbar-text); }
+                }
+
+                Rectangle { height: 1px; background: Theme.hairline; }
+
+                Text {
+                    text: @tr("Version {0}", root.data.version);
+                    color: Theme.ink-muted;
+                    font-size: 12px;
+                }
+                Text {
+                    text: @tr("Data {0}", root.data.coverage);
+                    color: Theme.ink-muted;
+                    font-size: 12px;
+                    wrap: word-wrap;
+                }
+                Text {
+                    text: "NepDate (MIT) · Noto Sans and Noto Sans Devanagari (OFL-1.1)";
+                    color: Theme.ink-muted;
+                    font-size: 11px;
+                    wrap: word-wrap;
+                }
+                AboutSlint {}
+            }
+        }
+    }
+}

@@ -2,8 +2,10 @@
 // and the clock lines, hides on Escape and on focus loss (WR-02 AC2). The height grew from 440 in
 // the W2 review: the 44 px day cells and a 6-row month need the extra 80 px (WR-02 AC1).
 import { AppInfo } from "app-info.slint";
+import { Converter, ConverterData } from "converter.slint";
 import { DayDetail, DayDetailData } from "day-detail.slint";
 import { MonthGrid, CellData } from "month-grid.slint";
+import { SettingsData, SettingsPanel } from "settings.slint";
 import { Theme } from "theme.slint";
 
 export struct PopupClockLine {
@@ -40,10 +42,26 @@ export component PopupWindow inherits Window {
     in property <int> holiday-days: -1;
     /// 13 px for Latin, 12 px for Devanagari (WR-03 AC2), set by `ui_bridge::set_month`.
     in property <length> ad-day-size: 13px;
+    /// 11 px for Latin, 12 px for Devanagari (W3-00b), set by `ui_bridge::set_month`.
+    in property <length> tithi-size: 12px;
 
     // Day detail (W2-03): an overlay inside the popup, never a new OS window (WR-04 AC1).
     in property <DayDetailData> detail;
     in-out property <bool> detail-visible: false;
+
+    // Converter (W3-02): another inline overlay, opened from the header.
+    in-out property <bool> converter-visible: false;
+    in-out property <ConverterData> converter-data;
+    in-out property <string> converter-input: "";
+    in-out property <string> converter-from: "";
+    in-out property <string> converter-to: "";
+    in-out property <int> converter-tab: 0;
+    in-out property <int> converter-direction: 0;
+
+    // Settings (W3-04): the third inline overlay, opened from the tray menu.
+    in-out property <bool> settings-visible: false;
+    in-out property <SettingsData> settings-data;
+    in-out property <string> settings-filter: "";
 
     // Fired by the tray menu, the taskbar menu and the grid (W2-02).
     callback day-clicked(int);
@@ -57,6 +75,21 @@ export component PopupWindow inherits Window {
     callback detail-closed();
     callback copy-detail-bs();
     callback copy-detail-ad();
+    // Fired by the converter (W3-02).
+    callback converter-opened();
+    callback converter-closed();
+    callback converter-edited(string, int);
+    callback converter-days-edited(string, string);
+    // Fired by the settings panel (W3-04).
+    callback settings-closed();
+    callback settings-language(int);
+    callback settings-theme(int);
+    callback settings-clock(bool);
+    callback settings-seconds(bool);
+    callback settings-zone(string);
+    callback settings-launch(bool);
+    callback settings-taskbar(bool);
+    callback settings-filter-changed(string);
 
     // Forward the window focus to the FocusScope so it receives key events and its focus-lost
     // fires when the popup is deactivated (WR-02 AC2).
@@ -74,6 +107,17 @@ export component PopupWindow inherits Window {
         }
         key-pressed(event) => {
             if (event.text == Key.Escape) {
+                // An overlay closes before the day detail, and the day detail before the popup.
+                if (root.settings-visible) {
+                    root.settings-visible = false;
+                    root.settings-closed();
+                    return accept;
+                }
+                if (root.converter-visible) {
+                    root.converter-visible = false;
+                    root.converter-closed();
+                    return accept;
+                }
                 // WR-04 AC3: Escape closes the detail first, then the popup.
                 if (root.detail-visible) {
                     root.detail-visible = false;
@@ -107,8 +151,41 @@ export component PopupWindow inherits Window {
             spacing: 4px;
 
             // Two lines: the weekday and AD date share one, so a 6-row month still fits the grid
-            // and the WR-03 AC8 holiday line in 520 px (WR-02 AC3 keeps every field).
-            Text { text: root.weekday + " · " + root.ad; color: Theme.ink-muted; font-size: 13px; }
+            // and the WR-03 AC8 holiday line in 520 px (WR-02 AC3 keeps every field). The
+            // converter sits at the end of that line at the 11 px caption size and adds no height.
+            HorizontalLayout {
+                spacing: 4px;
+                Text {
+                    text: root.weekday + " · " + root.ad;
+                    color: Theme.ink-muted;
+                    font-size: 13px;
+                    horizontal-stretch: 1;
+                    vertical-alignment: center;
+                }
+                FocusScope {
+                    width: 52px;
+                    height: 16px;
+                    accessible-role: button;
+                    accessible-label: @tr("Convert");
+                    accessible-action-default => {
+                        root.converter-visible = true;
+                        root.converter-opened();
+                    }
+                    Text {
+                        text: @tr("Convert");
+                        color: Theme.ink-muted;
+                        font-size: 11px;
+                        horizontal-alignment: right;
+                        vertical-alignment: center;
+                    }
+                    TouchArea {
+                        clicked => {
+                            root.converter-visible = true;
+                            root.converter-opened();
+                        }
+                    }
+                }
+            }
             Text { text: root.bs; color: Theme.ink; font-size: 22px; }
 
             Rectangle { height: 1px; background: Theme.hairline; }
@@ -137,6 +214,7 @@ export component PopupWindow inherits Window {
                 holiday-name: root.holiday-name;
                 holiday-days: root.holiday-days;
                 ad-day-size: root.ad-day-size;
+                tithi-size: root.tithi-size;
 
                 day-clicked(index) => { root.day-clicked(index); }
                 prev-month => { root.prev-month(); }
@@ -156,6 +234,12 @@ export component PopupWindow inherits Window {
             height: 100%;
             background: #40000000;
             TouchArea {
+                accessible-role: button;
+                accessible-label: @tr("Close day detail");
+                accessible-action-default => {
+                    root.detail-visible = false;
+                    root.detail-closed();
+                }
                 clicked => {
                     root.detail-visible = false;
                     root.detail-closed();
@@ -167,6 +251,82 @@ export component PopupWindow inherits Window {
                 data: root.detail;
                 copy-bs => { root.copy-detail-bs(); }
                 copy-ad => { root.copy-detail-ad(); }
+            }
+        }
+
+        // Converter overlay (W3-02): its scrim closes only the converter.
+        if root.converter-visible: Rectangle {
+            x: 0;
+            y: 0;
+            width: 100%;
+            height: 100%;
+            background: #40000000;
+            TouchArea {
+                accessible-role: button;
+                accessible-label: @tr("Close converter");
+                accessible-action-default => {
+                    root.converter-visible = false;
+                    root.converter-closed();
+                }
+                clicked => {
+                    root.converter-visible = false;
+                    root.converter-closed();
+                }
+            }
+            Converter {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                data: root.converter-data;
+                input <=> root.converter-input;
+                from <=> root.converter-from;
+                to <=> root.converter-to;
+                tab <=> root.converter-tab;
+                direction <=> root.converter-direction;
+                edited(input, direction) => { root.converter-edited(input, direction); }
+                days-edited(from, to) => { root.converter-days-edited(from, to); }
+                closed => {
+                    root.converter-visible = false;
+                    root.converter-closed();
+                }
+            }
+        }
+
+        // Settings overlay (W3-04): its scrim closes only the settings panel.
+        if root.settings-visible: Rectangle {
+            x: 0;
+            y: 0;
+            width: 100%;
+            height: 100%;
+            background: #40000000;
+            TouchArea {
+                accessible-role: button;
+                accessible-label: @tr("Close settings");
+                accessible-action-default => {
+                    root.settings-visible = false;
+                    root.settings-closed();
+                }
+                clicked => {
+                    root.settings-visible = false;
+                    root.settings-closed();
+                }
+            }
+            SettingsPanel {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                data: root.settings-data;
+                zone-filter <=> root.settings-filter;
+                language-picked(index) => { root.settings-language(index); }
+                theme-picked(index) => { root.settings-theme(index); }
+                clock-changed(value) => { root.settings-clock(value); }
+                seconds-changed(value) => { root.settings-seconds(value); }
+                zone-picked(zone) => { root.settings-zone(zone); }
+                launch-changed(value) => { root.settings-launch(value); }
+                taskbar-changed(value) => { root.settings-taskbar(value); }
+                filter-zones(text) => { root.settings-filter-changed(text); }
+                closed => {
+                    root.settings-visible = false;
+                    root.settings-closed();
+                }
             }
         }
     }

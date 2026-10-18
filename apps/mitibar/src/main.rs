@@ -15,7 +15,11 @@
 )]
 
 mod app;
+#[cfg(test)]
+mod interaction_tests;
 mod platform;
+#[cfg(test)]
+pub(crate) mod test_support;
 mod theme;
 mod ui_bridge;
 
@@ -27,9 +31,11 @@ use std::rc::Rc;
 use nepdate::{DateOrder, Lang, LongDate, Month, NepaliDate, Separator};
 use slint::{ComponentHandle, Weak};
 
+use crate::app::converter::{self, Direction};
 use crate::app::settings::Settings;
 use crate::app::taskbar::taskbar_lines;
 use crate::app::{APP_NAME, clock, holidays, month_view};
+use crate::platform::clipboard::{Clipboard, SystemClipboard};
 use crate::platform::taskbar::{MenuItem, TaskbarEvent, TaskbarText};
 use crate::platform::tray::{SlintTray, Tray, TrayEvent};
 
@@ -47,8 +53,42 @@ struct AppState {
     hidden_on: NepaliDate,
     /// The open day detail, if any (WR-04); cleared on hide and navigation.
     detail: Option<month_view::DayDetail>,
-    /// The fixed local date for a snapshot (`--today`); `None` in the normal app (W2 review).
+    /// The fixed local date for a snapshot (`--today`) or a test; `None` in the normal app
+    /// (W2 review, W3-00a).
     today_override: Option<NepaliDate>,
+    /// The clipboard port (W3-00a). Tests inject a fake so they never touch the real clipboard.
+    clipboard: Rc<dyn Clipboard>,
+    /// Every IANA zone, for the settings filter (W3-04).
+    zones: Vec<String>,
+    /// The live tray and taskbar text, so a settings change can reach them (W3-04).
+    tray: Option<Rc<SlintTray>>,
+    taskbar: Option<Rc<dyn TaskbarText>>,
+    /// Where the settings panel saves (W3-04): the per-user file in the app, a temporary file in
+    /// a test, `None` in a snapshot run or without a config directory.
+    settings_path: Option<PathBuf>,
+}
+
+impl AppState {
+    fn new(
+        settings: Settings,
+        today: NepaliDate,
+        today_override: Option<NepaliDate>,
+        clipboard: Rc<dyn Clipboard>,
+    ) -> Self {
+        Self {
+            settings,
+            popup_hidden_at: None,
+            viewed_month: (today.year(), today.month()),
+            hidden_on: today,
+            detail: None,
+            today_override,
+            clipboard,
+            zones: Vec::new(),
+            tray: None,
+            taskbar: None,
+            settings_path: None,
+        }
+    }
 }
 
 /// A tray click within this long after focus loss hid the popup was the click that took the focus
@@ -57,6 +97,8 @@ const REOPEN_GUARD: std::time::Duration = std::time::Duration::from_millis(400);
 
 /// Command-line flags. `theme` and `lang` override the settings, for snapshot determinism.
 #[derive(Debug, Default)]
+// The flags are independent switches; a state machine would obscure the parser.
+#[allow(clippy::struct_excessive_bools)]
 struct Cli {
     font_test: bool,
     popup: bool,
@@ -68,6 +110,12 @@ struct Cli {
     /// A BS date whose day-detail card the snapshot opens (W2 review).
     #[cfg(feature = "snapshot")]
     detail: Option<NepaliDate>,
+    /// Opens the converter overlay in a snapshot (W3-02).
+    #[cfg(feature = "snapshot")]
+    converter: bool,
+    /// Opens the settings panel in a snapshot (W3-04).
+    #[cfg(feature = "snapshot")]
+    settings_panel: bool,
     theme: Option<ThemeChoice>,
     lang: Option<Lang>,
     no_taskbar_text: bool,
@@ -94,6 +142,8 @@ fn parse_bs_date(
 }
 
 impl Cli {
+    // One arm per flag is the clearest form; splitting it hides the flag table.
+    #[allow(clippy::too_many_lines)]
     fn parse(args: impl Iterator<Item = String>) -> anyhow::Result<Self> {
         let mut cli = Cli::default();
         let mut args = args.peekable();
@@ -113,6 +163,10 @@ impl Cli {
                 "--today" => cli.today = Some(parse_bs_date(&mut args, "--today")?),
                 #[cfg(feature = "snapshot")]
                 "--detail" => cli.detail = Some(parse_bs_date(&mut args, "--detail")?),
+                #[cfg(feature = "snapshot")]
+                "--converter" => cli.converter = true,
+                #[cfg(feature = "snapshot")]
+                "--settings" => cli.settings_panel = true,
                 "--theme" => {
                     let value = args
                         .next()
@@ -186,14 +240,52 @@ impl Cli {
             if cli.detail.is_some() && !cli.popup {
                 anyhow::bail!("--detail needs --popup --snapshot");
             }
+            if cli.converter && !cli.popup {
+                anyhow::bail!("--converter needs --popup --snapshot");
+            }
+            if cli.settings_panel && !cli.popup {
+                anyhow::bail!("--settings needs --popup --snapshot");
+            }
         }
         if cli.font_test && cli.popup {
             anyhow::bail!("--font-test and --popup are exclusive");
         }
         Ok(cli)
     }
+
+    /// Whether this run is a review/snapshot tool, which must not touch the user's login item or
+    /// settings file.
+    fn is_snapshot_tool(&self) -> bool {
+        #[cfg(feature = "snapshot")]
+        if self.popup {
+            return true;
+        }
+        #[cfg(all(windows, feature = "snapshot"))]
+        if self.taskbar_snapshot.is_some() {
+            return true;
+        }
+        false
+    }
 }
 
+/// The settings for this run: the per-user file, or the defaults for a snapshot tool so a
+/// review image neither reads nor writes `settings.toml`.
+fn load_settings(cli: &Cli) -> (Settings, Vec<String>) {
+    #[cfg(feature = "snapshot")]
+    if cli.popup {
+        return (Settings::default(), Vec::new());
+    }
+    #[cfg(all(windows, feature = "snapshot"))]
+    if cli.taskbar_snapshot.is_some() {
+        return (Settings::default(), Vec::new());
+    }
+    let _ = cli;
+    platform::settings_store::load_default()
+}
+
+// The composition root reads top to bottom: parse, settings, single instance, windows, tray,
+// timers. Splitting it would scatter the startup order.
+#[allow(clippy::too_many_lines)]
 fn main() -> anyhow::Result<()> {
     // Best-effort: the app still runs if the file logger can't start; the panic hook is
     // installed regardless (W1-06).
@@ -213,12 +305,39 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let mut settings = Settings::default();
+    // WR-09 AC1: a second launch signals this one and exits 0 before touching settings, the
+    // login item or the UI. A snapshot run never claims the socket, so a review image can be
+    // rendered while the app is open.
+    // If the socket can't be created at all, the app still starts, without the guard.
+    let mut primary = None;
+    if !cli.is_snapshot_tool() {
+        match platform::single_instance::claim() {
+            Ok(platform::single_instance::Claim::Secondary) => return Ok(()),
+            Ok(platform::single_instance::Claim::Primary(listener)) => primary = Some(listener),
+            Err(err) => log::warn!("single instance: {err}; running without the guard"),
+        }
+    }
+
+    // WR-06: load the per-user file (or write the defaults), then let the snapshot flags
+    // override language and theme for this run only. A snapshot run uses the defaults and never
+    // touches the user's settings file.
+    let (mut settings, settings_warnings) = load_settings(&cli);
+    for warning in settings_warnings {
+        log::warn!("settings: {warning}");
+    }
     if let Some(lang) = cli.lang {
         settings.language = match lang {
             Lang::Ne => String::from("ne"),
             Lang::En => String::from("en"),
         };
+    }
+    // The `--no-taskbar-text` flag turns WR-12 off for this run (W3 builds the settings UI).
+    if cli.no_taskbar_text {
+        settings.taskbar_text = false;
+    }
+    // WR-09 AC2: match the login item to the setting. A snapshot never touches it.
+    if !cli.is_snapshot_tool() {
+        platform::autostart::apply(settings.launch_at_login);
     }
     let lang = settings.lang();
 
@@ -252,17 +371,15 @@ fn main() -> anyhow::Result<()> {
     let today_override = cli.today;
     #[cfg(not(feature = "snapshot"))]
     let today_override = None;
-    let state = Rc::new(RefCell::new(AppState {
+    let state = Rc::new(RefCell::new(AppState::new(
         settings,
-        popup_hidden_at: None,
-        viewed_month: (today.year(), today.month()),
-        hidden_on: today,
-        detail: None,
+        today,
         today_override,
-    }));
-    // The `--no-taskbar-text` flag turns WR-12 off for this run (W3 builds the settings UI).
-    if cli.no_taskbar_text {
-        state.borrow_mut().settings.taskbar_text = false;
+        Rc::new(SystemClipboard),
+    )));
+    state.borrow_mut().zones = ui_bridge::all_time_zones();
+    if !cli.is_snapshot_tool() {
+        state.borrow_mut().settings_path = platform::settings_store::default_path();
     }
     let popup = PopupWindow::new()?;
     // The popup title (Alt+Tab) and every later window title share this one value (ADR-0017).
@@ -318,11 +435,47 @@ fn main() -> anyhow::Result<()> {
         taskbar.set_lines(&taskbar_lines(&now, &s.settings));
     }
 
+    // W3-04: the settings panel needs the live tray and taskbar for language and taskbar-text
+    // changes, and one debounce timer for the 300 ms save.
+    state.borrow_mut().tray = Some(tray.clone());
+    state.borrow_mut().taskbar = Some(taskbar.clone());
+    let save_timer = Rc::new(slint::Timer::default());
+    wire_settings(&popup, &state, &popup_weak, &save_timer);
+
     // First paint of the tray, then the once-per-minute (or per-second) timer (W1-05).
     update_tray(&state, &tray);
+
+    // WR-09 AC1: the listener thread sets a flag; this small timer turns it into an open popup
+    // on the UI thread. It only runs in the first instance.
+    let single_timer = slint::Timer::default();
+    if let Some(listener) = primary {
+        platform::single_instance::start(listener);
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        single_timer.start(
+            slint::TimerMode::Repeated,
+            std::time::Duration::from_millis(250),
+            move || {
+                if !platform::single_instance::take_request() {
+                    return;
+                }
+                let Some(popup) = popup_weak.upgrade() else {
+                    return;
+                };
+                prepare_show(&state);
+                update_popup(&state, &popup_weak);
+                let _ = ui_bridge::show_popup_at(&popup, ui_bridge::PopupAnchor::TrayCorner);
+            },
+        );
+    }
+
     arm_timer(state.clone(), popup_weak.clone(), tray, taskbar);
 
     slint::run_event_loop()?;
+    // A change made in the last 300 ms before Quit is still waiting for the debounce timer.
+    if save_timer.running() {
+        save_settings(&state);
+    }
     Ok(())
 }
 
@@ -343,6 +496,26 @@ fn snapshot_popup(
         state.borrow_mut().detail = Some(month_view::day_detail(detail, lang));
     }
     update_popup(state, &popup.as_weak());
+    if cli.converter {
+        let today = today_of(&state.borrow());
+        ui_bridge::reset_converter(popup, today, lang);
+        popup.set_converter_input("2081/01/01".into());
+        let outcome = converter::convert("2081/01/01", Direction::BsToAd, lang);
+        ui_bridge::set_converter(popup, &outcome);
+        popup.set_converter_visible(true);
+    }
+    if cli.settings_panel {
+        if let Some(theme) = cli.theme {
+            match theme {
+                ThemeChoice::Light => "light",
+                ThemeChoice::Dark => "dark",
+                ThemeChoice::System => "system",
+            }
+            .clone_into(&mut state.borrow_mut().settings.theme);
+        }
+        refresh_settings(popup, state);
+        popup.set_settings_visible(true);
+    }
     snapshot(popup, &path)
 }
 
@@ -370,9 +543,9 @@ fn handle_tray_event(
                 let _ = ui_bridge::show_popup_at(&popup, ui_bridge::PopupAnchor::TrayCorner);
             }
         }
-        TrayEvent::CopyBs => copy_bs(&state.borrow().settings),
-        TrayEvent::CopyAd => copy_ad(),
-        TrayEvent::Settings => {}
+        TrayEvent::CopyBs => copy_bs(state),
+        TrayEvent::CopyAd => copy_ad(state),
+        TrayEvent::Settings => open_settings(state, popup_weak),
         TrayEvent::Quit => {
             let _ = slint::quit_event_loop();
         }
@@ -415,22 +588,26 @@ fn handle_taskbar_event(
 }
 
 /// Writes today's BS date as `YYYY/MM/DD` to the clipboard (WR-01 AC5).
-fn copy_bs(s: &Settings) {
-    let now = jiff::Zoned::now();
-    if let Ok(bs) = NepaliDate::try_from(now.date()) {
-        let text = bs
-            .short(DateOrder::Ymd, Separator::Slash, true, s.lang())
-            .to_string();
-        let _ = platform::clipboard::set_text(&text);
-    }
+fn copy_bs(state: &Rc<RefCell<AppState>>) {
+    let state = state.borrow();
+    let bs = today_of(&state);
+    let text = bs
+        .short(
+            DateOrder::Ymd,
+            Separator::Slash,
+            true,
+            state.settings.lang(),
+        )
+        .to_string();
+    let _ = state.clipboard.set_text(&text);
 }
 
 /// Writes today's AD date as `YYYY-MM-DD` to the clipboard (WR-01 AC5).
-fn copy_ad() {
-    let now = jiff::Zoned::now();
-    if let Ok(bs) = NepaliDate::try_from(now.date()) {
-        let _ = platform::clipboard::set_text(&bs.to_gregorian().to_string());
-    }
+fn copy_ad(state: &Rc<RefCell<AppState>>) {
+    let state = state.borrow();
+    let _ = state
+        .clipboard
+        .set_text(&today_of(&state).to_gregorian().to_string());
 }
 
 /// Refreshes the popup header, clocks and month grid from the local date and viewed month.
@@ -455,6 +632,11 @@ fn update_popup(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>) {
     let holiday = holidays::next_holiday(today, lang);
     ui_bridge::set_next_holiday(&popup, holiday.as_ref());
     ui_bridge::set_detail(&popup, s.detail.as_ref());
+}
+
+/// The date the app calls today: the pinned date in a snapshot or test, otherwise the local date.
+fn today_of(s: &AppState) -> NepaliDate {
+    s.today_override.unwrap_or_else(today_local)
 }
 
 /// The local BS date, or `MIN` if the system clock is outside 1901..=2199.
@@ -521,7 +703,12 @@ fn change_month(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>, d
 fn wire_popup(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>) {
     popup.on_hidden({
         let state = state.clone();
+        let popup_weak = popup_weak.clone();
         move || {
+            if let Some(popup) = popup_weak.upgrade() {
+                popup.set_converter_visible(false);
+                popup.set_settings_visible(false);
+            }
             let mut state = state.borrow_mut();
             state.popup_hidden_at = Some(std::time::Instant::now());
             state.hidden_on = today_local();
@@ -550,6 +737,8 @@ fn wire_popup(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, popup_weak: &W
         move || copy_detail(&state, false)
     });
 
+    wire_converter(popup, state, popup_weak);
+
     popup.on_prev_month({
         let state = state.clone();
         let popup_weak = popup_weak.clone();
@@ -564,7 +753,7 @@ fn wire_popup(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, popup_weak: &W
         let state = state.clone();
         let popup_weak = popup_weak.clone();
         move || {
-            let today = today_local();
+            let today = today_of(&state.borrow());
             set_month(&state, &popup_weak, today.year(), today.month());
         }
     });
@@ -608,6 +797,224 @@ fn wire_popup(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, popup_weak: &W
     });
 }
 
+/// W3-02: the converter overlay. Opening it closes the day detail, and the Days tab starts with
+/// today on both sides.
+fn wire_converter(
+    popup: &PopupWindow,
+    state: &Rc<RefCell<AppState>>,
+    popup_weak: &Weak<PopupWindow>,
+) {
+    popup.on_converter_opened({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move || {
+            let (today, lang) = {
+                let state = state.borrow();
+                (today_of(&state), state.settings.lang())
+            };
+            state.borrow_mut().detail = None;
+            if let Some(popup) = popup_weak.upgrade() {
+                ui_bridge::set_detail(&popup, None);
+                ui_bridge::reset_converter(&popup, today, lang);
+            }
+        }
+    });
+    popup.on_converter_edited({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move |input, direction| {
+            let lang = state.borrow().settings.lang();
+            let direction = if direction == 0 {
+                Direction::BsToAd
+            } else {
+                Direction::AdToBs
+            };
+            let outcome = converter::convert(input.as_str(), direction, lang);
+            if let Some(popup) = popup_weak.upgrade() {
+                ui_bridge::set_converter(&popup, &outcome);
+            }
+        }
+    });
+    popup.on_converter_days_edited({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move |from, to| {
+            let lang = state.borrow().settings.lang();
+            let outcome = converter::days_between(from.as_str(), to.as_str(), lang);
+            if let Some(popup) = popup_weak.upgrade() {
+                ui_bridge::set_converter(&popup, &outcome);
+            }
+        }
+    });
+}
+
+/// W3-04: the settings panel. Each change is applied at once and saved 300 ms later. One
+/// callback per key keeps the mapping visible.
+#[allow(clippy::too_many_lines)]
+fn wire_settings(
+    popup: &PopupWindow,
+    state: &Rc<RefCell<AppState>>,
+    popup_weak: &Weak<PopupWindow>,
+    save_timer: &Rc<slint::Timer>,
+) {
+    popup.on_settings_language({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        let save_timer = save_timer.clone();
+        let popup = popup.as_weak();
+        move |index| {
+            let language = if index == 1 { "ne" } else { "en" };
+            language.clone_into(&mut state.borrow_mut().settings.language);
+            let _ = slint::select_bundled_translation(language);
+            if let Some(popup) = popup.upgrade() {
+                update_popup(&state, &popup_weak);
+                if let Some(tray) = state.borrow().tray.clone() {
+                    update_tray(&state, &tray);
+                }
+                if let Some(taskbar) = state.borrow().taskbar.clone() {
+                    taskbar.set_menu_labels(&ui_bridge::menu_labels(&popup));
+                    let s = state.borrow();
+                    let now = jiff::Zoned::now();
+                    taskbar.set_lines(&taskbar_lines(&now, &s.settings));
+                }
+                refresh_settings(&popup, &state);
+            }
+            schedule_save(&save_timer, &state);
+        }
+    });
+    popup.on_settings_theme({
+        let state = state.clone();
+        let save_timer = save_timer.clone();
+        let popup_weak = popup.as_weak();
+        move |index| {
+            let theme = match index {
+                1 => "light",
+                2 => "dark",
+                _ => "system",
+            };
+            theme.clone_into(&mut state.borrow_mut().settings.theme);
+            if let Some(popup) = popup_weak.upgrade() {
+                theme::apply(&popup, ui_bridge::theme_choice(theme));
+            }
+            schedule_save(&save_timer, &state);
+        }
+    });
+    popup.on_settings_clock({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        let save_timer = save_timer.clone();
+        move |value| {
+            state.borrow_mut().settings.clock_24h = value;
+            update_popup(&state, &popup_weak);
+            schedule_save(&save_timer, &state);
+        }
+    });
+    popup.on_settings_seconds({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        let save_timer = save_timer.clone();
+        move |value| {
+            state.borrow_mut().settings.show_seconds = value;
+            update_popup(&state, &popup_weak);
+            schedule_save(&save_timer, &state);
+        }
+    });
+    popup.on_settings_zone({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        let save_timer = save_timer.clone();
+        let popup = popup.as_weak();
+        move |zone| {
+            state.borrow_mut().settings.extra_time_zone = zone.to_string();
+            update_popup(&state, &popup_weak);
+            if let Some(popup) = popup.upgrade() {
+                refresh_settings(&popup, &state);
+            }
+            schedule_save(&save_timer, &state);
+        }
+    });
+    popup.on_settings_launch({
+        let state = state.clone();
+        let save_timer = save_timer.clone();
+        move |value| {
+            state.borrow_mut().settings.launch_at_login = value;
+            platform::autostart::apply(value);
+            schedule_save(&save_timer, &state);
+        }
+    });
+    popup.on_settings_taskbar({
+        let state = state.clone();
+        let save_timer = save_timer.clone();
+        move |value| {
+            state.borrow_mut().settings.taskbar_text = value;
+            if let Some(taskbar) = state.borrow().taskbar.clone() {
+                taskbar.set_enabled(value);
+            }
+            schedule_save(&save_timer, &state);
+        }
+    });
+    popup.on_settings_filter_changed({
+        let state = state.clone();
+        let popup = popup.as_weak();
+        move |filter| {
+            if let Some(popup) = popup.upgrade() {
+                let s = state.borrow();
+                let zones = ui_bridge::filter_time_zones(&s.zones, filter.as_str());
+                ui_bridge::set_settings(&popup, &s.settings, &zones);
+            }
+        }
+    });
+    popup.on_settings_closed(|| {});
+}
+
+/// Repaints the settings panel from `AppState`, keeping the current zone filter.
+fn refresh_settings(popup: &PopupWindow, state: &Rc<RefCell<AppState>>) {
+    let filter = popup.get_settings_filter().to_string();
+    let s = state.borrow();
+    let zones = ui_bridge::filter_time_zones(&s.zones, &filter);
+    ui_bridge::set_settings(popup, &s.settings, &zones);
+}
+
+/// Saves `settings.toml` 300 ms after the last change (W3-04).
+fn schedule_save(timer: &Rc<slint::Timer>, state: &Rc<RefCell<AppState>>) {
+    let state = state.clone();
+    timer.start(
+        slint::TimerMode::SingleShot,
+        std::time::Duration::from_millis(300),
+        move || save_settings(&state),
+    );
+}
+
+/// Writes the current settings to `AppState::settings_path`, if there is one.
+fn save_settings(state: &Rc<RefCell<AppState>>) {
+    let (settings, path) = {
+        let s = state.borrow();
+        (s.settings.clone(), s.settings_path.clone())
+    };
+    let Some(path) = path else {
+        return;
+    };
+    if let Err(err) = platform::settings_store::save(&path, &settings) {
+        log::warn!("settings: could not save: {err}");
+    }
+}
+
+/// Opens the settings panel, showing the popup first if it was hidden.
+fn open_settings(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>) {
+    let Some(popup) = popup_weak.upgrade() else {
+        return;
+    };
+    if !popup.window().is_visible() {
+        prepare_show(state);
+        update_popup(state, popup_weak);
+        let _ = ui_bridge::show_popup_at(&popup, ui_bridge::PopupAnchor::TrayCorner);
+    }
+    popup.set_settings_filter("".into());
+    refresh_settings(&popup, state);
+    popup.set_settings_visible(true);
+    popup.invoke_focus();
+}
+
 /// Opens the detail for a grid cell, if it is a real day (W2-03).
 fn open_detail(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>, index: i32) {
     let (year, month, lang) = {
@@ -640,7 +1047,7 @@ fn copy_detail(state: &Rc<RefCell<AppState>>, bs: bool) {
         return;
     };
     let text = if bs { &detail.copy_bs } else { &detail.copy_ad };
-    let _ = platform::clipboard::set_text(text);
+    let _ = state.clipboard.set_text(text);
 }
 
 /// Refreshes the tray title (macOS), day icon (Windows/Linux) and tooltip.

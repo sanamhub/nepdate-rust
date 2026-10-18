@@ -25,6 +25,11 @@ nepdate = { path = "../../crates/nepdate", features = ["jiff"] }
 nepdate-patro = { path = "../../crates/nepdate-patro" }
 jiff = "0.2"
 anyhow = "1"
+# Settings file (W3-03, ADR-0015): serde derive + TOML.
+serde = { version = "1", features = ["derive"] }
+toml = "1"
+# Single instance over a local socket (W3-06, ADR-0015).
+interprocess = "2"
 # Clipboard (WR-01 AC5). Already in the tree through Slint's winit backend, so no new crate;
 # text-only, no image feature (ADR-0015).
 arboard = { version = "3", default-features = false, features = ["wayland-data-control"] }
@@ -35,6 +40,13 @@ dirs = "6"
 # PNG encoding for the snapshot flags, behind the `snapshot` feature (W1B-00, ADR-0016).
 image = { version = "0.25", default-features = false, features = ["png"], optional = true }
 
+[dev-dependencies]
+# Slint's headless testing backend for the W3-00a interaction tests. It is an internal crate:
+# the version must equal `slint` exactly (1.18.1 in Cargo.lock), hence the `=`.
+i-slint-backend-testing = "=1.18.1"
+# Temporary directories for the W3-03 settings store tests.
+tempfile = "3"
+
 [build-dependencies]
 slint-build = "1.18"
 # Application manifest (ADR-0016): Windows 8 to 11 `supportedOS`, per-monitor-v2 DPI and the
@@ -43,6 +55,11 @@ embed-manifest = "1.5"
 
 [lints]
 workspace = true
+
+# Per-user launch at login on macOS and Linux (W3-05, ADR-0015). Windows writes its `Run` value
+# with `windows-registry` instead (W3 review: quoting and Task Manager).
+[target."cfg(not(windows))".dependencies]
+auto-launch = "0.6"
 
 [target."cfg(windows)".dependencies]
 windows-registry = "0.6.1"

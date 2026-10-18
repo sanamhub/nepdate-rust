@@ -6,10 +6,15 @@ use nepdate::{Lang, Month, NepaliDate};
 use slint::ComponentHandle;
 
 use crate::app::clock::Header;
+use crate::app::converter::ConvertOutcome;
 use crate::app::holidays::NextHoliday;
 use crate::app::month_view::{Cell, DayDetail, MonthView};
+use crate::app::settings::Settings;
 use crate::platform::taskbar::MenuLabels;
-use crate::{AppInfo, CellData, DayDetailData, MenuText, PopupClockLine, PopupWindow};
+use crate::{
+    AppInfo, CellData, ConverterData, DayDetailData, MenuText, PopupClockLine, PopupWindow,
+    SettingsData,
+};
 
 /// Where to open the popup (W1-04).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -99,6 +104,9 @@ pub fn set_month(popup: &PopupWindow, view: &MonthView, lang: Lang) {
     // The AD day is body size (13 px); Devanagari needs 12 px minimum and is narrower at 12 px
     // (widget-design §3/§4). The UI only needs the size, not the language.
     popup.set_ad_day_size(if lang == Lang::Ne { 12.0 } else { 13.0 });
+    // The tithi is a Latin caption at 11 px in English; Devanagari needs 12 px or more
+    // (widget-design §3/§4, W3-00b).
+    popup.set_tithi_size(if lang == Lang::Ne { 12.0 } else { 11.0 });
 }
 
 /// One `Cell` to one `CellData` (WR-03 AC3). The model keeps Saturday and public holidays
@@ -169,6 +177,91 @@ pub fn set_detail(popup: &PopupWindow, detail: Option<&DayDetail>) {
         copy_ad: detail.copy_ad.as_str().into(),
     });
     popup.set_detail_visible(true);
+}
+
+/// Fills the converter result area (W3-02). The UI shows the message, or the short and long
+/// forms; an empty outcome clears all three.
+pub fn set_converter(popup: &PopupWindow, outcome: &ConvertOutcome) {
+    let (short, long, error) = match outcome {
+        ConvertOutcome::Empty => (String::new(), String::new(), String::new()),
+        ConvertOutcome::Ok { short, long } => (short.clone(), long.clone(), String::new()),
+        ConvertOutcome::Error(message) => (String::new(), String::new(), message.clone()),
+    };
+    popup.set_converter_data(ConverterData {
+        short: short.as_str().into(),
+        long: long.as_str().into(),
+        error: error.as_str().into(),
+    });
+}
+
+/// Sets the Days tab defaults to today's BS date. A user-typed value is kept.
+pub fn reset_converter(popup: &PopupWindow, today: NepaliDate, lang: Lang) {
+    let today = today
+        .short(
+            nepdate::DateOrder::Ymd,
+            nepdate::Separator::Slash,
+            true,
+            lang,
+        )
+        .to_string();
+    if popup.get_converter_from().is_empty() {
+        popup.set_converter_from(today.as_str().into());
+    }
+    if popup.get_converter_to().is_empty() {
+        popup.set_converter_to(today.as_str().into());
+    }
+    set_converter(popup, &ConvertOutcome::Empty);
+}
+
+/// Every IANA zone in jiff's bundled database, sorted (WR-06 AC4).
+#[must_use]
+pub fn all_time_zones() -> Vec<String> {
+    let mut zones: Vec<String> = jiff::tz::TimeZoneDatabase::bundled()
+        .available()
+        .map(|name| name.as_str().to_owned())
+        .collect();
+    zones.sort();
+    zones.dedup();
+    zones
+}
+
+/// The zones whose id contains `filter`, case-insensitively. An empty filter returns all.
+#[must_use]
+pub fn filter_time_zones(zones: &[String], filter: &str) -> Vec<String> {
+    if filter.is_empty() {
+        return zones.to_vec();
+    }
+    let needle = filter.to_lowercase();
+    zones
+        .iter()
+        .filter(|zone| zone.to_lowercase().contains(&needle))
+        .cloned()
+        .collect()
+}
+
+/// Fills the settings panel from `Settings` and the filtered zone list (W3-04).
+pub fn set_settings(popup: &PopupWindow, settings: &Settings, zones: &[String]) {
+    let language_index = i32::from(u8::from(settings.lang() == Lang::Ne));
+    let theme_index = match settings.theme.as_str() {
+        "light" => 1,
+        "dark" => 2,
+        _ => 0,
+    };
+    let coverage = nepdate_patro::coverage();
+    let zone_model: Vec<slint::SharedString> =
+        zones.iter().map(|zone| zone.as_str().into()).collect();
+    popup.set_settings_data(SettingsData {
+        language_index,
+        theme_index,
+        clock_24h: settings.clock_24h,
+        show_seconds: settings.show_seconds,
+        zone: settings.extra_time_zone.as_str().into(),
+        launch_at_login: settings.launch_at_login,
+        taskbar_text: settings.taskbar_text,
+        zones: slint::ModelRc::new(slint::VecModel::from(zone_model)),
+        version: env!("CARGO_PKG_VERSION").into(),
+        coverage: format!("{} to {}", coverage.start(), coverage.end()).into(),
+    });
 }
 
 /// Maps the `theme` setting of WR-06 onto the `ThemeChoice` of `ui/theme.slint`.
@@ -370,31 +463,54 @@ mod tests {
         );
     }
 
-    /// A platform that builds a component without a display, for the tests that read a Slint
-    /// model or global back. The software renderer is a default feature (ADR-0010).
-    struct TestPlatform;
-
-    impl slint::platform::Platform for TestPlatform {
-        fn create_window_adapter(
-            &self,
-        ) -> Result<std::rc::Rc<dyn slint::platform::WindowAdapter>, slint::PlatformError> {
-            Ok(
-                slint::platform::software_renderer::MinimalSoftwareWindow::new(
-                    slint::platform::software_renderer::RepaintBufferType::ReusedBuffer,
-                ),
-            )
-        }
+    #[test]
+    fn filter_time_zones_matches_case_insensitively() {
+        let zones = vec![
+            "Asia/Kathmandu".to_owned(),
+            "Europe/Berlin".to_owned(),
+            "America/New_York".to_owned(),
+        ];
+        assert_eq!(
+            filter_time_zones(&zones, "kath"),
+            vec!["Asia/Kathmandu".to_owned()]
+        );
+        assert_eq!(
+            filter_time_zones(&zones, "BER"),
+            vec!["Europe/Berlin".to_owned()]
+        );
+        assert_eq!(filter_time_zones(&zones, "").len(), 3);
+        assert!(filter_time_zones(&zones, "Mars").is_empty());
     }
 
-    /// A process can set one platform, so this single component test is the only test that
-    /// creates one. Slint's platform is also tied to the thread that set it, so splitting the
-    /// assertions over tests would fail under `cargo test` (one process, many threads).
-    static PLATFORM: std::sync::Once = std::sync::Once::new();
+    #[test]
+    fn wr06_settings_panel_maps_the_indices_and_zones() {
+        use crate::app::settings::Settings;
+        use slint::Model;
 
-    fn init_platform() {
-        PLATFORM.call_once(|| {
-            let _ = slint::platform::set_platform(Box::new(TestPlatform));
-        });
+        crate::test_support::init_platform();
+        let popup = crate::PopupWindow::new().expect("popup component");
+        let settings = Settings {
+            language: "ne".to_owned(),
+            theme: "dark".to_owned(),
+            clock_24h: true,
+            show_seconds: true,
+            extra_time_zone: "Asia/Kathmandu".to_owned(),
+            launch_at_login: false,
+            taskbar_text: false,
+            ..Settings::default()
+        };
+        let zones = vec!["Asia/Kathmandu".to_owned()];
+        set_settings(&popup, &settings, &zones);
+        let data = popup.get_settings_data();
+        assert_eq!(data.language_index, 1);
+        assert_eq!(data.theme_index, 2);
+        assert!(data.clock_24h);
+        assert!(data.show_seconds);
+        assert!(!data.launch_at_login);
+        assert!(!data.taskbar_text);
+        assert_eq!(data.zone.as_str(), "Asia/Kathmandu");
+        assert_eq!(data.zones.row_count(), 1);
+        assert_eq!(data.coverage.as_str(), "2077/01/01 to 2084/08/20");
     }
 
     #[test]
@@ -405,7 +521,7 @@ mod tests {
         use slint::Model;
 
         assert_eq!(APP_NAME, "MitiBar");
-        init_platform();
+        crate::test_support::init_platform();
         let popup = crate::PopupWindow::new().expect("popup component");
 
         set_app_name(&popup);
