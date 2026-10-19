@@ -1,10 +1,10 @@
-# Benchmarks (task L6-02)
+# Benchmarks
 
 B1 to B8 of [`shared/spec/BENCHMARK.md`](../shared/spec/BENCHMARK.md), measured with the
 `benches/nepdate-bench` criterion harness on the reference machine, plus the four competitor
 crates for B1 and B2. The C# column is the .NET 10 column of the hub's
 [`docs/benchmarks/dotnet.md`](https://github.com/sanamhub/nepdate/blob/1eab1cb/docs/benchmarks/dotnet.md)
-(task H6, hub commit `1eab1cb`).
+(hub commit `1eab1cb`).
 
 ## Machine and versions
 
@@ -20,8 +20,8 @@ crates for B1 and B2. The C# column is the .NET 10 column of the hub's
 | Competitors | npdatetime 0.2.10, adtobs 0.2.0, nepali-date-converter 0.1.1, nepdate-cli 0.1.5 (pinned) |
 | Date of run | 2026-10-15 |
 
-The machine was not fully idle: the C++ port's agent was running on the same machine, but no
-heavy build was in progress when the benchmarks started (CPU load about 2 %). Laptop numbers are
+The machine was not fully idle: a C++ build was running on the same machine, but no heavy build
+was in progress when the benchmarks started (CPU load about 2 %). Laptop numbers are
 indicative, not a quiet-machine guarantee.
 
 ## Command
@@ -58,8 +58,8 @@ rows: the allocation-free `write_to` and, for comparison, `to_string` (which all
 | B8 | patro month grid | 298.80 | 0 | 3,132.66 | 1,429 | ≤ 250 |
 
 Every B-row beats the C# column and allocates 0 bytes. B8 misses its ADR-0004 target (298.80 ns
-against 250 ns) but is 10.5 times faster than C#. It was not micro-optimised: the plan says to
-report a miss rather than speculate. See the note below.
+against 250 ns) but is 10.5 times faster than C#. It was not micro-optimised: the miss is reported rather than
+speculated away. See the note below.
 
 ### Competitors (B1 and B2 only)
 
@@ -115,7 +115,7 @@ differ, not which one is right.
   about 59 % load (the C++ port's build); the `write_to` row ran about 20 % slower in the same
   run, so 128.91 ns is if anything high.
 - B8 reads the tithi, holiday flag and every event name (both languages) for every day of the
-  month, as the plan specifies. That is heavier than the ADR-0004 prototype (which measured a
+  month, as BENCHMARK §3 specifies. That is heavier than the ADR-0004 prototype (which measured a
   lighter read at 209 ns quiet / 285 ns busy), and the run above was not on a fully idle machine.
 - The B6 target (≤ 20 ns) was met at 18.38 ns, so the fallback fast-path in ADR-0004 was not
   needed.
