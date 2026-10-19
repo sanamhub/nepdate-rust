@@ -379,6 +379,77 @@ fn the_year_control_shows_language_digits_and_stops_at_the_edges() {
 }
 
 #[test]
+fn the_visible_year_buttons_step_and_stop_at_the_edges() {
+    let (popup, state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+
+    let prev = element(&popup, "Previous year");
+    let next = element(&popup, "Next year");
+    assert_eq!(prev.accessible_role(), Some(AccessibleRole::Button));
+    assert_eq!(next.accessible_role(), Some(AccessibleRole::Button));
+    assert!(
+        prev.size().width >= 24.0 && prev.size().height >= 24.0,
+        "previous-year hit target is {}x{}",
+        prev.size().width,
+        prev.size().height
+    );
+    assert!(
+        next.size().width >= 24.0 && next.size().height >= 24.0,
+        "next-year hit target is {}x{}",
+        next.size().width,
+        next.size().height
+    );
+
+    next.invoke_accessible_default_action();
+    assert_eq!(popup.get_year(), 2082);
+    prev.invoke_accessible_default_action();
+    assert_eq!(popup.get_year(), 2081);
+
+    // W6-03 AC2: the buttons carry the Devanagari year text and translated labels.
+    state.borrow_mut().settings.language = "ne".to_owned();
+    let _ = slint::select_bundled_translation("ne");
+    update_popup(&state);
+    assert_eq!(popup.get_year_text().as_str(), "२०८१");
+    element(&popup, "अर्को वर्ष").invoke_accessible_default_action();
+    assert_eq!(popup.get_year(), 2082);
+    assert_eq!(popup.get_year_text().as_str(), "२०८२");
+    element(&popup, "अघिल्लो वर्ष").invoke_accessible_default_action();
+    assert_eq!(popup.get_year(), 2081);
+
+    state.borrow_mut().settings.language = "en".to_owned();
+    let _ = slint::select_bundled_translation("en");
+    update_popup(&state);
+
+    show_month(&state, 1901, Month::Baishakh);
+    let prev = element(&popup, "Previous year");
+    assert_eq!(prev.accessible_enabled(), Some(false));
+    prev.invoke_accessible_default_action();
+    assert_eq!(popup.get_year(), 1901, "1901 is the lower edge");
+
+    show_month(&state, 2199, Month::Chaitra);
+    let next = element(&popup, "Next year");
+    assert_eq!(next.accessible_enabled(), Some(false));
+    next.invoke_accessible_default_action();
+    assert_eq!(popup.get_year(), 2199, "2199 is the upper edge");
+
+    // Keyboard and wheel still reach the same control (W6-03 AC3).
+    show_month(&state, 2081, Month::Baishakh);
+    let year = element(&popup, "Year");
+    year.mock_single_click(slint::platform::PointerEventButton::Left);
+    popup
+        .window()
+        .dispatch_event(slint::platform::WindowEvent::KeyPressed {
+            text: slint::platform::Key::UpArrow.into(),
+        });
+    assert_eq!(popup.get_year(), 2082);
+    let year = element(&popup, "Year");
+    year.scroll(0.0, 1.0);
+    assert_eq!(popup.get_year(), 2083);
+    let year = element(&popup, "Year");
+    year.scroll(0.0, -1.0);
+    assert_eq!(popup.get_year(), 2082);
+}
+
+#[test]
 fn the_popup_is_created_on_first_open_not_at_startup() {
     crate::test_support::init_platform();
     let today = NepaliDate::new(2081, 1, 1).expect("date");

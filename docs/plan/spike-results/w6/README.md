@@ -25,8 +25,9 @@ file per render and keeps only the sheets and `diff.json`.
 
 The right side is the femtovg image preserved under `femtovg/`. There is one reference for each
 of the 55 sheets: the 33 images committed at W6-01, the 18 W2 combinations that were not
-committed before, and the four font-test images at 1x/2x in light and dark. W6-02 later replaced the W2/W3 PNGs
-with the software render; these references keep this check reproducible. Every sheet labels the
+committed before, and the four font-test images at 1x/2x in light and dark. W6-02 and W6-03
+later replaced the W2/W3 PNGs with the software render and the visible year buttons; these
+references keep this check reproducible. Every sheet labels the
 right side "femtovg (W6-01 reference)".
 
 The font-test window has no language flag. It holds both the Devanagari strings and the Latin
