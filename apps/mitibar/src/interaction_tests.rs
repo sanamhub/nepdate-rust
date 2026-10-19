@@ -707,7 +707,11 @@ fn overlays_take_and_return_focus() {
     press(&popup, slint::platform::Key::Escape);
     click(&popup, "Convert");
     assert!(popup.get_converter_visible());
-    assert_eq!(focused(&popup), "", "nothing in the reopened converter has focus yet");
+    assert_eq!(
+        focused(&popup),
+        "",
+        "nothing in the reopened converter has focus yet"
+    );
     press(&popup, slint::platform::Key::Tab);
     assert_eq!(focused(&popup), "converter close");
     assert!(popup.window().is_visible(), "overlays never hide the popup");
