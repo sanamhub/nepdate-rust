@@ -1,4 +1,4 @@
-//! ADR-0018: the default MitiBar build must not contain femtovg or an OpenGL crate.
+//! ADR-0018: the default `MitiBar` build must not contain `femtovg` or an `OpenGL` crate.
 //!
 //! `cargo xtask renderer-check` reads `cargo tree -p mitibar -e features` and fails on a
 //! renderer crate name. It is a CI step, so a later `slint` default feature cannot bring the
@@ -48,6 +48,8 @@ pub(crate) fn run() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used)]
+
     use super::*;
 
     #[test]
