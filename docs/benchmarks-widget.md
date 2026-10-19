@@ -250,7 +250,7 @@ machine:
 | Build | Bytes | MiB |
 |---|---|---|
 | femtovg default, before | 12,500,992 | 11.922 |
-| software only, after | 12,073,984 | 11.514 |
+| software only, after | 12,073,984 | 11.515 |
 | change | -427,008 | -0.407 |
 
 `cargo tree -p mitibar -e features` contains no line with `femtovg`, `glow`, `glutin` or
