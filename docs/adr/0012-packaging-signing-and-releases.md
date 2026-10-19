@@ -74,7 +74,7 @@ verification. The release flow follows the one proven in `sanamhub/ada-csharp`.
   its repository variable is set (`WINDOWS_SIGNING_ENABLED`, `MACOS_SIGNING_ENABLED`), and is
   skipped rather than faked otherwise. Until signed, the release notes say that SmartScreen /
   Gatekeeper warnings will appear.
-- The release is a **draft** until a second maintainer has installed each artifact (manual test
+- The release is a **draft** until the approver has installed each artifact (manual test
   runbook), because a desktop app can't be verified by a script alone.
 - Attached to every widget release: `SHA256SUMS`, a CycloneDX SBOM (`cargo cyclonedx`), and
   build-provenance attestations (`actions/attest`).

@@ -19,8 +19,8 @@ Every major decision is recorded as an ADR in `/docs/adr`.
 
 - Use lightweight MADR-style ADRs in `docs/adr/NNNN-kebab-title.md`.
 - Sections: Status, Date, Approved by, Context, Decision, Consequences, (Alternatives).
-- ADRs may be revised in place until the repository is published. From then on, ADRs are
-  **immutable** once accepted. To change a decision, write a new ADR that says
+- ADRs could be revised in place during planning, before the first code merged. From then
+  on, ADRs are **immutable** once accepted. To change a decision, write a new ADR that says
   `Supersedes ADR-NNNN` and set the old one's Status to `Superseded by ADR-MMMM` (the status
   line is the only edit allowed on an accepted ADR).
 - Read every accepted ADR before starting work.
