@@ -1,4 +1,4 @@
-# Devanagari rendering test strings (W0-03)
+# Devanagari rendering test strings
 
 Each line exercises a shaping feature. All must render correctly at 14 px and 24 px.
 

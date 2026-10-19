@@ -1,5 +1,5 @@
 //! Selects the palette side of the `Theme` global from `ui/theme.slint`, which holds the design
-//! tokens (docs/plan/widget-design.md §2). The token values and the light/dark switch live in
+//! tokens (docs/design/widget-design.md §2). The token values and the light/dark switch live in
 //! that `.slint` file; this module only passes the user's choice in.
 //!
 //! The system scheme is not detected here. With `ThemeChoice::System` the markup reads Slint's
@@ -26,7 +26,7 @@ mod tests {
     /// every table row is in the markup, so the two can't drift apart.
     #[test]
     fn tokens_match_design_table() {
-        let design = include_str!("../../../docs/plan/widget-design.md");
+        let design = include_str!("../../../docs/design/widget-design.md");
         let markup = include_str!("../ui/theme.slint");
 
         let unquote = |s: &str| {
@@ -69,7 +69,7 @@ mod tests {
     /// light, white at 6 % in dark, both over the surface).
     #[test]
     fn focus_ring_ink_has_at_least_3_to_1_contrast() {
-        let design = include_str!("../../../docs/plan/widget-design.md");
+        let design = include_str!("../../../docs/design/widget-design.md");
         let mut values = std::collections::HashMap::new();
         for line in design.lines() {
             let cells: Vec<&str> = line.split('|').map(str::trim).collect();

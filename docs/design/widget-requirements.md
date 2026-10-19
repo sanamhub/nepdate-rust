@@ -23,7 +23,7 @@ Glossary: **BS** = Bikram Sambat (Nepali) date. **AD** = Gregorian date.
   whose first item is "Open".
 - AC5: Menu items, in order: Open · Copy today (BS) · Copy today (AD) · Settings · Quit.
   "Copy" writes `YYYY/MM/DD` (BS) or `YYYY-MM-DD` (AD) to the clipboard, both in the active
-  language's digits (W5-04: the clipboard is exactly what the screen shows).
+  language's digits, so the clipboard matches the screen.
 - AC6: If no tray is available (e.g. GNOME without the extension), the app opens the
   popup on start and logs a warning. It must not exit.
 
@@ -52,7 +52,7 @@ Glossary: **BS** = Bikram Sambat (Nepali) date. **AD** = Gregorian date.
 - AC4: When patro data exists: tithi shown small under the day; a dot marks days with
   events. Outside `nepdate_patro::coverage()` nothing is shown and nothing errors.
 - AC5: Title: `Ashoj 2083 · Sep/Oct 2026` (ne: `असोज २०८३ · Sep/Oct २०२६`). AD month names
-  stay Latin; every number follows the language's digits (widget-design §4, W3 review).
+  stay Latin; every number follows the language's digits (widget-design §4).
 - AC6: Prev/next buttons, a "Today" button, month + year dropdowns (full range
   1901–2199) and mouse wheel over the grid (one notch = one month) all navigate. The year
   control also has visible previous-year and next-year buttons. At the range edges the
@@ -68,7 +68,7 @@ Glossary: **BS** = Bikram Sambat (Nepali) date. **AD** = Gregorian date.
 
 - AC1: Inline panel or overlay inside the popup (no new OS window): BS long date, AD
   long date, weekday, tithi, holiday badge, event list. All in the current language.
-- AC2: Buttons "Copy BS" / "Copy AD", both in the active language's digits (W5-04).
+- AC2: Buttons "Copy BS" / "Copy AD", both in the active language's digits.
 - AC3: Escape or clicking outside closes the detail first, then the popup.
 
 ## WR-05 Clock and time zone
@@ -140,7 +140,8 @@ Not in v0.1 (ADR-0008 §B). ID kept so later IDs don't change.
 
 ## WR-10 Non-functional
 
-- AC1: Targets of ADR-0008 §C (size, RAM, start time, idle CPU) are measured in W4.
+- AC1: Targets of ADR-0008 §C (size, RAM, start time, idle CPU) are measured by
+  `cargo xtask widget-idle`.
 - AC2: Accessibility: every interactive control has an accessible name. The popup is
   keyboard-operable: Tab/Shift+Tab move through controls and day cells, Enter opens day
   detail, PageUp/PageDown change month, Home jumps to today, Escape closes.
@@ -150,7 +151,7 @@ Not in v0.1 (ADR-0008 §B). ID kept so later IDs don't change.
 
 ## WR-11 Privacy
 
-- AC1: The app opens no network connections (verify in W4 with the OS firewall/`lsof`/
+- AC1: The app opens no network connections (verify with the OS firewall, `lsof` or
   Resource Monitor). No telemetry, no crash upload, no update check.
 - AC2: Logs contain no personal data (no user names, paths inside the home folder are
   shown as `~`).
@@ -166,7 +167,7 @@ Windows 11 only (ADR-0016). Elsewhere the tray icon (WR-01) is the only always-v
   as `Oct 15, 2026`. Example (en): `Thursday | 1:50 PM` / `Ashoj 29, 2083 | Oct 15, 2026`.
   With language = ne the weekday, the time digits and the BS date are Nepali
   (`बिहिवार | १:५० PM` / `असोज २९, २०८३ | Oct १५, २०२६`); the AD month name stays Latin and
-  its numbers use Devanagari digits (widget-design §4, W3 review). The
+  its numbers use Devanagari digits (widget-design §4). The
   weekday and BS date come from the same local date (WR-05 AC4), formatted by `nepdate`.
 - AC2: Text colour is the `ink` token for the **taskbar** theme (`SystemUsesLightTheme`), not
   the app theme, and changes within 1 s of a system light/dark switch, without restart.

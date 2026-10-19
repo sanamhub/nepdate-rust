@@ -24,7 +24,7 @@ with only the essentials ("no feature slop").
 
 ### A. How NepDateWidget is used
 
-1. The source of truth for the widget is `docs/plan/widget-requirements.md`, plus the
+1. The source of truth for the widget is `docs/design/widget-requirements.md`, plus the
    `nepdate` and `nepdate-patro` crates. Agents build what it says, and nothing more.
 2. Agents **may** read NepDateWidget (https://github.com/RajuPrasai/NepDateWidget) as a
    reference for behaviour, wording and Nepali translations. It is WPF/C#, so nothing is

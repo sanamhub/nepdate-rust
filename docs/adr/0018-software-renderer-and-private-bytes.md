@@ -42,7 +42,7 @@ What the numbers show:
 
    Condition: ADR-0010 chose femtovg partly for Devanagari shaping, and every committed snapshot
    so far was rendered with femtovg. W6-01 renders the strings in
-   `docs/plan/devanagari-test-strings.md` and every W2/W3 snapshot with the software renderer and
+   `docs/design/devanagari-test-strings.md` and every W2/W3 snapshot with the software renderer and
    compares them with the femtovg images. If any conjunct, reph or matra renders wrongly and the
    fix is not a font or feature setting, this decision is void, femtovg stays, and a new ADR
    amends the memory target instead. Nothing ships on the software renderer before that check.

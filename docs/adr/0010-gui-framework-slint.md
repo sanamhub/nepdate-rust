@@ -6,7 +6,7 @@
 
 ## Context
 
-Requirements (ADR-0008, `docs/plan/widget-requirements.md`): tray / menu-bar icon,
+Requirements (ADR-0008, `docs/design/widget-requirements.md`): tray / menu-bar icon,
 small borderless popup, month grid, **correct Devanagari rendering** (conjuncts क्ष ज्ञ
 श्र, reph र्क, matras), Windows + macOS + Linux (X11 and Wayland), small binary, low
 idle RAM, fast start, accessible, and learnable by a Rust beginner.
@@ -35,7 +35,7 @@ Research snapshot (2026-09-24, versions from crates.io):
 - Fonts: bundle **Noto Sans Devanagari** and **Noto Sans** (both OFL-1.1) via
   `import "fonts/...ttf"` in `.slint`. Do not rely on system fonts.
 - Phase W1 includes a **spike with an exit criterion** (task W1-01): render the test
-  strings in `docs/plan/devanagari-test-strings.md` on all 3 OSes, screenshot, and
+  strings in `docs/design/devanagari-test-strings.md` on all 3 OSes, screenshot, and
   compare. If Slint fails on any OS and Skia does not fix it, stop and escalate to the
   human; the runner-up is **Tauri 2** (new ADR required).
 

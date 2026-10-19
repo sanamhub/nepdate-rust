@@ -1,8 +1,8 @@
-# Widget design tokens (W0)
+# Widget design tokens
 
-Design decisions for `apps/mitibar`, made in W0 before the first `.slint` file and used
-by W1 to W4. Loaded via the `frontend-design` skill. Requirements: ADR-0008 and
-`docs/plan/widget-requirements.md`. Fonts: ADR-0010. License: ADR-0013.
+Design decisions for `apps/mitibar`, fixed before the first `.slint` file. Requirements:
+ADR-0008 and [`widget-requirements.md`](widget-requirements.md). Fonts: ADR-0010. License:
+ADR-0013.
 
 ## 1. Subject
 

@@ -38,7 +38,7 @@ const ICNS_SIZES: [(u32, &[u8; 4]); 7] = [
     (1024, b"ic10"),
 ];
 
-/// Ink per taskbar scheme: the `ink` token of docs/plan/widget-design.md for that scheme, so the
+/// Ink per taskbar scheme: the `ink` token of docs/design/widget-design.md for that scheme, so the
 /// digits contrast with a light or a dark taskbar the way the popup text contrasts with its
 /// surface.
 const SCHEMES: [(&str, &str); 2] = [("light", "#211C17"), ("dark", "#F1ECE4")];

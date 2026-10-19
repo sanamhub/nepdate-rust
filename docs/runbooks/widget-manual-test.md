@@ -52,7 +52,7 @@ rings were not run.
 ## Popup (WR-02)
 - [ ] AC1 Opens next to the tray, fully on-screen (test with the taskbar on each screen edge on Windows)
 - [ ] AC2 Hides on focus loss and on Escape; reopening keeps the viewed month, resets after a date change
-- [x] AC4 Light/dark/system themes; Devanagari renders per `docs/plan/devanagari-test-strings.md` (light+dark and en+ne popup snapshots in `docs/plan/spike-results/w1/`)
+- [x] AC4 Light/dark/system themes; Devanagari renders per `docs/design/devanagari-test-strings.md` (light+dark and en+ne popup snapshots in `docs/plan/spike-results/w1/`)
 - [ ] Text quality on the software renderer at 100 % and 200 % scale: no tofu, clipped or misplaced glyph; conjuncts क्ष ज्ञ श्र, reph र्क and every matra match the W6 sheets (Windows checked, macOS and Linux pending)
 
 ## Month grid (WR-03) / Day detail (WR-04)
