@@ -1,14 +1,14 @@
 # ADR-0007: Error handling and public API conventions
 
-- Status: Accepted
-- Date: 2026-09-24
-- Deciders: Sanam Pakuwal
+- **Status:** accepted
+- **Date:** 2026-09-24
+- **Approved by:** Sanam
 
 ## Context
 
 C# NepDate throws exceptions (`InvalidNepaliDateFormatException`, etc.) and offers
 `TryParse` twins. Rust has no exceptions; fallible operations return `Result`.
-Consistent conventions make the API predictable and easy for agents to extend.
+Consistent conventions make the API predictable and easy to extend.
 
 ## Decision
 
@@ -62,6 +62,5 @@ pub enum Error {
 
 ## Consequences
 
-- API feels native to Rust users; C# users get a mapping table (in `README` and
-  `docs/learn/`).
+- API feels native to Rust users; C# users get a mapping table in the README.
 - `#[non_exhaustive]` lets us add error variants without a breaking release.

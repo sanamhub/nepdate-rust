@@ -1,9 +1,9 @@
 # ADR-0005: `no_std`, zero-dependency core with opt-in Cargo features
 
-- Status: Accepted
-- Date: 2026-09-24 (revised 2026-10-07: the `meta` feature became the crate `nepdate-patro`,
+- **Status:** accepted
+- **Date:** 2026-09-24 (revised 2026-10-07: the `meta` feature became the crate `nepdate-patro`,
   hub ADR-0004)
-- Deciders: Sanam Pakuwal
+- **Approved by:** Sanam
 
 ## Context
 
@@ -32,7 +32,7 @@ Tithi, public holiday and patro data (BS 2077–2084) is **not** a feature of `n
 the separate crate `crates/nepdate-patro` (package `nepdate-patro`, lib `nepdate_patro`), as
 in every NepDate port (hub ADR-0004). It is `#![no_std]`, never allocates, has no features, and
 its only dependency is `nepdate` with `default-features = false`. The core never depends on it,
-and the compiled core contains no event string (CI checks for `World Day Against Human Trafficking`, task L5-06).
+and the compiled core contains no event string (CI checks for `World Day Against Human Trafficking`).
 
 Rules:
 

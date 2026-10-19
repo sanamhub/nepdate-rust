@@ -1,25 +1,25 @@
 # ADR-0015: Widget internal architecture
 
-- Status: Accepted
-- Date: 2026-09-24
-- Deciders: Sanam Pakuwal
+- **Status:** accepted
+- **Date:** 2026-09-24
+- **Approved by:** Sanam
 
 ## Context
 
-The org default is Clean Architecture (Domain → Application → Infrastructure →
+The project follows Clean Architecture (Domain → Application → Infrastructure →
 Presentation). The widget is small (target < 3k lines of Rust + `.slint`). Separate crates
 per layer would be ceremony. Layer boundaries still matter for testability, because the UI
 and the OS integration can't be unit-tested easily.
 
 ## Decision
 
-One binary crate, `apps/nepdate-widget`, with **modules as layers** and a strict
+One binary crate, `apps/mitibar`, with **modules as layers** and a strict
 dependency direction:
 
 ```
-apps/nepdate-widget/
+apps/mitibar/
 ├── build.rs              # slint_build::compile_with_config(.., with_bundled_translations("i18n"))
-├── i18n/ne/LC_MESSAGES/nepdate-widget.po   # Nepali translations of @tr() strings
+├── i18n/ne/LC_MESSAGES/mitibar.po   # Nepali translations of @tr() strings
 ├── ui/                   # PRESENTATION (Slint markup): app.slint, popup.slint, month-grid.slint,
 │   └── fonts/            #   day-detail.slint, converter.slint, settings.slint
 └── src/

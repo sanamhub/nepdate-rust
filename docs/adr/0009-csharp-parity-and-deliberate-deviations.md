@@ -1,8 +1,8 @@
 # ADR-0009: Parity with C# NepDate: Rust names for the shared deviations
 
-- Status: Accepted
-- Date: 2026-09-24 (revised 2026-09-25: the deviation list moved to the hub)
-- Deciders: Sanam Pakuwal
+- **Status:** accepted
+- **Date:** 2026-09-24 (revised 2026-09-25: the deviation list moved to the hub)
+- **Approved by:** Sanam
 
 ## Context
 

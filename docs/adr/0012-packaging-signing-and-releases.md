@@ -1,29 +1,29 @@
 # ADR-0012: Packaging, signing and releases
 
-- Status: Accepted
-- Date: 2026-09-24 (revised 2026-09-25: trusted publishing, preflight, notes from changelog;
+- **Status:** accepted
+- **Date:** 2026-09-24 (revised 2026-09-25: trusted publishing, preflight, notes from changelog;
   revised 2026-10-07: `nepdate-patro` released with `nepdate`, hub ADR-0004)
-- Deciders: Sanam Pakuwal
+- **Approved by:** Sanam
 
 ## Context
 
 Two release trains: the library crates `nepdate` and `nepdate-patro` (crates.io, released
-together, ADR-0002) and the `nepdate-widget` desktop app (Windows, macOS, Linux). Org policy: semver + changelog, green CI, approval-gated
-production release, rollback plan, post-release verification (SEA §9, §12). The release
-flow follows the one proven in `sanamhub/ada-csharp`.
+together, ADR-0002) and MitiBar (Windows, macOS, Linux). The rules are semver and a
+changelog, green CI, an approval-gated production release, a rollback plan and post-release
+verification. The release flow follows the one proven in `sanamhub/ada-csharp`.
 
 ## Decision
 
 ### Common to both packages
 
-- Tag with the package prefix (`nepdate-vX.Y.Z`, `widget-vX.Y.Z`). A tag containing `-`
+- Tag with the package prefix (`nepdate-vX.Y.Z`, `mitibar-vX.Y.Z` after ADR-0017). A tag containing `-`
   (`nepdate-v0.2.0-beta.1`) is a prerelease.
 - **Preflight job first**, seconds long: `cargo xtask release-check <package> <version>`
   fails unless the tag, the manifest version and a `## [X.Y.Z]` section in that package's
-  `CHANGELOG.md` all agree. For `nepdate` it checks both library crates (L6-04). A wrong tag
+  `CHANGELOG.md` all agree. For `nepdate` it checks both library crates. A wrong tag
   costs seconds, not a full build.
 - **Approval gate:** the publishing job runs in GitHub Environment `production` with a
-  required reviewer who is not the tagger (org §10).
+  required approver who is not the tagger.
 - **Release notes come from the changelog section** (`cargo xtask changelog <package>
   <version>`), plus an *Install* and a *Verification* block. Never `generate_release_notes`,
   which lists commits instead of what shipped.
@@ -43,7 +43,7 @@ flow follows the one proven in `sanamhub/ada-csharp`.
   No long-lived registry token exists anywhere.
 - crates.io allows trusted publishing only for a crate that already exists. So **0.1.0 of
   both crates is published once by hand** (runbook), after the dry run passes on the tag.
-  Then the human registers the trusted publisher (repository, `release-lib.yml`, environment
+  Then the maintainer registers the trusted publisher (repository, `release-lib.yml`, environment
   `production`) on each crate and deletes the token.
 - Before publishing: `cargo package -p nepdate -p nepdate-patro` builds each crate from its
   packaged files, which catches a file missing from `include`. From 0.1.1
@@ -74,14 +74,14 @@ flow follows the one proven in `sanamhub/ada-csharp`.
   its repository variable is set (`WINDOWS_SIGNING_ENABLED`, `MACOS_SIGNING_ENABLED`), and is
   skipped rather than faked otherwise. Until signed, the release notes say that SmartScreen /
   Gatekeeper warnings will appear.
-- The release is a **draft** until the approver has installed each artifact (manual test
+- The release is a **draft** until a second maintainer has installed each artifact (manual test
   runbook), because a desktop app can't be verified by a script alone.
 - Attached to every widget release: `SHA256SUMS`, a CycloneDX SBOM (`cargo cyclonedx`), and
   build-provenance attestations (`actions/attest`).
 - **No auto-update in v0.1** (ADR-0008 scope). Users download new versions from GitHub
   Releases.
 - Rollback = mark the GitHub Release as pre-release, re-mark the previous one as latest
-  (runbook `docs/runbooks/release-widget.md`).
+  (runbook `docs/runbooks/release-mitibar.md`).
 
 ## Consequences
 

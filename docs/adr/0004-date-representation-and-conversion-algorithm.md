@@ -1,14 +1,14 @@
 # ADR-0004: Date representation, tables and lookups (performance design)
 
-- Status: Accepted
-- Date: 2026-09-24 (rewritten 2026-10-08 before L0, as ADR-0001 allows: measured performance
+- **Status:** accepted
+- **Date:** 2026-09-24 (rewritten 2026-10-08 before publication, as ADR-0001 allows: measured performance
   design for BENCHMARK.md B1 to B8, patro layout, allocation-free formatting)
-- Deciders: Sanam Pakuwal
+- **Approved by:** Sanam
 
 ## Context
 
 `shared/spec/BENCHMARK.md` §6 sets the Rust target: faster than C# NepDate on B1, B2 and B7, with
-zero bytes allocated. The human raised it to every operation B1 to B8, in both crates. Speed has to
+zero bytes allocated. The maintainer raised it to every operation B1 to B8, in both crates. Speed has to
 come from data layout and data access, so this ADR records what was measured, not assumed.
 
 What C# NepDate does (read at commit `cb05cb65`):
@@ -34,15 +34,15 @@ Experiments ran on the reference machine (i5-12500H, Windows 11) with rustc 1.99
 (`x86_64-pc-windows-gnu`, `lto = "fat"`, `codegen-units = 1`) and .NET 8.0.31, using
 `std::time::Instant` and `std::hint::black_box` over the 64 dates of BENCHMARK §2, best of
 7 runs of 200,000 rounds. Other jobs were running on the machine, so treat the numbers as rough
-ratios, not as the published benchmark (that is task L6-02). "Quiet" is a run pinned to logical
+ratios, not as the published benchmark. "Quiet" is a run pinned to logical
 CPU 2 with little other load; "busy" is an unpinned run under load. The experiment code was
-throwaway and is not in this repository; L6-02 rebuilds the measurement properly.
+throwaway and is not in this repository; the published benchmark rebuilds the measurement.
 
 Every variant below agreed with every other on all 109,212 days, in both directions.
 
 | Op | Variant | Quiet ns | Busy ns |
 |---|---|---|---|
-| B1 BS to AD | V1: `PACKED_YEARS` + `YEAR_START`, month loop, Hinnant `civil_from_days` (the old plan) | 32.3 | 27.3 |
+| B1 BS to AD | V1: `PACKED_YEARS` + `YEAR_START`, month loop, Hinnant `civil_from_days` (the earlier design) | 32.3 | 27.3 |
 | B1 | V2: one-load month table `MONTH_INFO`, Hinnant (signed `i32` division) | 24.0 | 19.2 |
 | B1 | V2 with Neri-Schneider `civil_from_days` | 7.2 | 13.8 |
 | B1 | V3: C#'s method (AD date of month end, then day arithmetic) | 32.6 | 47.3 |
@@ -62,7 +62,7 @@ Every variant below agreed with every other on all 109,212 days, in both directi
 | B5 | **same pieces, `write_str` on a concrete `W: fmt::Write` (generic, no `dyn`)** | not run | **29.7** |
 | B5 | `str::from_utf8` alone, 60 bytes of Devanagari | not run | 100.9 |
 | B6 strict parse | byte scanner over `s.as_bytes()` | 22.8 | 31.1 |
-| B7 patro info | sorted serials + `binary_search` (the old plan) | 28.2 | 41.9 |
+| B7 patro info | sorted serials + `binary_search` (the earlier design) | 28.2 | 41.9 |
 | B7 | **per-day tables (tithi byte, holiday bitset, event offsets)** | **8.1** | **12.1** |
 | B7 | one packed `u32` record per day | 6.1 | 8.6 |
 | B7 | per-day tables + one string blob with offsets | 12.1 | 16.5 |
@@ -73,12 +73,12 @@ Every variant below agreed with every other on all 109,212 days, in both directi
 Same harness shape in C# (`Action<int>` per call, unpinned, busy, NepDate source at `cb05cb65`
 compiled for .NET 8): B1 38.4 ns, B2 34.3 ns, B3 35.9 ns, B4 32.5 ns, B5 480 ns and 435 B,
 B6 79.2 ns, B7 133.6 ns and 51 B, B8 7334 ns and 1429 B. The published C# column comes from the
-hub (task H6) with BenchmarkDotNet; these numbers only show that the chosen design has a wide
+hub benchmark with BenchmarkDotNet; these numbers only show that the chosen design has a wide
 margin.
 
 The hub has since published that column (hub file `docs/benchmarks/dotnet.md`,
 .NET 10, BenchmarkDotNet, pinned to logical CPU 2, rerun 2026-10-09 with no other jobs). The Rust targets
-below are what L6-02 must show on the reference machine with `criterion`. Each is at least 1.6 times
+below are what the published benchmark must show on the reference machine with `criterion`. Each is at least 1.6 times
 faster than C# except B6 (1.08 times), and none is looser than the Go port's pinned prototype on the same machine
 (`sanamhub/nepdate-go` ADR-0002 §8: B1 6.8, B2 5.6, B3 4.6, B4 4.2, B5 30.6, B6 17.8, B7 6.7, B8 226 ns),
 since Rust and C++ are meant to be the fastest ports:
@@ -94,9 +94,9 @@ since Rust and C++ are meant to be the fastest ports:
 | B7 | patro info of a day | 8.1 | ≤ 10 | 0 | 47.93 | 51 |
 | B8 | month grid with patro | 209 | ≤ 250 | 0 | 3133 | 1429 |
 
-B6 is the one target below the quiet measurement (Go's byte parser does 17.8 ns). If L6-02 measures it above 20 ns, the fix order is: one
+B6 is the one target below the quiet measurement (Go's byte parser does 17.8 ns). If the published benchmark measures it above 20 ns, the fix order is: one
 pass over the bytes with no second validation step, then a fixed-width fast path for
-`YYYY/MM/DD`; report to the human before anything else.
+`YYYY/MM/DD`; report it before anything else.
 
 For comparison, the C++ port's prototype (`sanamhub/nepdate-cpp`, `docs/adr/0002-representation-and-performance.md`
 §8, zig/Clang, same machine and pinning) measured B1 at 4.6 to 4.8 ns with Neri–Schneider and B3 at
@@ -167,7 +167,7 @@ Total 44.3 KB. A test binary grew by 43,008 bytes when the last three were added
 C#'s two conversion tables are about 187 KB (47 % of its 397 KB DLL).
 
 The `const fn` builders use only `while` loops and reads of `const` items (never of a `static`),
-so they rely on no recent const-evaluation feature; the MSRV job (L0-05) proves it. Each builder that needs AD dates calls ALGORITHM §5 (Hinnant, in `i64`) at compile
+so they rely on no recent const-evaluation feature; the MSRV job proves it. Each builder that needs AD dates calls ALGORITHM §5 (Hinnant, in `i64`) at compile
 time. A `const _: () = assert!(...)` checks `MONTH_INFO[3588] >> 2 == 109_212` and
 `days_from_civil(1844, 4, 11) == -45_920` in every build.
 
@@ -190,7 +190,7 @@ the data ever changes so that the estimate is off by two, the unit test fails an
 second correction step, not a different design.
 
 The results are those of ALGORITHM §4 to §6 exactly; only the storage differs. The exhaustive test
-(L2-06) compares the table path with a direct transcription of ALGORITHM §4 and §5 for every
+The exhaustive test compares the table path with a direct transcription of ALGORITHM §4 and §5 for every
 serial.
 
 ### 5. Formatting and parsing never allocate, and never go through `dyn` per piece
@@ -237,7 +237,7 @@ returned as `&'static str`, never copied.
   On the busy machine the chosen variants measured 2.5 to 4.6 times faster than C# on B1 to B4
   and B6, 16 times on B5 (with `write_to`) and 11 times on B7.
 - Nothing allocates in either crate. Every B-operation gets a zero-allocation test with a counting
-  global allocator (L6-02, ADR-0014).
+  global allocator (ADR-0014).
 - The core's read-only data is about 45 KB, against about 187 KB of tables in C#. The patro's is
   about 40 KB of tables plus about 59 KB of UTF-8 names.
 - The ALGORITHM spec stays the reference for results. A port that has no compile-time evaluation
@@ -245,7 +245,7 @@ returned as `&'static str`, never copied.
 
 ## Alternatives considered
 
-- **Old plan (V1):** `PACKED_YEARS` + `YEAR_START`, loops over months, binary search over years,
+- **Earlier design (V1):** `PACKED_YEARS` + `YEAR_START`, loops over months, binary search over years,
   Hinnant at run time. 2.4 KB of tables, but 4 to 5 times slower on B1 to B3. Rejected.
 - **Neri-Schneider arithmetic instead of the two AD tables:** 28 KB smaller, 1 to 3 ns slower on
   B1 and B2. Kept as the fallback if binary size ever matters more than these nanoseconds.
@@ -257,12 +257,12 @@ returned as `&'static str`, never copied.
   carry, and the C++ port, which rejected the same table, measured about 5 ns without it. Rejected.
   (Dense per-day tables are used where they pay: the patro, §6, at 2,793 days.)
 - **`include_bytes!` of a packed blob:** zero start-up cost too, but every read needs
-  `u32::from_le_bytes` on a slice with bounds checks, and the blob is opaque in review. Rejected.
+  `u32::from_le_bytes` on a slice with bounds checks, and the blob is opaque to a reader. Rejected.
 - **Storing the serial (4 bytes) or serial plus fields (8 bytes):** B3 saves one load; getters and
   formatting pay a decomposition, `Debug` is unreadable, and 8 bytes loses the single-register
   return. Rejected.
-- **Patro with sorted serials and binary search** (the earlier plan and PATRO §3's suggestion):
+- **Patro with sorted serials and binary search** (an earlier design and PATRO §3's suggestion):
   3.5 times slower on B7 and 6 times on B8. Rejected. **One packed `u32` per day:** about 2 ns
-  faster on B7, but larger (11.2 KB against 8.7 KB) and harder to review. Rejected.
+  faster on B7, but larger (11.2 KB against 8.7 KB) and harder to read. Rejected.
 - **An existing crate:** none matches NepDate's range and data, C# parity, or `no_std` without
   dependencies (`docs/competitors.md`). Rejected.

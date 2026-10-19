@@ -1,9 +1,9 @@
 # ADR-0016: Windows taskbar text
 
-- Status: Accepted
-- Date: 2026-10-15
-- Deciders: Sanam Pakuwal
-- Amends: ADR-0008 §B (removes "taskbar-embedding hacks" from the out-of-scope list, for
+- **Status:** accepted
+- **Date:** 2026-10-15
+- **Approved by:** Sanam
+- **Amends:** ADR-0008 §B (removes "taskbar-embedding hacks" from the out-of-scope list, for
   Windows 11 only), ADR-0015 (dependency list, unsafe code in one module)
 
 ## Context
@@ -17,7 +17,7 @@ Ashoj 29, 2083 | Oct 15, 2026
 ```
 
 The tray icon (WR-01) shows only a 16 px day number on Windows, because a notification-area
-icon can't show text. The owner wants the taskbar text in v0.1, while keeping the rest of the
+icon can't show text. The maintainer wants the taskbar text in v0.1, while keeping the rest of the
 widget minimal. Requirement: WR-12.
 
 Constraints:
@@ -25,7 +25,7 @@ Constraints:
 - Windows gives no API for third-party content in the taskbar. Every tool that does it either
   parents a window into the taskbar (`Shell_TrayWnd`) or floats a top-most window over it.
 - Devanagari must shape correctly (conjuncts, reph, pre-base matra), with the bundled Noto
-  fonts, as in the W0 spike.
+  fonts, as in the font test.
 - The workspace denies `unsafe_code`; Win32 calls are `unsafe`.
 - Idle cost must stay at about 0 % CPU (WR-05 AC5, WR-10).
 
@@ -61,7 +61,7 @@ which is the native equivalent. Linux has no equivalent.
 Design:
 
 1. **Two windows, one thread.** A hidden top-level *controller* window (never shown, class
-   `nepdate-taskbar-controller`) receives the broadcasts a child cannot: `TaskbarCreated`
+   `mitibar-taskbar-controller`) receives the broadcasts a child cannot: `TaskbarCreated`
    (Explorer restarted; registered with `RegisterWindowMessageW`), `WM_SETTINGCHANGE`
    (`ImmersiveColorSet` for theme, `TraySettings` for alignment), `WM_DISPLAYCHANGE` and
    `WM_DPICHANGED`. It owns the *text* window: `WS_CHILD | WS_CLIPSIBLINGS` with
@@ -90,9 +90,9 @@ Design:
 5. **Colour.** The taskbar follows the *system* theme (`SystemUsesLightTheme`), which can
    differ from the app theme (`AppsUseLightTheme`). The value is read with `RegGetValueW`,
    never by spawning a process, and re-read on `WM_SETTINGCHANGE` "ImmersiveColorSet". Text
-   colour is the `ink` token of `widget-design.md` for that scheme; a test keeps the Rust
+   colour is the `ink` token of `docs/design/widget-design.md` for that scheme; a test keeps the Rust
    constants equal to the table.
-6. **Repaint only on change.** The W1 timer (one per minute, or per second with seconds shown)
+6. **Repaint only on change.** The once-a-minute timer (or once a second with seconds shown)
    passes new lines in; the text window redraws only when the lines, the colour, the DPI or the
    placement changed.
 7. **Input.** Left click toggles the popup, opened above the text and left-aligned with it.
@@ -112,18 +112,19 @@ the widget keeps the workspace `deny`.
 - `windows` 0.62 (already in `Cargo.lock` through winit), Windows-only target dependency, only
   the `Win32_*` features the module uses.
 - `windows-registry` 0.6 (same windows-rs family, safe API), Windows-only, for reading
-  `SystemUsesLightTheme` without `unsafe`; W1 uses it for the tray icon ink before W1B lands.
+  `SystemUsesLightTheme` without `unsafe`; the tray icon uses it for its ink.
 - `embed-manifest` (build dependency) for the application manifest: Windows 8 to 11
   `supportedOS`, per-monitor-v2 DPI awareness, UTF-8 active code page.
 - `image` (PNG only) moves behind a cargo feature `snapshot`, off by default. ADR-0015 says
-  the shipped binary has no image crate; the W0 `--snapshot` flag is a test tool, so CI and
+  the shipped binary has no image crate; the `--snapshot` flag is a test tool, so CI and
   developers enable the feature and release builds don't carry it.
 
 ## Consequences
 
 - The best-liked NepDateWidget feature is in v0.1 on Windows 11, without z-order fights or
   flicker.
-- About 600 lines of `unsafe` Win32 and COM code, kept in one module, reviewed line by line.
+- About 600 lines of `unsafe` Win32 and COM code, kept in one module with a safety comment on
+  every block.
   Everything decidable without a desktop (line text, placement, theme value, colours) is pure
   and unit-tested in `app/` and `platform/windows/` tests.
 - Depends on undocumented parts of the Windows 11 taskbar: the class name `Shell_TrayWnd` and
