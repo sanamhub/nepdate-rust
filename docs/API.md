@@ -1,10 +1,9 @@
-# `nepdate` and `nepdate-patro`: public API contract (v0.1)
+# `nepdate` and `nepdate-patro`: public API (0.1)
 
-This is the complete public surface of both crates for v0.1. Implement exactly this: nothing
-more, nothing renamed. Adding public items needs a spec update in the same PR, approved by the
-human. Semantics refer to `shared/spec/ALGORITHM.md`, `FORMATTING.md`, `PARSING.md` and
-`PATRO.md` (same folder). Conventions: ADR-0007. Features: ADR-0005 / ADR-0011. Why the patro
-is a separate crate: ADR-0005 and hub ADR-0004.
+This is the complete public surface of both crates for 0.1. A new public item needs a spec
+change, an ADR, and a line in this file. Semantics refer to `shared/spec/ALGORITHM.md`,
+`FORMATTING.md`, `PARSING.md` and `PATRO.md` (same folder). Conventions: ADR-0007. Features:
+ADR-0005 and ADR-0011. Why the patro is a separate crate: ADR-0005 and hub ADR-0004.
 
 ## Crate `nepdate` (`crates/nepdate`)
 
@@ -232,16 +231,15 @@ The crate reaches the serial day through the public core API only:
 `NepaliDate::MIN.checked_add_days(serial)` turns a generated serial back into a date. No
 `pub` serial API is added to the core for it.
 
-Changes on 2026-10-08 (ADR-0004 rewrite), so reviewers of older notes are not surprised:
-`NepaliDate` stores `month: Month` (niche, 4-byte `Option`); `short`, `long`, `format_pattern`,
-`Lang::digits` and `FiscalYear::label` return the named formatter types with `write_to` instead
-of `impl Display`, and became `const fn` (they only copy their arguments);
+Design notes: `NepaliDate` stores `month: Month` (niche, 4-byte `Option`); `short`, `long`,
+`format_pattern`, `Lang::digits` and `FiscalYear::label` return the named formatter types with
+`write_to` instead of `impl Display`, and are `const fn` (they only copy their arguments);
 `CalendarInfo::events` returns the named iterator `Events`.
 
 Thread safety: every public type of both crates is `Send + Sync` because it is plain data and the
 tables are immutable statics. Tests assert it (ADR-0014).
 
-Notes for implementers:
+Implementation rules:
 
 - Formatter values write `&'static str` pieces only. Never build bytes and call
   `str::from_utf8` (about 100 ns for a Nepali date, ADR-0004), never `unsafe`.

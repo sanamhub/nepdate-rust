@@ -6,4 +6,4 @@
    don't blanket-`allow` them.
 4. MSRV (`rust-version`) changes only with a CHANGELOG entry, and for the library only in a
    minor release (≥ 0.x+1).
-5. PR titled `chore: bump toolchain to 1.NN`. It needs normal review.
+5. PR titled `chore: bump toolchain to 1.NN`. It needs normal approval.
