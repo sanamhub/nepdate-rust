@@ -300,5 +300,3 @@ below the 500 ms target. Run 2 is also LOADED by its before sample.
 
 No process, `mitibar` Run value or real `%APPDATA%\mitibar\settings.toml` was left. The temporary
 settings file was removed.
-
-
