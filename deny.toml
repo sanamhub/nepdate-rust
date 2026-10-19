@@ -33,12 +33,12 @@ allow = [
     "BSD-2-Clause",
     "BSD-3-Clause",
     "ISC",
-    "0BSD",     # recvmsg and doctest-file, via interprocess ()
+    "0BSD",     # recvmsg and doctest-file, via interprocess
     "Zlib",
     "OFL-1.1",   # bundled Noto fonts (ADR-0010)
     "Unlicense", # clipboard-win, via arboard (clipboard)
     "BSL-1.0",   # error-code and ksni, via arboard/muda
-    "MPL-2.0",   # option-ext, via dirs ( logging)
+    "MPL-2.0",   # option-ext, via dirs (logging)
 ]
 confidence-threshold = 0.9
 unused-allowed-license = "allow" # the list covers optional dependencies
