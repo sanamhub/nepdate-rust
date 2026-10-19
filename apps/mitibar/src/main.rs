@@ -1338,7 +1338,15 @@ fn write_taskbar_snapshot(
 ) -> anyhow::Result<()> {
     use crate::platform::taskbar::{render_taskbar_text, taskbar_ink};
 
-    let rendered = render_taskbar_text(lines, scale, taskbar_ink(dark))?;
+    // The renderer caches its DirectWrite and Direct2D objects per thread. Render on a worker,
+    // as the controller does, so that cache is released when the worker ends; on the main thread
+    // it would be released during process exit, after DirectWrite has shut down.
+    let rendered = std::thread::scope(|scope| {
+        scope
+            .spawn(|| render_taskbar_text(lines, scale, taskbar_ink(dark)))
+            .join()
+    })
+    .map_err(|_| anyhow::anyhow!("the taskbar render thread panicked"))??;
     let strip = (48.0 * scale).round() as u32;
     let inset = (12.0 * scale).round() as u32;
     let width = rendered.width + inset * 2;

@@ -44,7 +44,8 @@ fn rotate_if_needed(dir: &Path) {
     }
 }
 
-/// Logs the panic message and location before the process exits (WR-09 AC5).
+/// Logs the panic message and location before the process exits (WR-09 AC5), and prints them to
+/// stderr too, so a debug or CI run shows why it stopped. A release build has no console.
 fn install_panic_hook() {
     std::panic::set_hook(Box::new(|info| {
         let location = info.location().map(ToString::to_string).unwrap_or_default();
@@ -56,5 +57,6 @@ fn install_panic_hook() {
             "non-string panic payload"
         };
         log::error!("panic at {location}: {payload}");
+        eprintln!("mitibar panicked at {location}: {payload}");
     }));
 }

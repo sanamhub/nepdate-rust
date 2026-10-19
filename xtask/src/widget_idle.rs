@@ -14,23 +14,34 @@
 // value above 4 PB or 142 years would round; that is far outside a five-minute process sample.
 #![allow(clippy::cast_precision_loss)]
 
+#[cfg(windows)]
 use std::path::{Path, PathBuf};
+#[cfg(windows)]
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 
+#[cfg(windows)]
 use crate::codegen::workspace_root;
 
 const DEFAULT_MINUTES: u32 = 5;
+#[cfg(windows)]
 const WARMUP: Duration = Duration::from_secs(15);
+#[cfg(windows)]
 const SAMPLE: Duration = Duration::from_secs(5);
+
+// The targets and verdict rules are pure, so the tests run them on every OS; only Windows
+// measures.
 /// ADR-0018 (redefining the ADR-0008 §C idle memory row): private bytes at most 40 MB. The
 /// harness uses 40 MiB, the unit used by ADR-0018. The working set is recorded, not judged.
+#[cfg(any(windows, test))]
 const PRIVATE_TARGET_BYTES: u64 = 40 * 1024 * 1024;
 /// ADR-0008 §C says "about 0 %". Half a percent of one core is the harness's testable edge.
+#[cfg(any(windows, test))]
 const CPU_TARGET_PERCENT: f64 = 0.5;
 
 /// One verdict cell in the table.
+#[cfg(any(windows, test))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Verdict {
     Pass,
@@ -38,6 +49,7 @@ pub(crate) enum Verdict {
     Loaded,
 }
 
+#[cfg(windows)]
 impl Verdict {
     fn label(self) -> &'static str {
         match self {
@@ -63,6 +75,7 @@ fn parse_minutes(value: Option<&str>) -> Result<u32> {
 }
 
 /// The load rule: the mean before the row or any sample during it is 15.0 % or more.
+#[cfg(any(windows, test))]
 pub(crate) fn is_loaded(before_mean: f64, during: &[f64]) -> bool {
     before_mean >= 15.0 || during.iter().any(|sample| *sample >= 15.0)
 }
@@ -70,6 +83,7 @@ pub(crate) fn is_loaded(before_mean: f64, during: &[f64]) -> bool {
 /// ADR-0018 idle memory target, applied to private bytes (the process's own commit). The working
 /// set also counts shared pages (GPU driver, DWM, fonts) the process does not own, so it is
 /// reported without a verdict.
+#[cfg(any(windows, test))]
 pub(crate) fn memory_verdict(private_bytes: u64, loaded: bool) -> Verdict {
     if loaded {
         Verdict::Loaded
@@ -81,6 +95,7 @@ pub(crate) fn memory_verdict(private_bytes: u64, loaded: bool) -> Verdict {
 }
 
 /// ADR-0008 §C idle CPU target ("about 0 %"), tested at most half a percent of one core.
+#[cfg(any(windows, test))]
 pub(crate) fn cpu_verdict(percent_of_one_core: f64, loaded: bool) -> Verdict {
     if loaded {
         Verdict::Loaded
