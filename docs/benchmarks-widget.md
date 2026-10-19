@@ -4,14 +4,16 @@ Measured on one Windows x64 machine on 2026-10-19: Acer Nitro AN515-58, Intel Co
 32 GB RAM, Windows 11 Home 10.0.26300. Build: `cargo build -p mitibar --profile release-widget`
 (`opt-level = "s"`, fat LTO, `panic = "abort"`, stripped). The app used Slint's software
 renderer, with the popup closed, the Windows 11 taskbar text on, English, a 12-hour clock and
-seconds hidden. Settings came from a temporary file with `launch_at_login = false`.
+seconds hidden. Settings came from a temporary file with `launch_at_login = false`. The idle and
+cold-start rows predate keyboard navigation, which does not run while the popup is closed; the
+binary size is from the current build.
 
 ## Method
 
 `cargo xtask widget-idle --minutes 5` builds the app, starts it with that temporary settings file,
 waits 15 s, then samples private bytes, working set, process CPU time, thread count and total CPU
-load every 5 s for five minutes. It writes the raw row, stops the process, removes the settings file, and checks that no
-`mitibar` login item or real settings file was touched.
+load every 5 s for five minutes. It writes the raw row, stops the process, removes the settings file,
+and checks that no `mitibar` login item or real settings file was touched.
 
 A row is `LOADED` when the mean total CPU load before the run, or any sample during it, is 15 % or
 more. The measured process's own CPU is subtracted from the load. A LOADED row is reported and gets
@@ -49,7 +51,7 @@ The idle row is LOADED: mean load before was 47.9 %, during was 31.2 % (6.5 to 9
 | 5 | 74.0 ms | 108.3 ms | 7.9 % | 27.8 % | 19.4 % |
 
 Every startup sample is above 15 %, so every row is LOADED. The raw durations are below 500 ms,
-but they are not a verdict. The poll saw the log line 30 to 40 ms after the process wrote it.
+but they are not a verdict. The poll saw the log line 29 to 79 ms after the process wrote it.
 
 ## What this means
 
