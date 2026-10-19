@@ -687,4 +687,33 @@ jobs: {}
         check_pinned_actions(&value).expect("the comment is not a `uses`");
         assert!(check_jobs(root).is_err(), "the fixture has no real jobs");
     }
+
+    /// `renderer-check` (ADR-0018) must cover every target the release builds, with the universal
+    /// macOS build as its two halves.
+    #[test]
+    fn renderer_check_covers_every_release_target() {
+        let value = parse(&workflow_text()).expect("parse");
+        let jobs = map_field(map(&value).expect("mapping"), "jobs").expect("jobs");
+        let matrix = map_field(
+            map_field(job(jobs, "build").expect("build"), "strategy").expect("strategy"),
+            "matrix",
+        )
+        .expect("matrix");
+        let mut targets: Vec<&str> = Vec::new();
+        for item in seq_field(matrix, "include").expect("include") {
+            let target = field(map(item).expect("row"), "target")
+                .expect("target")
+                .as_str()
+                .expect("text");
+            if target == "universal-apple-darwin" {
+                targets.extend(["x86_64-apple-darwin", "aarch64-apple-darwin"]);
+            } else {
+                targets.push(target);
+            }
+        }
+        targets.sort_unstable();
+        let mut checked = crate::renderer::TARGETS.to_vec();
+        checked.sort_unstable();
+        assert_eq!(targets, checked);
+    }
 }
