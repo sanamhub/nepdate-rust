@@ -1,8 +1,7 @@
 # Port plan: phases and acceptance criteria every port meets
 
-Language-neutral. Each port's `docs/plan/00-ROADMAP.md` maps these phases to its own task IDs
-(`G`, `T`, `P`, `S`, `K`, `L` for Rust) and adds only what is language-specific. Names below are
-neutral; each port uses the names in its own `docs/API.md`.
+Language-neutral. A new port works through these phases in order and adds only what is
+language-specific. Names below are neutral; each port uses the names in its own `docs/API.md`.
 
 ## Phase 0: repository and CI
 
@@ -16,7 +15,7 @@ neutral; each port uses the names in its own `docs/API.md`.
 
 ## C# test catalogue (every phase from 1 to 4)
 
-`vectors/csharp-tests/catalog.tsv` (hub task H5) lists every test case of C# NepDate's own test
+`vectors/csharp-tests/catalog.tsv` lists every test case of C# NepDate's own test
 suite (395 `[Fact]` and 29 `[Theory]` methods with 147 `[InlineData]` rows at `cb05cb65`), each
 tagged with the phase that covers it, `n/a` (C#-only API such as `TypeConverter` or XML) or a
 PARITY deviation. AC for each phase: every catalogue row tagged with that phase has a test in the
@@ -28,8 +27,8 @@ The phase is the file's main subject, so a few rows need an API from a later pha
 of `NepaliDateConstructionTests`, `NepaliDatePropertiesTests` and `OptimizationVerificationTests`
 build dates from strings (phase 3 parsing) or read `Today` (phase 4). Write those tests in phase 1
 anyway: a row that expects a date or a validation error builds it with the constructor and a marker
-naming the later task; a row that needs the missing API is skipped with that marker (for example
-`#[ignore = "L4-03: needs FromStr"]`, `t.Skip("pending G3-04")`). The later phase removes the
+naming the later phase; a row that needs the missing API is skipped with that marker (for example
+`#[ignore = "phase 3: needs FromStr"]`, `t.Skip("phase 3: needs Parse")`). The later phase removes the
 marker. The phase's AC counts these rows as covered; the later phase's AC includes removing every
 marker that names it.
 
@@ -86,6 +85,6 @@ marker that names it.
 - Benchmarks per `BENCHMARK.md`: operations B1–B8 on the 64 dates, on the reference machine, against
   the port's `docs/competitors.md` and the C# NepDate baseline, with bytes allocated per operation
   and an "agrees with `shared/data`" column, published in `docs/benchmarks.md`.
-- AC: every BENCHMARK §6 target met, or the miss reported to the human with the numbers.
+- AC: every BENCHMARK §6 target met, or the miss reported to the maintainer with the numbers.
 - Release workflow with preflight (version, tag and changelog agree), approval gate, notes from the
-  changelog; version 0.1.0 prepared by the agent, tagged by the human.
+  changelog; the maintainer tags version 0.1.0.
