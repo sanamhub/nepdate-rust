@@ -404,6 +404,14 @@ fn the_visible_year_buttons_step_and_stop_at_the_edges() {
     prev.invoke_accessible_default_action();
     assert_eq!(popup.get_year(), 2081);
 
+    // A pointer click steps exactly one year (the TouchArea path, not only the accessible
+    // action).
+    next.mock_single_click(slint::platform::PointerEventButton::Left);
+    assert_eq!(popup.get_year(), 2082, "one click is one year");
+    let prev = element(&popup, "Previous year");
+    prev.mock_single_click(slint::platform::PointerEventButton::Left);
+    assert_eq!(popup.get_year(), 2081, "one click is one year");
+
     // W6-03 AC2: the buttons carry the Devanagari year text and translated labels.
     state.borrow_mut().settings.language = "ne".to_owned();
     let _ = slint::select_bundled_translation("ne");
