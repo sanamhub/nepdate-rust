@@ -102,7 +102,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: "1.98"
-      - uses: Swatinem/rust-cache@63fed3e2fecf6f7b51dc6f043341b79ef82a9ae7 # v2.9.2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       # cargo-packager is not in taiki-e/install-action's manifest list, so it builds once here.
       # The version is the ADR-0012 one; a newer release is a decision, not a float.
       - name: Install cargo-packager
