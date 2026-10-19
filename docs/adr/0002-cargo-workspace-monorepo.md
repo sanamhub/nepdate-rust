@@ -1,9 +1,9 @@
 # ADR-0002: One Rust repository and Cargo workspace for library and widget
 
-- Status: Accepted
-- Date: 2026-09-24 (revised 2026-09-25: Rust only; shared data and spec vendored from the hub;
+- **Status:** accepted
+- **Date:** 2026-09-24 (revised 2026-09-25: Rust only; shared data and spec vendored from the hub;
   revised 2026-10-07: patro crate `nepdate-patro`, hub ADR-0004)
-- Deciders: Sanam Pakuwal
+- **Approved by:** Sanam
 
 ## Context
 
@@ -12,7 +12,7 @@ We are building three Rust deliverables:
 1. `nepdate`, a library port of the C# NepDate library (Bikram Sambat calendar).
 2. `nepdate-patro`, a library with tithi, public holidays and events, built on `nepdate`
    (hub ADR-0004).
-3. `nepdate-widget`, a minimal cross-platform desktop widget using both libraries.
+3. MitiBar, a minimal cross-platform desktop widget using both libraries.
 
 Other languages get their own repositories; what they share lives in the hub
 `sanamhub/nepdate` (hub ADR-0001).
@@ -30,10 +30,10 @@ nepdate-rust/
 │   ├── nepdate/            # the core library (no_std), own CHANGELOG.md          ADR-0005
 │   └── nepdate-patro/     # tithi, holidays, events; depends on nepdate          ADR-0005
 ├── apps/
-│   └── nepdate-widget/     # the desktop app, own CHANGELOG.md                    ADR-0008
+│   └── mitibar/            # the desktop app, own CHANGELOG.md                    ADR-0008
 ├── xtask/                  # dev automation: codegen, checks, release helpers     ADR-0006
 ├── benches/nepdate-bench/  # criterion + competitor crates, publish = false        ADR-0014
-└── docs/                   # API.md, adr/, plan/, learn/, runbooks/, legal/
+└── docs/                   # API.md, adr/, design/, runbooks/, legal/
 ```
 
 - Workspace-level `[workspace.package]` (edition, license, rust-version) and
@@ -44,12 +44,12 @@ nepdate-rust/
     same version X.Y.Z (hub ADR-0004 §3). `nepdate-patro` depends on
     `nepdate = { path = "../nepdate", version = "~X.Y.0", default-features = false }`, so the
     pair always comes from the same minor. A change to only one of them still bumps both.
-  - `widget-vX.Y.Z` releases the widget, versioned on its own.
+  - `mitibar-vX.Y.Z` releases the app, versioned on its own (ADR-0017).
 
 ## Consequences
 
 - One CI pipeline. One PR can change library and app together.
-- The widget always builds against the in-tree libraries (`path` dependencies), so
+- MitiBar always builds against the in-tree libraries (`path` dependencies), so
   library API breaks are caught immediately.
 - When publishing to crates.io, `nepdate` must not depend on anything outside `crates/nepdate`
   at build time, and `nepdate-patro` on nothing outside `crates/nepdate-patro` except the
@@ -59,6 +59,6 @@ nepdate-rust/
 
 ## Alternatives considered
 
-- Separate repos for lib and widget: more ceremony, cross-repo version bumps for every
-  change while the API is still moving. Rejected.
-- Library-only workspace with widget elsewhere: same problem.
+- Separate repositories for the libraries and the app: more ceremony, cross-repo version
+  bumps for every change while the API is still moving. Rejected.
+- Library-only workspace with the app elsewhere: same problem.

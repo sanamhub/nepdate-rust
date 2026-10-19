@@ -55,6 +55,6 @@ Everything not listed here must match the golden vectors.
 ## 3. Updating
 
 - A new deviation needs a new row here, agreed in a PR to this repository, and applies to
-  every port. Agents must not add rows on their own.
-- Regenerating vectors against a newer NepDate NuGet version is a human decision
+  every port. A port never adds a row on its own.
+- Regenerating vectors against a newer NepDate NuGet version is a maintainer decision
   (`tools/README.md`).

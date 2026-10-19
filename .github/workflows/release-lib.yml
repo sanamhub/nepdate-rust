@@ -1,7 +1,7 @@
-# L6-05: one tag `nepdate-vX.Y.Z` releases `nepdate` then `nepdate-patro` (ADR-0012, ADR-0002).
+# One tag `nepdate-vX.Y.Z` releases `nepdate` then `nepdate-patro` (ADR-0012, ADR-0002).
 # preflight -> ci -> publish -> verify-published. Published by crates.io trusted publishing, so
 # no long-lived registry token exists. The `production` environment gates `publish` behind a
-# human reviewer. See docs/runbooks/release-library.md.
+# maintainer approval. See docs/runbooks/release-library.md.
 
 name: release-lib
 

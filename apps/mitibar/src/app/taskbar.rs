@@ -1,8 +1,7 @@
 //! Pure model for the Windows taskbar text (WR-12, ADR-0016). No Win32, no Slint: the line text
 //! and the placement maths are unit-tested here, and `src/platform/windows/` only feeds them
 //! rectangles and pixels.
-// W1B-01 is pure and unit-tested; W1B-02 and W1B-03 wire these items into the binary. Remove this
-// allow once they are wired.
+// Only the Windows module consumes these items, so they look dead on other platforms.
 #![allow(dead_code)]
 
 use nepdate::{LongDate, NepaliDate};

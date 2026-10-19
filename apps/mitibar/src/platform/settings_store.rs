@@ -1,7 +1,7 @@
-//! TOML load and save, atomic write, `dirs` paths (WR-06, W3-03). A missing file is written with
+//! TOML load and save, atomic write, `dirs` paths (WR-06). A missing file is written with
 //! the defaults; a file that does not parse is renamed to `settings.toml.broken-<unix-ts>` and
 //! the defaults are used (WR-06 AC2). Writes go to a temp file in the same folder and are then
-//! renamed over the target (WR-06 AC3, learn/11 §2).
+//! renamed over the target (WR-06 AC3).
 
 use std::fs;
 use std::io::Write;

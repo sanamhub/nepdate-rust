@@ -1,5 +1,5 @@
-//! Settings struct, defaults and validation, no file IO (WR-06). W1 holds the plain struct and
-//! the WR-06 defaults; W3 adds serde, file IO and validation.
+//! Settings struct, defaults and validation, no file IO (WR-06). Serde and the settings file
+//! live in the platform layer.
 
 use nepdate::Lang;
 use serde::{Deserialize, Serialize};

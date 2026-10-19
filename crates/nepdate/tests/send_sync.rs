@@ -1,5 +1,5 @@
 //! Every public type is `Send + Sync`, and conversion gives the same answers on many threads
-//! (L2-09, extended in L3-06 and L4-07; ADR-0014).
+//! (ADR-0014).
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use nepdate::{

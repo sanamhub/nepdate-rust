@@ -1,4 +1,4 @@
-# L6-06: weekly sync of `shared/` with the hub (ADR-0003). Runs the hub's reusable workflow,
+# Weekly sync of `shared/` with the hub (ADR-0003). Runs the hub's reusable workflow,
 # pinned to a full hub commit SHA. The reusable workflow reads `vars.SYNC_APP_ID` and
 # `secrets.SYNC_APP_PRIVATE_KEY` from this repository and opens one PR on `bot/shared-sync`.
 

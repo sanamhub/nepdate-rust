@@ -1,8 +1,8 @@
 # ADR-0008: Widget scope (minimal) and use of NepDateWidget
 
-- Status: Accepted
-- Date: 2026-09-24 (revised 2026-09-25: permission from the NepDateWidget author, see A)
-- Deciders: Sanam Pakuwal
+- **Status:** accepted
+- **Date:** 2026-09-24 (revised 2026-09-25: permission from the NepDateWidget author, see A)
+- **Approved by:** Sanam
 
 ## Context
 
@@ -24,13 +24,13 @@ with only the essentials ("no feature slop").
 
 ### A. How NepDateWidget is used
 
-1. The source of truth for the widget is `docs/plan/widget-requirements.md`, plus the
-   `nepdate` and `nepdate-patro` crates. Agents build what it says, and nothing more.
-2. Agents **may** read NepDateWidget (https://github.com/RajuPrasai/NepDateWidget) as a
+1. The source of truth for the widget is `docs/design/widget-requirements.md`, plus the
+   `nepdate` and `nepdate-patro` crates. Contributors build what it says, and nothing more.
+2. Contributors **may** read NepDateWidget (https://github.com/RajuPrasai/NepDateWidget) as a
    reference for behaviour, wording and Nepali translations. It is WPF/C#, so nothing is
    ported line by line. Its extra features stay out of scope (B).
 3. UI strings live in the `.slint` files as `@tr("English text")`,
-   with the Nepali translation in `apps/nepdate-widget/i18n/ne/LC_MESSAGES/nepdate-widget.po`,
+   with the Nepali translation in `apps/mitibar/i18n/ne/LC_MESSAGES/mitibar.po`,
    bundled at build time (Slint bundled translations, since 1.9). The language switches at runtime with
    `slint::select_bundled_translation("ne")`. This needs no extra crate, and `@tr` bindings
    update live. A unit test fails if any `msgstr` in the `.po` file is empty. Rust code
@@ -70,7 +70,7 @@ notes, reminders, notifications, documents, launcher/hotkeys, theme presets, fon
 picker, backup/restore, fiscal-year footer, auto-update, taskbar-embedding hacks,
 custom holiday editing.
 
-### C. Non-functional targets (verified in plan phase W4)
+### C. Non-functional targets
 
 | Metric | Target |
 |---|---|
@@ -84,5 +84,5 @@ custom holiday editing.
 - The widget is a small cross-platform sibling of NepDateWidget, not a full port.
 - Tray-first design is new relative to the original (which had no tray icon) and
   works on all three OSes, unlike taskbar overlay tricks.
-- Keeping the scope list here means agents can reject feature requests that are
+- Keeping the scope list here means contributors can reject feature requests that are
   not in it.

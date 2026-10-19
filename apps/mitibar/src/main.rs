@@ -1,5 +1,5 @@
-//! Composition root: wires platform + app + ui, starts the event loop (ADR-0015). W1 adds the
-//! tray, the popup and the once-per-minute timer.
+//! Composition root: wires the platform, app and UI layers and starts the event loop
+//! (ADR-0015).
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 // Slint's `include_modules!` generated component code has pub items without docs, and uses
@@ -48,38 +48,35 @@ struct AppState {
     /// The month the grid shows (WR-03 AC6).
     viewed_month: (u16, Month),
     /// The local BS date when the popup last hid; a different date on reopen resets the month
-    /// (WR-02 AC2, W2-06).
+    /// (WR-02 AC2).
     hidden_on: NepaliDate,
     /// The open day detail, if any (WR-04); cleared on hide and navigation.
     detail: Option<month_view::DayDetail>,
-    /// The fixed local date for a snapshot (`--today`) or a test; `None` in the normal app
-    /// (W2 review, W3-00a).
+    /// The fixed local date for a snapshot (`--today`) or a test; `None` in the normal app.
     today_override: Option<NepaliDate>,
-    /// The clipboard port (W3-00a). Tests inject a fake so they never touch the real clipboard.
+    /// The clipboard port. Tests inject a fake so they never touch the real clipboard.
     clipboard: Rc<dyn Clipboard>,
-    /// Every IANA zone, for the settings filter (W3-04).
+    /// Every IANA zone, for the settings filter.
     zones: Vec<String>,
-    /// The live tray and taskbar text, so a settings change can reach them (W3-04).
+    /// The live tray and taskbar text, so a settings change can reach them.
     tray: Option<Rc<SlintTray>>,
     taskbar: Option<Rc<dyn TaskbarText>>,
-    /// Where the settings panel saves (W3-04): the per-user file in the app, a temporary file in
+    /// Where the settings panel saves: the per-user file in the app, a temporary file in
     /// a test, `None` in a snapshot run or without a config directory.
     settings_path: Option<PathBuf>,
-    /// The popup once it exists (W5-03). It is created on the first open, not at startup, so the
+    /// The popup once it exists. It is created on the first open, not at startup, so the
     /// window and its renderer are not created while the popup has never been shown.
     popup: Weak<PopupWindow>,
-    /// The one settings debounce timer (W3-04), created once and shared by the popup.
+    /// The one settings debounce timer, created once and shared by the popup.
     save_timer: Rc<slint::Timer>,
-    /// The `--theme` flag, applied when the popup is created (W5 review: the lazy popup must
-    /// still honour it, as the eager popup did).
+    /// The `--theme` flag, applied when the popup is created. A lazy popup must still honour it.
     theme_override: Option<ThemeChoice>,
 }
 
 /// The strong popup handle. `AppState` keeps only a `Weak`, so the popup's own callbacks (which
 /// capture `AppState`) do not keep the popup alive through the state. The tray and taskbar
 /// closures do hold this slot and the state, and `AppState` holds the tray, so a reference cycle
-/// exists; it lives exactly as long as the process, which never drops these objects before exit
-/// (W5 review).
+/// exists; it lives exactly as long as the process, which never drops these objects before exit.
 type PopupSlot = Rc<RefCell<Option<PopupWindow>>>;
 
 impl AppState {
@@ -118,7 +115,7 @@ thread_local! {
     static OPEN_REQUEST: RefCell<Option<Rc<dyn Fn()>>> = const { RefCell::new(None) };
 }
 
-/// Installs the second-launch handler on the UI thread (W5-02).
+/// Installs the second-launch handler on the UI thread.
 pub(crate) fn install_open_request(slot: &PopupSlot, state: &Rc<RefCell<AppState>>) {
     let slot = slot.clone();
     let state = state.clone();
@@ -146,7 +143,7 @@ fn wake_ui() {
     }
 }
 
-/// W5-02's idle-wake counter, present only in a `snapshot` build.
+/// The idle-wake counter, present only in a `snapshot` build.
 #[cfg(feature = "snapshot")]
 static IDLE_WAKES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
@@ -163,7 +160,7 @@ fn idle_wakes() -> u64 {
     IDLE_WAKES.load(std::sync::atomic::Ordering::Relaxed)
 }
 
-/// Creates the popup the first time it is needed (W5-03). Until then `PopupWindow::new` has not
+/// Creates the popup the first time it is needed. Until then `PopupWindow::new` has not
 /// run, so no window or renderer exists for a popup nobody has seen.
 fn ensure_popup(slot: &PopupSlot, state: &Rc<RefCell<AppState>>) -> Option<PopupWindow> {
     if let Some(popup) = slot.borrow().as_ref() {
@@ -230,22 +227,22 @@ struct Cli {
     popup: bool,
     #[cfg(feature = "snapshot")]
     snapshot: Option<PathBuf>,
-    /// A fixed BS date for the popup snapshot; never accepted by the normal app (W2 review).
+    /// A fixed BS date for the popup snapshot; never accepted by the normal app.
     #[cfg(feature = "snapshot")]
     today: Option<NepaliDate>,
-    /// A BS date whose day-detail card the snapshot opens (W2 review).
+    /// A BS date whose day-detail card the snapshot opens.
     #[cfg(feature = "snapshot")]
     detail: Option<NepaliDate>,
-    /// Opens the converter overlay in a snapshot (W3-02).
+    /// Opens the converter overlay in a snapshot.
     #[cfg(feature = "snapshot")]
     converter: bool,
-    /// Opens the settings panel in a snapshot (W3-04).
+    /// Opens the settings panel in a snapshot.
     #[cfg(feature = "snapshot")]
     settings_panel: bool,
     /// Focuses Next year for a focus-ring snapshot.
     #[cfg(feature = "snapshot")]
     focus_year_next: bool,
-    /// W5-02: run for this many seconds, then write the UI-wake count and quit. A test tool,
+    /// Run for this many seconds, then write the UI-wake count and quit. A test tool,
     /// available only with the `snapshot` feature.
     #[cfg(feature = "snapshot")]
     wake_probe: Option<u64>,
@@ -255,7 +252,7 @@ struct Cli {
     theme: Option<ThemeChoice>,
     lang: Option<Lang>,
     no_taskbar_text: bool,
-    /// W5-01: use this settings file instead of the per-user one, and do not touch the login item
+    /// Use this settings file instead of the per-user one, and do not touch the login item
     /// or the single-instance socket. It is how the idle harness starts a measured process.
     settings_file: Option<PathBuf>,
     #[cfg(all(windows, feature = "snapshot"))]
@@ -435,10 +432,10 @@ impl Cli {
         Ok(cli)
     }
 
-    /// Whether this run is a review/snapshot tool, which must not touch the user's login item or
+    /// Whether this run is a snapshot tool, which must not touch the user's login item or
     /// settings file.
     fn is_snapshot_tool(&self) -> bool {
-        // W5-01: a settings-file run is isolated like a snapshot tool: no login item, no socket,
+        // A settings-file run is isolated like a snapshot tool: no login item, no socket,
         // and no read or write of the real settings file unless the flag points at it.
         if self.settings_file.is_some() {
             return true;
@@ -456,9 +453,9 @@ impl Cli {
 }
 
 /// The settings for this run: the per-user file, or the defaults for a snapshot tool so a
-/// review image neither reads nor writes `settings.toml`.
+/// snapshot image neither reads nor writes `settings.toml`.
 fn load_settings(cli: &Cli) -> (Settings, Vec<String>) {
-    // W5-01: the idle harness points at its own file, so the real `%APPDATA%\mitibar` is never
+    // The idle harness points at its own file, so the real `%APPDATA%\mitibar` is never
     // read or written. A missing file is created there, which is also what the harness expects.
     if let Some(path) = &cli.settings_file {
         return platform::settings_store::load(path);
@@ -479,15 +476,15 @@ fn load_settings(cli: &Cli) -> (Settings, Vec<String>) {
 // timers. Splitting it would scatter the startup order.
 #[allow(clippy::too_many_lines)]
 fn main() -> anyhow::Result<()> {
-    // W4-05: the start of the process, so the "tray ready" line measures cold start.
+    // The start of the process, so the "tray ready" line measures cold start.
     let startup = std::time::Instant::now();
     // Best-effort: the app still runs if the file logger can't start; the panic hook is
-    // installed regardless (W1-06).
+    // installed regardless.
     let _ = platform::logging::init();
 
     let cli = Cli::parse(std::env::args().skip(1))?;
 
-    // W0 Devanagari spike window (unchanged).
+    // The debug font-test window.
     if cli.font_test {
         let ui = FontTestWindow::new()?;
         theme::apply(&ui, cli.theme.unwrap_or(ThemeChoice::System));
@@ -500,7 +497,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     // WR-09 AC1: a second launch signals this one and exits 0 before touching settings, the
-    // login item or the UI. A snapshot run never claims the socket, so a review image can be
+    // login item or the UI. A snapshot run never claims the socket, so a snapshot image can be
     // rendered while the app is open.
     // If the socket can't be created at all, the app still starts, without the guard.
     let mut primary = None;
@@ -525,7 +522,7 @@ fn main() -> anyhow::Result<()> {
             Lang::En => String::from("en"),
         };
     }
-    // The `--no-taskbar-text` flag turns WR-12 off for this run (W3 builds the settings UI).
+    // The `--no-taskbar-text` flag turns WR-12 off for this run.
     if cli.no_taskbar_text {
         settings.taskbar_text = false;
     }
@@ -535,7 +532,7 @@ fn main() -> anyhow::Result<()> {
     }
     let lang = settings.lang();
 
-    // Taskbar snapshot (W1B-04 test tool): render the text and composite it over a taskbar
+    // Taskbar snapshot: render the text and composite it over a taskbar
     // strip, exactly as the controller sends it to `UpdateLayeredWindow`.
     #[cfg(all(windows, feature = "snapshot"))]
     if let Some(path) = cli.taskbar_snapshot.clone() {
@@ -547,7 +544,7 @@ fn main() -> anyhow::Result<()> {
         return write_taskbar_snapshot(&lines, cli.taskbar_scale.unwrap_or(1.0), dark, &path);
     }
 
-    // Keep the popup out of the Windows taskbar (W1-04). The hook runs before winit creates the
+    // Keep the popup out of the Windows taskbar. The hook runs before winit creates the
     // window, so it has to be selected before any window is constructed.
     #[cfg(windows)]
     {
@@ -578,7 +575,7 @@ fn main() -> anyhow::Result<()> {
     } else if !cli.is_snapshot_tool() {
         state.borrow_mut().settings_path = platform::settings_store::default_path();
     }
-    // W5-03: the popup is created on the first open, not here. The slot holds the one strong
+    // The popup is created on the first open, not here. The slot holds the one strong
     // handle; `AppState` keeps only a weak one, so the component's callbacks cannot form a cycle.
     let slot: PopupSlot = Rc::new(RefCell::new(None));
 
@@ -599,7 +596,7 @@ fn main() -> anyhow::Result<()> {
         return snapshot_popup(&cli, &state, &popup, lang);
     }
 
-    // Tray (W1-03): WR-01 events delivered back here.
+    // Tray: WR-01 events delivered back here.
     let tray = Rc::new(SlintTray::new(lang, {
         let state = state.clone();
         let slot = slot.clone();
@@ -613,7 +610,7 @@ fn main() -> anyhow::Result<()> {
         slint::select_bundled_translation("ne")?;
     }
 
-    // Taskbar text (W1B-03): WR-12 on Windows 11, a no-op elsewhere. Its events run the same
+    // Taskbar text: WR-12 on Windows 11, a no-op elsewhere. Its events run the same
     // actions as the tray menu; its scheme callback keeps the tray icon ink in step.
     let taskbar: Rc<dyn TaskbarText> = Rc::from(platform::taskbar::create(
         {
@@ -626,7 +623,7 @@ fn main() -> anyhow::Result<()> {
             move |dark| tray.set_dark_taskbar(dark)
         },
     ));
-    // The labels come from the tray component, which exists before the popup (W5-03).
+    // The labels come from the tray component, which exists before the popup.
     taskbar.set_menu_labels(&tray.menu_labels());
     taskbar.set_enabled(state.borrow().settings.taskbar_text);
     // First taskbar lines, then the timer updates them each tick (WR-12 AC1).
@@ -636,18 +633,18 @@ fn main() -> anyhow::Result<()> {
         taskbar.set_lines(&taskbar_lines(&now, &s.settings));
     }
 
-    // W3-04: the settings panel needs the live tray and taskbar for language and taskbar-text
+    // The settings panel needs the live tray and taskbar for language and taskbar-text
     // changes. The debounce timer lives in `AppState`, so a lazily created popup shares it.
     state.borrow_mut().tray = Some(tray.clone());
     state.borrow_mut().taskbar = Some(taskbar.clone());
 
-    // First paint of the tray, then the once-per-minute (or per-second) timer (W1-05).
+    // First paint of the tray, then the once-per-minute (or per-second) timer.
     update_tray(&state, &tray);
-    // W4-05: the benchmark in docs/benchmarks-widget.md reads this line for cold start.
+    // The benchmark in docs/benchmarks-widget.md reads this line for cold start.
     log::info!("tray ready in {:?}", startup.elapsed());
 
     // WR-09 AC1: the listener thread wakes the event loop with `invoke_from_event_loop`; the UI
-    // thread then runs the same open path as before. No polling timer remains (W5-02).
+    // thread then runs the same open path as before. No polling timer remains.
     if let Some(listener) = primary {
         install_open_request(&slot, &state);
         platform::single_instance::start(listener, wake_ui);
@@ -655,7 +652,7 @@ fn main() -> anyhow::Result<()> {
 
     arm_timer(state.clone(), tray, taskbar);
 
-    // W5-02: count UI wakes in a headless window, write the count and quit. Snapshot tool only.
+    // Count UI wakes in a headless window, write the count and quit. Snapshot tool only.
     #[cfg(feature = "snapshot")]
     if let Some(seconds) = cli.wake_probe {
         let out = cli
@@ -680,7 +677,7 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Renders one popup snapshot. `--today` and `--detail` are snapshot-only (W2 review); the normal
+/// Renders one popup snapshot. `--today` and `--detail` are snapshot-only; the normal
 /// path never reaches this function, and the parser rejects both without `--popup`.
 #[cfg(feature = "snapshot")]
 fn snapshot_popup(
@@ -723,7 +720,7 @@ fn snapshot_popup(
     snapshot(popup, &path)
 }
 
-/// Handles a WR-01 tray event. `Settings` opens no panel in W1 (W3 builds it).
+/// Handles a WR-01 tray event.
 fn handle_tray_event(event: TrayEvent, state: &Rc<RefCell<AppState>>, slot: &PopupSlot) {
     match event {
         TrayEvent::Open => {
@@ -786,7 +783,7 @@ fn copy_bs(state: &Rc<RefCell<AppState>>) {
 }
 
 /// Writes today's AD date as `YYYY-MM-DD` to the clipboard, in the language's digits like Copy
-/// BS, so the clipboard is exactly what the header shows (WR-01 AC5, W5-04).
+/// BS, so the clipboard is exactly what the header shows (WR-01 AC5).
 fn copy_ad(state: &Rc<RefCell<AppState>>) {
     let state = state.borrow();
     let text = app::format::ad_short(today_of(&state).to_gregorian(), state.settings.lang());
@@ -830,7 +827,7 @@ fn today_local() -> NepaliDate {
 }
 
 /// The local time the popup renders. A snapshot can pin the date with `--today` and the clock to
-/// noon, so re-rendering the same image does not change it (W2 review).
+/// noon, so re-rendering the same image does not change it.
 fn popup_now(s: &AppState) -> jiff::Zoned {
     let now = jiff::Zoned::now();
     let Some(today) = s.today_override else {
@@ -843,7 +840,7 @@ fn popup_now(s: &AppState) -> jiff::Zoned {
 }
 
 /// Records that the popup hid on today's BS date, so a reopen on a later date resets the month
-/// (WR-02 AC2, W2-06). Only the focus-loss path sets `popup_hidden_at`, which guards the reopen.
+/// (WR-02 AC2). Only the focus-loss path sets `popup_hidden_at`, which guards the reopen.
 fn record_hidden(state: &Rc<RefCell<AppState>>) {
     let today = today_local();
     let mut state = state.borrow_mut();
@@ -852,7 +849,7 @@ fn record_hidden(state: &Rc<RefCell<AppState>>) {
 }
 
 /// Prepares the popup for a show: keep the viewed month while the date is unchanged, otherwise
-/// jump to today's month (WR-02 AC2, W2-06), and start with the detail closed.
+/// jump to today's month (WR-02 AC2), and start with the detail closed.
 fn prepare_show(state: &Rc<RefCell<AppState>>) {
     let today = today_local();
     let mut state = state.borrow_mut();
@@ -877,7 +874,7 @@ fn change_month(state: &Rc<RefCell<AppState>>, delta: i32) {
     set_month(state, year, month);
 }
 
-/// Wires the popup's hide notification (WR-02 AC2) and month navigation (W2-02). Kept out of
+/// Wires the popup's hide notification (WR-02 AC2) and month navigation. Kept out of
 /// `main` so the composition root stays readable.
 fn wire_popup(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>) {
     popup.on_hidden({
@@ -895,7 +892,7 @@ fn wire_popup(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, popup_weak: &W
         }
     });
 
-    // W2-03: a day opens the inline detail; Escape or the scrim clears it. The copy buttons use
+    // A day opens the inline detail; Escape or the scrim clears it. The copy buttons use
     // the same clipboard path as the tray.
     popup.on_day_clicked({
         let state = state.clone();
@@ -968,7 +965,7 @@ fn wire_popup(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, popup_weak: &W
     });
 }
 
-/// W3-02: the converter overlay. Opening it closes the day detail, and the Days tab starts with
+/// The converter overlay. Opening it closes the day detail, and the Days tab starts with
 /// today on both sides.
 fn wire_converter(
     popup: &PopupWindow,
@@ -1019,7 +1016,7 @@ fn wire_converter(
     });
 }
 
-/// W3-04: the settings panel. Each change is applied at once and saved 300 ms later. One
+/// The settings panel. Each change is applied at once and saved 300 ms later. One
 /// callback per key keeps the mapping visible.
 #[allow(clippy::too_many_lines)]
 fn wire_settings(
@@ -1143,7 +1140,7 @@ fn refresh_settings(popup: &PopupWindow, state: &Rc<RefCell<AppState>>) {
     ui_bridge::set_settings(popup, &s.settings, &zones);
 }
 
-/// Saves `settings.toml` 300 ms after the last change (W3-04).
+/// Saves `settings.toml` 300 ms after the last change.
 fn schedule_save(timer: &Rc<slint::Timer>, state: &Rc<RefCell<AppState>>) {
     let state = state.clone();
     timer.start(
@@ -1183,7 +1180,7 @@ fn open_settings(state: &Rc<RefCell<AppState>>, slot: &PopupSlot) {
     popup.invoke_focus();
 }
 
-/// Opens the detail for a grid cell, if it is a real day (W2-03).
+/// Opens the detail for a grid cell, if it is a real day.
 fn open_detail(state: &Rc<RefCell<AppState>>, index: i32) {
     let (year, month, lang) = {
         let state = state.borrow();
@@ -1232,8 +1229,8 @@ fn update_tray(state: &Rc<RefCell<AppState>>, tray: &Rc<SlintTray>) {
         bs.month().short_name(lang)
     ));
     tray.set_icon_day(&bs.day().to_string());
-    // Re-read each tick, so a light/dark switch reaches the icon within a minute; W1B reacts to
-    // WM_SETTINGCHANGE at once. Elsewhere the markup follows Slint's palette.
+    // Re-read each tick, so a light/dark switch reaches the icon within a minute; the Windows
+    // taskbar reacts to WM_SETTINGCHANGE at once. Elsewhere the markup follows Slint's palette.
     if let Some(dark) = platform::taskbar_scheme::taskbar_is_dark() {
         tray.set_dark_taskbar(dark);
     }
@@ -1251,7 +1248,7 @@ fn update_tray(state: &Rc<RefCell<AppState>>, tray: &Rc<SlintTray>) {
     ));
 }
 
-/// One tick of the W1 timer: tray, popup, taskbar text, then re-arms (WR-05 AC5/AC6).
+/// One tick of the timer: tray, popup, taskbar text, then re-arms (WR-05 AC5/AC6).
 fn update_tick(state: &Rc<RefCell<AppState>>, tray: &Rc<SlintTray>, taskbar: &Rc<dyn TaskbarText>) {
     note_wake();
     update_tray(state, tray);
@@ -1273,7 +1270,7 @@ fn arm_timer(state: Rc<RefCell<AppState>>, tray: Rc<SlintTray>, taskbar: Rc<dyn 
     });
 }
 
-/// Renders a window and writes it as a PNG (W0 tool, reused for the popup). Uses Slint's
+/// Renders a window and writes it as a PNG (test tool, reused for the popup). Uses Slint's
 /// `Window::take_snapshot` and the `image` crate; the window is sized on the first event-loop
 /// turn, so the snapshot runs from a timer once `Window::size()` is non-zero.
 #[cfg(feature = "snapshot")]
@@ -1328,7 +1325,7 @@ fn snapshot<C: ComponentHandle + 'static>(ui: &C, path: &std::path::Path) -> any
 
 /// Renders the taskbar text at `scale` and composites it over a taskbar-coloured strip
 /// (`#F3F3F3` light, `#202020` dark, 48 px scaled high), exactly as the controller sends the text
-/// to `UpdateLayeredWindow` (W1B-04).
+/// to `UpdateLayeredWindow`.
 // The strip height and inset are 12 or 48 times a scale of at most a few, so the f32-to-u32 cast
 // only drops the fractional rounding.
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]

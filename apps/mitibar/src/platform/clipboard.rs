@@ -1,6 +1,6 @@
 //! Clipboard access for the tray menu and the day detail (WR-01 AC5, WR-04 AC2). The trait is
 //! the port the interaction tests inject a fake through; the shipped app uses the system
-//! clipboard (arboard, W3-00a).
+//! clipboard (arboard).
 
 /// Writes plain text to a clipboard. The app never reads back.
 pub trait Clipboard {

@@ -4,8 +4,8 @@
 //! release target and fails on a renderer crate name. Without `--target`, `cargo tree` shows only
 //! the host's target-specific dependencies, so a GPU crate pulled in on Linux or macOS alone
 //! would pass on a Windows machine. It is a CI step, so a later `slint` default feature cannot
-//! bring the GPU renderer back without a red build. The negative control adds `renderer-femtovg` to the
-//! app manifest, runs this command and expects the femtovg line to fail the check.
+//! bring the GPU renderer back without a red build. Adding `renderer-femtovg` to the
+//! app manifest makes this command fail on the femtovg line.
 
 use std::process::Command;
 

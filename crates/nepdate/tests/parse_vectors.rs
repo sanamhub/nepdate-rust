@@ -1,4 +1,4 @@
-//! Every row of `shared/spec/vectors/parse.tsv`, both parsers (L4-05, PARSING).
+//! Every row of `shared/spec/vectors/parse.tsv`, both parsers (PARSING).
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -49,5 +49,5 @@ fn every_row_both_columns() {
         assert_eq!(lenient, expected(cols[2]), "lenient {input:?}");
         count += 1;
     }
-    assert_eq!(count, 67);
+    assert_eq!(count, 69);
 }

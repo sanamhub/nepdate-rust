@@ -141,7 +141,7 @@ fn subscribe(
 }
 
 /// Keeps the automation object and removes the handler when dropped, so a restart does not stack
-/// handlers (W1B-05 item 3).
+/// handlers.
 struct Subscription {
     automation: IUIAutomation,
     start: IUIAutomationElement,

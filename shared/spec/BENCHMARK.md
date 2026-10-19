@@ -71,7 +71,7 @@ versions, the exact command, and one table:
 | ID | This port ns/op | bytes/op | Competitor A ns/op | agrees | ... | C# NepDate ns/op (from the hub) |
 |---|---|---|---|---|---|---|
 
-The C# column is the **.NET 10** column of the hub's `docs/benchmarks/dotnet.md` (task H6), measured
+The C# column is the **.NET 10** column of the hub's `docs/benchmarks/dotnet.md`, measured
 on the same machine with BenchmarkDotNet and the NepDate version pinned in `tools/dotnet-bench`.
 Research on why C# NepDate is fast and where it allocates: `docs/research/dotnet-internals.md`.
 
@@ -84,5 +84,5 @@ Research on why C# NepDate is fast and where it allocates: `docs/research/dotnet
 | TypeScript | within 3× of C# NepDate |
 | Python | the fastest pure-Python option among its competitors |
 
-A port that misses its target reports the numbers to the human before release; it doesn't drop
+A port that misses its target reports the numbers to the maintainer before release; it doesn't drop
 features to get there.

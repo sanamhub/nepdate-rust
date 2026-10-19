@@ -1,4 +1,4 @@
-//! `cargo xtask check-core-has-no-patro` (L5-06): the core crate neither names `nepdate-patro`
+//! `cargo xtask check-core-has-no-patro`: the core crate neither names `nepdate-patro`
 //! nor carries patro data (ADR-0005, hub ADR-0004). One event name stands for all of it.
 
 use std::fs;

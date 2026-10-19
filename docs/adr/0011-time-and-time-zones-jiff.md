@@ -1,9 +1,9 @@
 # ADR-0011: Time and time zones: `jiff` in the widget, nothing in the core
 
-- Status: Accepted
-- Date: 2026-09-24 (revised 2026-10-10: `today()` uses `Asia/Kathmandu` and `today_in` takes a
-  zone, to match the hub PORT-PLAN phase 4 and `docs/API.md`; it used the local zone before)
-- Deciders: Sanam Pakuwal
+- **Status:** accepted
+- **Date:** 2026-09-24 (revised 2026-10-10: `today()` uses `Asia/Kathmandu` and `today_in` takes a
+  zone, to match the hub PORT-PLAN and `docs/API.md`; it used the local zone before)
+- **Approved by:** Sanam
 
 ## Context
 
@@ -25,7 +25,7 @@ clunkier API), `time` 0.3 (no IANA db, so not enough).
 2. **Library `std` feature, `NepaliDate::today()`**: needs a zone. `std` has no
    time-zone API, so the library does **not** implement zone lookup itself.
    Decision: "today" is provided **only with the `jiff` feature**, following the hub
-   PORT-PLAN phase 4 ("today" with an explicit zone defaulting to `Asia/Kathmandu`) and
+   PORT-PLAN ("today" with an explicit zone defaulting to `Asia/Kathmandu`) and
    PARITY D-14:
    - `NepaliDate::today_in(&jiff::tz::TimeZone) -> Result<Self, Error>`: the date in that zone.
    - `NepaliDate::today() -> Result<Self, Error>`: `today_in` with `Asia/Kathmandu`, or a

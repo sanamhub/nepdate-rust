@@ -1,5 +1,5 @@
 //! Counts every allocation made by each B-operation of `shared/spec/BENCHMARK.md`, 10,000 rounds
-//! over the 64 inputs per operation (L6-02 AC2). The gate is the `no_alloc` tests; this binary
+//! over the 64 inputs per operation. The gate is the `no_alloc` tests; this binary
 //! only fills the `docs/benchmarks.md` table.
 //!
 //! A global allocator can only be written with `unsafe`; the libraries themselves forbid it.

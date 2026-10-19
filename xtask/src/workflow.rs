@@ -1,6 +1,5 @@
-//! Static check of `.github/workflows/release-mitibar.yml` (W4-04). The workflow cannot run
-//! until the repository has a remote, so this test parses the YAML and checks the structure the
-//! plan requires: triggers, pinned actions, least privilege, signing gates, checksums, SBOM and
+//! Static check of `.github/workflows/release-mitibar.yml`. The workflow needs GitHub Actions,
+//! so this test parses the YAML and checks the structure it requires: triggers, pinned actions, least privilege, signing gates, checksums, SBOM and
 //! a draft release. Comments are ignored by the parser, not by string matching.
 
 use std::path::Path;
@@ -316,7 +315,7 @@ fn check_signing_gate(job: &Mapping, os: &str, variable: &str) -> Result<()> {
     Ok(())
 }
 
-/// W5-05: the Windows binary is signed before `cargo xtask package`, and the NSIS setup is
+/// the Windows binary is signed before `cargo xtask package`, and the NSIS setup is
 /// signed after it, so the installer and the portable zip carry a signed `mitibar.exe`.
 fn check_windows_signing(job: &Mapping) -> Result<()> {
     let sign_binary = step_named(job, "Sign Windows binary")?;
@@ -368,7 +367,7 @@ fn check_windows_signing(job: &Mapping) -> Result<()> {
     Ok(())
 }
 
-/// W5-05: the macOS `.app` is signed before the DMG is built, then the DMG is notarized and
+/// the macOS `.app` is signed before the DMG is built, then the DMG is notarized and
 /// stapled. The old step mounted a compressed DMG read-only and signed the app inside it.
 fn check_macos_signing(job: &Mapping) -> Result<()> {
     let package = step_named(job, "Package (macOS app)")?;
@@ -413,7 +412,7 @@ fn check_macos_signing(job: &Mapping) -> Result<()> {
     Ok(())
 }
 
-/// W5-05: the Windows matrix builds `aarch64-pc-windows-msvc`, and the package step tells
+/// the Windows matrix builds `aarch64-pc-windows-msvc`, and the package step tells
 /// cargo-packager and the portable zip which architecture it is.
 fn check_windows_arm64(job: &Mapping) -> Result<()> {
     let build = step_named(job, "Build the Windows binary")?;
@@ -524,7 +523,7 @@ mod tests {
     }
 
     /// The real workflow with one exact edit; the edit must apply, so a later change to the
-    /// workflow cannot silently turn a negative control into a no-op.
+    /// test cannot silently turn a failed edit into a no-op.
     fn mutated(from: &str, to: &str) -> String {
         let text = workflow_text();
         assert_eq!(text.matches(from).count(), 1, "`{from}` must occur once");
@@ -538,7 +537,7 @@ mod tests {
     }
 
     #[test]
-    fn release_workflow_matches_the_plan() {
+    fn release_workflow_matches_the_runbook() {
         check(&workspace_root()).expect("release workflow");
     }
 
@@ -597,7 +596,7 @@ mod tests {
         expect_failure(&text, "does not codesign dist/MitiBar.app");
     }
 
-    /// W5 review: signing the binary after packaging would ship an unsigned binary inside a
+    /// Signing the binary after packaging would ship an unsigned binary inside a
     /// signed installer and an unsigned portable zip; the order check must catch it.
     #[test]
     fn signing_the_windows_binary_after_packaging_fails() {

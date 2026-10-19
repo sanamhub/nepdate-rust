@@ -1,7 +1,7 @@
 [package]
 name = "nepdate-bench"
 version = "0.0.0"
-description = "B1 to B8 of shared/spec/BENCHMARK.md for nepdate, nepdate-patro and other BS crates (L6-02)"
+description = "B1 to B8 of shared/spec/BENCHMARK.md for nepdate, nepdate-patro and other BS crates"
 edition.workspace = true
 license.workspace = true
 publish = false

@@ -1,4 +1,4 @@
-//! Shared pieces for the `nepdate-bench` crate (L6-02): the 64 benchmark inputs of
+//! Shared pieces for the `nepdate-bench` crate: the 64 benchmark inputs of
 //! `shared/spec/BENCHMARK.md` §2 and a stack buffer for the allocation-free formatters.
 //!
 //! This crate is `publish = false`, so it and its competitor dependencies never reach a

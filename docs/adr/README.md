@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-Immutable once Accepted and L0 is merged (ADR-0001). Supersede with a new ADR.
+Immutable once accepted (ADR-0001). Supersede with a new ADR.
 
 | ADR | Title | Status |
 |---|---|---|
@@ -21,4 +21,4 @@ Immutable once Accepted and L0 is merged (ADR-0001). Supersede with a new ADR.
 | [0015](0015-widget-architecture.md) | Widget internal architecture | Accepted |
 | [0016](0016-windows-taskbar-text.md) | Windows taskbar text (amends 0008 and 0015) | Accepted |
 | [0017](0017-desktop-app-name-mitibar.md) | The desktop app is called MitiBar (amends 0008, 0012 and 0015) | Accepted |
-| [0018](0018-software-renderer-and-private-bytes.md) | Software renderer by default, idle memory judged on private bytes (amends 0008 and 0010) | Accepted, conditional on W6-01 |
+| [0018](0018-software-renderer-and-private-bytes.md) | Software renderer by default, idle memory judged on private bytes (amends 0008 and 0010) | Accepted, conditional on the Devanagari check |

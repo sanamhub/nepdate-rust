@@ -1,8 +1,8 @@
 # Runbook: release MitiBar
 
-Owner: maintainer. Approver: a second person (org §10/§12). Decided in ADR-0012. The tag is
+Owner: maintainer. Approver: a second maintainer. Decided in ADR-0012. The tag is
 `mitibar-vX.Y.Z`; the display name is MitiBar and every identifier is `mitibar` (ADR-0017).
-The workflow creates a **draft**; a human installs the assets and publishes it.
+The workflow creates a **draft**; a second maintainer installs the assets and publishes it.
 
 ## Before tagging
 
@@ -18,10 +18,10 @@ The workflow creates a **draft**; a human installs the assets and publishes it.
    first, never by lowering the threshold.
 4. `docs/benchmarks-widget.md` has current numbers from a quiet machine (ADR-0008 §C), and no
    row is LOADED. Idle memory is judged on private bytes (ADR-0018). **0.1.0 is not releasable
-   yet:** W6 removed femtovg and the software build measures 34.35 MB private and 1.217 % of one
-   core, but the 5-minute row is LOADED (47.9 % before, 31.2 % during). The five cold starts are
-   62.4 to 80.4 ms, also LOADED (19.4 to 32.4 % during startup). A quiet 5-minute row and quiet
-   cold starts must pass on this build.
+   yet:** the software build measures 34.35 MB private and 1.217 % of one core, but the 5-minute
+   row is LOADED (47.9 % before, 31.2 % during). The five cold starts are 62.4 to 80.4 ms, also
+   LOADED (19.4 to 32.4 % during startup). A quiet 5-minute row and quiet cold starts must pass
+   on this build.
 5. `cargo xtask ci` passes locally.
 
 ## Build the packages locally (optional)
@@ -145,9 +145,9 @@ These are accepted for 0.x previews and recorded here so a 1.0 release cannot sk
 | Signing credentials | The Windows and macOS signing steps exist and are gated on `WINDOWS_SIGNING_ENABLED` / `MACOS_SIGNING_ENABLED`, but no certificate, Developer ID or notarization secrets are configured here. 0.x ships unsigned and says so. | Provision Azure Artifact Signing and the Apple Developer ID plus notarization secrets, set both variables, and verify a signed asset. |
 | Signing not exercised | `xtask/src/workflow.rs` checks the order (sign `mitibar.exe`, package, sign the NSIS setup; sign `MitiBar.app`, build the DMG, notarize and staple it), but no workflow run has exercised the tools. | A `workflow_dispatch` dry run with both variables on, on all 3 OSes. |
 | Windows ARM64 package | The matrix builds `aarch64-pc-windows-msvc` and names the installer and portable zip arm64, but this was not built or installed locally. | The first workflow run on `windows-latest`; optionally a real ARM64 machine. |
-| Quiet performance | W6 software default: the 5-minute row is 34.35 MB private, 73.59 MB working set and 1.217 % of one core, but LOADED (47.9 % before, 31.2 % during). Cold starts are 62.4 to 80.4 ms, also LOADED (19.4 to 32.4 % during startup). The last quiet software row, from W5, was 34.68 MB and 0.335 %. | A quiet 5-minute row that passes private bytes and CPU on the shipped build, and quiet cold starts. |
-| Text quality at 100 % and 200 % | W6-01 checked Windows x64 with 55 software/femtovg sheets: every conjunct, reph and matra is the same, none is wrong. macOS and Linux were not checked. | Look at `docs/plan/spike-results/w6/` and tick the 3-OS checklist line on macOS and Linux. |
-| Keyboard and focus rings | W7 interaction tests and eight focus snapshots cover Windows x64. The settings zone rows stay pointer-only, and macOS and Linux were not run. | Tick the W7 checklist line on all 3 OSes and decide whether the zone list needs keyboard navigation. |
+| Quiet performance | The current software build: the 5-minute row is 34.35 MB private, 73.59 MB working set and 1.217 % of one core, but LOADED (47.9 % before, 31.2 % during). Cold starts are 62.4 to 80.4 ms, also LOADED (19.4 to 32.4 % during startup). The last quiet software row was 34.68 MB and 0.335 %. | A quiet 5-minute row that passes private bytes and CPU on the shipped build, and quiet cold starts. |
+| Text quality at 100 % and 200 % | Windows x64 was checked with 55 software/femtovg sheets: every conjunct, reph and matra is the same, none is wrong. macOS and Linux were not checked. | Check text quality on macOS and Linux and tick the checklist line. |
+| Keyboard and focus rings | Interaction tests and eight focus snapshots cover Windows x64. The settings zone rows stay pointer-only, and macOS and Linux were not run. | Tick the keyboard line on all 3 OSes and decide whether the zone list needs keyboard navigation. |
 | macOS and Linux packages | Built only in the release workflow; not built or installed locally on this Windows machine. | The first workflow run and the 3-OS manual checklist. |
 
 ## Releasing
@@ -163,9 +163,9 @@ the CycloneDX SBOM, attests the artifacts, and waits for the `production` approv
 creates a **draft** GitHub Release with the changelog section and every asset; it never
 publishes.
 
-The approver downloads each artifact, checks it against `SHA256SUMS` and the attestation,
-runs the ticked manual test and the smoke test above on a clean VM or user account, then
-publishes the draft. The release notes name any unsigned-preview warnings.
+A second maintainer downloads each artifact, checks it against `SHA256SUMS` and the
+attestation, runs the ticked manual test and the smoke test above on a clean VM or user account,
+then publishes the draft. The release notes name any unsigned-preview warnings.
 
 ## After releasing
 
@@ -173,7 +173,7 @@ publishes the draft. The release notes name any unsigned-preview warnings.
    include the installers, `SHA256SUMS` and the SBOM.
 2. Check `gh attestation verify` on one asset from a different machine.
 3. Add an empty `## [Unreleased]` to `apps/mitibar/CHANGELOG.md` for the next cycle.
-4. Update `docs/plan/PROGRESS.md` with the release row.
+4. Record the release in the maintainer notes.
 
 ## Rolling back
 

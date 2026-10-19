@@ -1,4 +1,4 @@
-//! Features `serde` (L5-03), `jiff` (L5-04) and `chrono` (L5-05). Each test needs only its own
+//! Features `serde`, `jiff` and `chrono`. Each test needs only its own
 //! feature, so `cargo test --features serde` alone runs the serde tests.
 #![allow(clippy::unwrap_used)]
 
@@ -78,7 +78,7 @@ mod jiff_feature {
 
     #[test]
     fn clock_test_through_the_conversion() {
-        // PORT-PLAN phase 4: 2024-07-30 18:30 UTC is BS 2081-04-15 in UTC, 2081-04-16 in Nepal.
+        // 2024-07-30 18:30 UTC is BS 2081-04-15 in UTC, 2081-04-16 in Nepal.
         let now: Timestamp = "2024-07-30T18:30:00Z".parse().unwrap();
         let utc = now.to_zoned(TimeZone::UTC).date();
         let nepal = now

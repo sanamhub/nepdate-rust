@@ -52,12 +52,16 @@ each port's choice, but these facts should shape it:
 - Holidays (H = 294) and event days (E = 1671, 3032 events) are sparse. Store sorted serials
   and binary search them (ALGORITHM §4), at most 11 comparisons.
 - Event and tithi names repeat. Deduplicate the (np, en) pairs: 753 distinct pairs today.
+- 152 of the 2190 tithi days (all in BS 2078 to 2081) have a name whose `np` ends in `*` and
+  whose `en` ends in ` (K)`, for example `तृतिया*` / `Tritiya (K)`. Upstream does not say what the
+  marker means, and it does not match skipped or repeated tithis in the data (U-09). Ports show
+  the name exactly as in the data: no stripping, no tooltip, no meaning of their own.
 - Events of one day keep file order.
 - Alternative allowed: dense per-day tables over the covered days (one small index per day for
   holidays and event slices) give O(1) lookups with no binary search. A port may use them when its
   benchmark shows they are faster at an acceptable size (the C++ plan does, about 82 KB in total).
 
-The Rust layout is in `nepdate-rust` (task L5-01) as a worked example.
+The Rust layout is in `nepdate-rust` as a worked example.
 
 ## 4. Test anchors (from the C# test suite, confirmed against data)
 

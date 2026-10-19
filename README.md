@@ -1,61 +1,123 @@
 # nepdate-rust
 
-Bikram Sambat (Nepali calendar) for Rust, plus MitiBar, a tiny cross-platform desktop app.
-Part of the NepDate family: shared data and spec live in the hub
-[`sanamhub/nepdate`](https://github.com/sanamhub/nepdate); other languages have their own
-repositories.
+[![CI](https://github.com/sanamhub/nepdate-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/sanamhub/nepdate-rust/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-| Part | Path | What |
-|---|---|---|
-| `nepdate` crate | `crates/nepdate` | `no_std`, zero-dependency BS↔AD conversion, formatting (English/Nepali), parsing, arithmetic, fiscal year |
-| `nepdate-patro` crate | `crates/nepdate-patro` | the patro (पात्रो, the Nepali almanac): tithi, public holidays and events per BS day, on top of `nepdate`. Separate so the core carries no patro data. Same version as `nepdate`, released together |
-| MitiBar | `apps/mitibar` | tray / taskbar app (Windows, macOS, Linux): today's BS date, month calendar, converter, clock with time zone |
-| Shared data and spec | `shared/` | read-only copy of the hub's `data/` and `spec/`, updated by a weekly PR. Read only at dev time |
+Bikram Sambat (the Nepali calendar) for Rust, plus MitiBar, a small tray calendar for Windows,
+macOS and Linux.
 
-**MitiBar**, "the eighth day of the week", is the desktop app. The name joins *miti* (date) and
-the *-bar* of Nepali weekday names (Sombar, Mangalbar), because the date lives in the taskbar.
-Its identifiers (crate, binary, folders) are lower case `mitibar`; see
-[ADR-0017](docs/adr/0017-desktop-app-name-mitibar.md).
+The library converts between BS and AD for BS 1901-01-01 to 2199-12-30 (AD 1844-04-11 to
+2143-04-15), formats and parses Nepali dates, does date arithmetic and fiscal years, and ships the
+patro: tithi, public holidays and events. It is `no_std` with no dependencies by default, allocates
+nothing, and contains no `unsafe` code.
 
-**Status:** L0 to L4 done (workspace, core types, BS↔AD conversion, arithmetic, fiscal year, ranges, formatting and parsing); L5 (crate `nepdate-patro`, features `serde`, `jiff`, `chrono`) ready for review; next: phase L6.
+```rust
+use nepdate::{Lang, NepaliDate};
 
-Supported range: **BS 1901-01-01 to 2199-12-30** (AD 1844-04-11 to 2143-04-15).
-Patro data (`nepdate-patro`): BS 2077-01-01 to 2084-08-20; tithi 2078-01-02 to 2083-12-30,
-public holidays until 2084-08-18.
+fn main() -> Result<(), nepdate::Error> {
+    let date = NepaliDate::new(2081, 4, 15)?;
+    let ad = date.to_gregorian();
+    assert_eq!((ad.year(), ad.month(), ad.day()), (2024, 7, 30));
+    assert_eq!(date.weekday().name(Lang::En), "Tuesday");
+    println!("{}", date.long(nepdate::LongDate::default(), Lang::En));
+    Ok(())
+}
+```
 
-Performance goal: faster than C# NepDate on every operation of
-[`shared/spec/BENCHMARK.md`](shared/spec/BENCHMARK.md) (B1 to B8), with zero heap allocation in
-both crates. How: [ADR-0004](docs/adr/0004-date-representation-and-conversion-algorithm.md).
+It prints `Shrawan 15, 2081`.
 
-## Where to start
+> **Status:** `nepdate` and `nepdate-patro` are 0.1.0-ready but not published yet. MitiBar builds
+> and runs on Windows; its 0.1.0 release waits for a quiet idle measurement and a manual pass on
+> macOS and Linux.
 
-| You are | Read |
+## Install
+
+Once 0.1.0 is on crates.io:
+
+```toml
+[dependencies]
+nepdate = "0.1"
+nepdate-patro = "0.1"
+```
+
+Until then, use the repository:
+
+```toml
+[dependencies]
+nepdate = { git = "https://github.com/sanamhub/nepdate-rust" }
+nepdate-patro = { git = "https://github.com/sanamhub/nepdate-rust" }
+```
+
+The MSRV is Rust 1.85. The `std` feature is on by default; `serde`, `chrono` and `jiff` are
+optional.
+
+## The two crates
+
+| Crate | Contents |
 |---|---|
-| an AI agent implementing a phase | [AGENTS.md](AGENTS.md) → [docs/plan/00-ROADMAP.md](docs/plan/00-ROADMAP.md) |
-| the reviewer learning Rust | [docs/learn/00-setup-and-workflow.md](docs/learn/00-setup-and-workflow.md) |
-| wondering "why is it like this?" | [docs/adr/README.md](docs/adr/README.md) |
-| looking for the algorithm or data | [shared/spec/README.md](shared/spec/README.md) (changes go to the hub) |
+| `nepdate` | Conversion, arithmetic, fiscal year, formatting, parsing, ranges |
+| `nepdate-patro` | Tithi, public holidays and events for BS 2077-01-01 to 2084-08-20 |
 
-## Repository layout
+`nepdate-patro` depends on `nepdate`, never the other way round, so an app that only converts
+dates carries no patro data. Both crates share one version and are released together.
+
+```rust
+use nepdate::{Lang, NepaliDate};
+
+fn main() -> Result<(), nepdate::Error> {
+    let date = NepaliDate::new(2081, 1, 1)?;
+    let info = nepdate_patro::info(date);
+    assert_eq!(info.tithi().map(|t| t.name(Lang::En)), Some("Panchami"));
+    assert!(info.is_public_holiday());
+    Ok(())
+}
+```
+
+## MitiBar
+
+MitiBar keeps today's BS date in the tray, with a month grid, tithi, public holidays, a converter
+and settings. It opens from the tray or the Windows 11 taskbar and closes when it loses focus. It
+makes no network requests.
+
+```bash
+cargo run -p mitibar --release
+```
+
+On Linux it needs a tray (StatusNotifierItem or the GNOME AppIndicator extension), fontconfig,
+xkbcommon and D-Bus. The renderer is software only, so no OpenGL or GPU driver is needed. The
+release workflow builds an NSIS installer and portable zip on Windows, a universal `.dmg` on macOS
+and an `.AppImage` and `.deb` on Linux.
+
+## Repository
 
 ```
-shared/          hub copy: data/ (calendar JSON), spec/ (specs, vectors), VERSION (hub commit)
-crates/nepdate/  the core library       (created in phase L0)
-crates/nepdate-patro/  tithi, holidays, events (created in phase L5)
-apps/            the widget             (created in phase W0)
-xtask/           dev automation: codegen, checks, release helpers (created in phase L0)
-docs/API.md      the public Rust API contract
-docs/adr/        architecture decisions for the Rust port
-docs/plan/       phases, tasks, acceptance criteria, widget requirements
-docs/learn/      Rust learning notes, one per phase
-docs/runbooks/   release and manual-test procedures
+crates/nepdate/        core library
+crates/nepdate-patro/  tithi, holidays, events
+apps/mitibar/          the desktop app
+shared/                read-only copy of the hub's data and spec
+xtask/                 code generation, checks and release helpers
+docs/                  API, ADRs, design notes, benchmarks and runbooks
 ```
+
+## Documentation
+
+| Link | Contents |
+|---|---|
+| [`docs/API.md`](docs/API.md) | Public API of both crates |
+| [`docs/adr/`](docs/adr/README.md) | Why the libraries and the app are built this way |
+| [`docs/design/`](docs/design/widget-requirements.md) | MitiBar requirements and design tokens |
+| [`docs/benchmarks.md`](docs/benchmarks.md) | Library benchmarks against C# NepDate and other crates |
+| [`docs/benchmarks-widget.md`](docs/benchmarks-widget.md) | MitiBar idle memory, CPU and cold start |
+| [`shared/spec/`](shared/spec/README.md) | Algorithm, data and conformance vectors, shared by every port |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Building, testing and pull request rules |
 
 ## Credits and license
 
-- Calendar data and algorithm from [NepDate](https://github.com/RajuPrasai/NepDate) by Raju
-  Prasai and contributors, MIT. See [shared/data/NOTICE](shared/data/NOTICE).
-- MitiBar follows [NepDateWidget](https://github.com/RajuPrasai/NepDateWidget), with its
-  author's permission ([docs/legal](docs/legal/README.md)).
-- This repository: MIT ([ADR-0013](docs/adr/0013-licensing.md)).
-- Not affiliated with the Government of Nepal. Holiday data is informational.
+Calendar data and algorithm come from [NepDate](https://github.com/RajuPrasai/NepDate) by Raju
+Prasai and contributors, MIT. See [`shared/data/NOTICE`](shared/data/NOTICE). MitiBar follows
+[NepDateWidget](https://github.com/RajuPrasai/NepDateWidget), with its author's permission
+([record](docs/legal/README.md)).
+
+This repository is MIT ([`LICENSE`](LICENSE)). MitiBar uses Slint under its royalty-free licence;
+the bundled Noto fonts are under the SIL Open Font License. Not affiliated with the Government of
+Nepal. Holiday data is informational.

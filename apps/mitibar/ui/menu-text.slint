@@ -1,5 +1,5 @@
-// The tray menu labels, in one global so the Slint tray menu (W1) and W1B's native Windows
-// taskbar menu read the same translated strings. `ui_bridge.rs` reads these for W1B.
+// The tray menu labels, in one global so the Slint tray menu and the native Windows
+// taskbar menu read the same translated strings. `ui_bridge.rs` reads both.
 
 export global MenuText {
     out property <string> open: @tr("Open");

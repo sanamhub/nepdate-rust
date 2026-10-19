@@ -1,6 +1,6 @@
-//! Parity with C# `NepDate` 2.0.7 on `shared/spec/vectors/csharp-golden/dates.tsv` (L2-07).
-//! Conversion columns (L2-07), arithmetic files and fiscal columns (L3-05), text columns,
-//! `format-pattern.tsv` and the strict column of the C# `parse.tsv` (L4-05).
+//! Parity with C# `NepDate` 2.0.7 on `shared/spec/vectors/csharp-golden/dates.tsv`.
+//! Conversion columns, arithmetic files and fiscal columns, text columns,
+//! `format-pattern.tsv` and the strict column of the C# `parse.tsv`.
 //! No arithmetic row is skipped: no PARITY deviation applies to integer arithmetic. The only
 //! skipped rows are D-04 (`MMM` for Ashad and Ashoj) and D-05 (Devanagari digits in strict
 //! parsing), each behind a commented filter.

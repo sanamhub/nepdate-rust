@@ -1,6 +1,6 @@
 // The popup window (WR-02): borderless, always-on-top, fixed 360x520. It shows today's header
-// and the clock lines, hides on Escape and on focus loss (WR-02 AC2). The height grew from 440 in
-// the W2 review: the 44 px day cells and a 6-row month need the extra 80 px (WR-02 AC1).
+// and the clock lines, hides on Escape and on focus loss (WR-02 AC2). The 520 px height fits
+// the 44 px day cells and a 6-row month (WR-02 AC1).
 import { AppInfo } from "app-info.slint";
 import { Converter, ConverterData } from "converter.slint";
 import { DayDetail, DayDetailData } from "day-detail.slint";
@@ -30,7 +30,7 @@ export component PopupWindow inherits Window {
     in property <string> ad: "";
     in property <[PopupClockLine]> clocks: [];
 
-    // Month grid state, filled by `ui_bridge::set_month` (W2-02).
+    // Month grid state, filled by `ui_bridge::set_month`.
     in property <[CellData]> cells: [];
     in property <[string]> weekday-headers: [];
     in property <[string]> month-names: [];
@@ -44,14 +44,14 @@ export component PopupWindow inherits Window {
     in property <int> holiday-days: -1;
     /// 13 px for Latin, 12 px for Devanagari (WR-03 AC2), set by `ui_bridge::set_month`.
     in property <length> ad-day-size: 13px;
-    /// 11 px for Latin, 12 px for Devanagari (W3-00b), set by `ui_bridge::set_month`.
+    /// 11 px for Latin, 12 px for Devanagari, set by `ui_bridge::set_month`.
     in property <length> tithi-size: 12px;
 
-    // Day detail (W2-03): an overlay inside the popup, never a new OS window (WR-04 AC1).
+    // Day detail: an overlay inside the popup, never a new OS window (WR-04 AC1).
     in property <DayDetailData> detail;
     in-out property <bool> detail-visible: false;
 
-    // Converter (W3-02): another inline overlay, opened from the header.
+    // Converter: another inline overlay, opened from the header.
     in-out property <bool> converter-visible: false;
     in-out property <ConverterData> converter-data;
     in-out property <string> converter-input: "";
@@ -60,12 +60,12 @@ export component PopupWindow inherits Window {
     in-out property <int> converter-tab: 0;
     in-out property <int> converter-direction: 0;
 
-    // Settings (W3-04): the third inline overlay, opened from the tray menu.
+    // Settings: the third inline overlay, opened from the tray menu.
     in-out property <bool> settings-visible: false;
     in-out property <SettingsData> settings-data;
     in-out property <string> settings-filter: "";
 
-    // Fired by the tray menu, the taskbar menu and the grid (W2-02).
+    // Fired by the tray menu, the taskbar menu and the grid.
     callback day-clicked(int);
     callback prev-month();
     callback next-month();
@@ -73,16 +73,16 @@ export component PopupWindow inherits Window {
     callback month-picked(int);
     callback year-picked(int);
     callback wheel(int);
-    // Fired by the day detail (W2-03).
+    // Fired by the day detail.
     callback detail-closed();
     callback copy-detail-bs();
     callback copy-detail-ad();
-    // Fired by the converter (W3-02).
+    // Fired by the converter.
     callback converter-opened();
     callback converter-closed();
     callback converter-edited(string, int);
     callback converter-days-edited(string, string);
-    // Fired by the settings panel (W3-04).
+    // Fired by the settings panel.
     callback settings-closed();
     callback settings-language(int);
     callback settings-theme(int);
@@ -219,7 +219,7 @@ export component PopupWindow inherits Window {
                     Text {
                         text: @tr("Convert");
                         // The FocusScope above is the one accessible button; without this the
-                        // Text would expose the same label a second time (W3 review).
+                        // Text would expose the same label a second time.
                         accessible-role: none;
                         color: Theme.ink-muted;
                         font-size: 11px;
@@ -315,7 +315,7 @@ export component PopupWindow inherits Window {
             }
         }
 
-        // Converter overlay (W3-02): its scrim closes only the converter.
+        // Converter overlay: its scrim closes only the converter.
         if root.converter-visible: Rectangle {
             x: 0;
             y: 0;
@@ -356,7 +356,7 @@ export component PopupWindow inherits Window {
             }
         }
 
-        // Settings overlay (W3-04): its scrim closes only the settings panel.
+        // Settings overlay: its scrim closes only the settings panel.
         if root.settings-visible: Rectangle {
             x: 0;
             y: 0;

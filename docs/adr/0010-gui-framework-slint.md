@@ -1,12 +1,12 @@
 # ADR-0010: GUI framework for the widget: Slint
 
-- Status: Accepted (license option: see ADR-0013)
-- Date: 2026-09-24
-- Deciders: Sanam Pakuwal
+- **Status:** accepted (license option: see ADR-0013)
+- **Date:** 2026-09-24
+- **Approved by:** Sanam
 
 ## Context
 
-Requirements (ADR-0008, `docs/plan/widget-requirements.md`): tray / menu-bar icon,
+Requirements (ADR-0008, `docs/design/widget-requirements.md`): tray / menu-bar icon,
 small borderless popup, month grid, **correct Devanagari rendering** (conjuncts क्ष ज्ञ
 श्र, reph र्क, matras), Windows + macOS + Linux (X11 and Wayland), small binary, low
 idle RAM, fast start, accessible, and learnable by a Rust beginner.
@@ -25,23 +25,23 @@ Research snapshot (2026-09-24, versions from crates.io):
 ## Decision
 
 - Use **Slint 1.18.x** (`slint = "1.18"`, `slint-build` for compiling `.slint` files).
-- Renderer: **femtovg** (default). If Devanagari quality issues appear in phase W1's
-  font test, switch to the Skia renderer (feature flag only, no code changes).
+- Renderer: **femtovg** (default). If Devanagari quality issues appear in the font test,
+  switch to the Skia renderer (feature flag only, no code changes).
 - Windowing backend: Slint's **winit** backend.
 - Tray: Slint's `SystemTrayIcon`. **Fallback** if a blocker is hit (e.g. Linux menu
   bug slint-ui/slint#13624 still open): `tray-icon` 0.25 (ksni backend on Linux) +
   `muda` 0.20, driven from the Slint event loop. The switch is contained in
-  `apps/nepdate-widget/src/platform/tray.rs` (one module behind a small trait).
+  `apps/mitibar/src/platform/tray.rs` (one module behind a small trait).
 - Fonts: bundle **Noto Sans Devanagari** and **Noto Sans** (both OFL-1.1) via
   `import "fonts/...ttf"` in `.slint`. Do not rely on system fonts.
-- Phase W1 includes a **spike with an exit criterion** (task W1-01): render the test
-  strings in `docs/plan/devanagari-test-strings.md` on all 3 OSes, screenshot, and
-  compare. If Slint fails on any OS and Skia does not fix it, stop and escalate to the
-  human; the runner-up is **Tauri 2** (new ADR required).
+- The first widget milestone includes a **font test with an exit criterion**: render the test
+  strings in `docs/design/devanagari-test-strings.md` on all 3 OSes, screenshot, and compare.
+  If Slint fails on any OS and Skia does not fix it, stop and raise it with the maintainer;
+  the runner-up is **Tauri 2** (new ADR required).
 
 ## Consequences
 
-- UI lives in `apps/nepdate-widget/ui/*.slint`; Rust code stays small and testable.
+- UI lives in `apps/mitibar/ui/*.slint`; Rust code stays small and testable.
 - MSRV is set by Slint (1.92 at 1.18.1); the workspace pins the dev toolchain separately.
 - Wayland limits (no client-side positioning or always-on-top) apply to every toolkit;
   handled in WR-02/WR-08 acceptance criteria.

@@ -1,4 +1,4 @@
-//! Every supported day, checked against an independent copy of ALGORITHM §4 and §5 (L2-06).
+//! Every supported day, checked against an independent copy of ALGORITHM §4 and §5.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,

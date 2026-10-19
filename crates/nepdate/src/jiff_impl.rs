@@ -125,7 +125,7 @@ mod tests {
 
     #[test]
     fn clock_at_2024_07_30_18_30_utc() {
-        // PORT-PLAN phase 4: the same instant is 2081-04-15 in UTC and 2081-04-16 in Nepal.
+        // The same instant is 2081-04-15 in UTC and 2081-04-16 in Nepal.
         let now = at("2024-07-30T18:30:00Z");
         let kathmandu = TimeZone::get("Asia/Kathmandu");
         assert!(kathmandu.is_ok(), "tzdb has Asia/Kathmandu");

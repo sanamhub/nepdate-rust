@@ -1,10 +1,10 @@
-# cargo-deny configuration (L0-04). The widget's Slint license exception is added in W0 (ADR-0013).
+# cargo-deny configuration. The widget's Slint license exception follows ADR-0013.
 
 [graph]
 all-features = true
 # Exclude the benchmark crate and, with it, its GPL competitor dependencies (dev-only, never
-# distributed, L6-02). The widget stays in the graph, so the Slint license exceptions below
-# actually apply (W0-04).
+# distributed). The widget stays in the graph, so the Slint license exceptions below
+# actually apply.
 exclude = ["nepdate-bench"]
 
 [advisories]
@@ -33,18 +33,18 @@ allow = [
     "BSD-2-Clause",
     "BSD-3-Clause",
     "ISC",
-    "0BSD",     # recvmsg and doctest-file, via interprocess (W3-06)
+    "0BSD",     # recvmsg and doctest-file, via interprocess
     "Zlib",
     "OFL-1.1",   # bundled Noto fonts (ADR-0010)
     "Unlicense", # clipboard-win, via arboard (clipboard)
     "BSL-1.0",   # error-code and ksni, via arboard/muda
-    "MPL-2.0",   # option-ext, via dirs (W1-06 logging)
+    "MPL-2.0",   # option-ext, via dirs (logging)
 ]
 confidence-threshold = 0.9
-unused-allowed-license = "allow" # the list covers later phases
+unused-allowed-license = "allow" # the list covers optional dependencies
 
 # Slint is triple-licensed; the widget uses the Royalty-free 2.0 option (ADR-0013), which needs
-# visible attribution (AboutSlint, added in a later phase). Allow it for Slint crates only.
+# visible attribution (AboutSlint). Allow it for Slint crates only.
 [[licenses.exceptions]]
 name = "slint"
 allow = ["LicenseRef-Slint-Royalty-free-2.0"]

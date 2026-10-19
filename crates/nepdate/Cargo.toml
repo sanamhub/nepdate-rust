@@ -5,11 +5,13 @@ description = "Bikram Sambat (Nepali) calendar: fast, no_std, zero-dependency BS
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage = "https://github.com/sanamhub/nepdate-rust"
+documentation = "https://docs.rs/nepdate"
 rust-version.workspace = true
 categories = ["date-and-time", "no-std", "localization"]
 keywords = ["nepali", "bikram-sambat", "calendar", "date", "nepal"]
 readme = "README.md"
-include = ["src/**", "README.md", "LICENSE", "LICENSE-THIRD-PARTY", "CHANGELOG.md"]   # L6-01: no shared/ or tests/
+include = ["src/**", "README.md", "LICENSE", "LICENSE-THIRD-PARTY", "CHANGELOG.md"]   # no shared/ or tests/
 
 [package.metadata.docs.rs]
 all-features = true
@@ -24,7 +26,7 @@ chrono = ["dep:chrono"]                        # ADR-0005: conversions only
 
 [dependencies]
 serde = { version = "1", default-features = false, optional = true }
-# Not `tz-system`: today() asks for Asia/Kathmandu by name, never the system zone, and that
+# Not `tz-system`: today asks for Asia/Kathmandu by name, never the system zone, and that
 # feature's Windows import library needs an assembler the windows-gnu dev host doesn't have.
 jiff = { version = "0.2", default-features = false, features = ["std", "tzdb-bundle-platform", "tzdb-zoneinfo", "tzdb-concatenated"], optional = true }
 chrono = { version = "0.4", default-features = false, optional = true }

@@ -1,4 +1,4 @@
-//! Conformance with `shared/spec/vectors/month-boundaries.csv` (L2-05).
+//! Conformance with `shared/spec/vectors/month-boundaries.csv`.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,

@@ -1,4 +1,4 @@
-//! `cargo xtask icons [--check]` (W1-03, W4-02): renders the tray day-number icons and the app
+//! `cargo xtask icons [--check]`: renders the tray day-number icons and the app
 //! icon. The tray icons are 32x32 PNGs under `apps/mitibar/ui/tray/<lang>/<scheme>/` for each
 //! digit set (en, ne) and taskbar scheme (light, dark), plus `ui/tray-icons.slint`, the image
 //! arrays the tray indexes. The app icon comes from `assets/icon.svg` as PNG sizes 16 to 1024,
@@ -21,7 +21,7 @@ const FONT_NE: &str = "apps/mitibar/ui/fonts/NotoSansDevanagari-Variable.ttf";
 const OUT_DIR: &str = "apps/mitibar/ui/tray";
 const SLINT_OUT: &str = "apps/mitibar/ui/tray-icons.slint";
 
-/// The app icon source and the generated files (W4-02).
+/// The app icon source and the generated files.
 const APP_SVG: &str = "assets/icon.svg";
 const APP_OUT: &str = "apps/mitibar/icons";
 const APP_PNG_SIZES: [u32; 9] = [16, 24, 32, 48, 64, 128, 256, 512, 1024];
@@ -38,7 +38,7 @@ const ICNS_SIZES: [(u32, &[u8; 4]); 7] = [
     (1024, b"ic10"),
 ];
 
-/// Ink per taskbar scheme: the `ink` token of docs/plan/widget-design.md for that scheme, so the
+/// Ink per taskbar scheme: the `ink` token of docs/design/widget-design.md for that scheme, so the
 /// digits contrast with a light or a dark taskbar the way the popup text contrasts with its
 /// surface.
 const SCHEMES: [(&str, &str); 2] = [("light", "#211C17"), ("dark", "#F1ECE4")];

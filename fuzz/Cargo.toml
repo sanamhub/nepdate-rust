@@ -1,5 +1,5 @@
-# Fuzz targets for `nepdate` (L4-07). Not a workspace member: cargo-fuzz needs nightly Rust and
-# libFuzzer, so the scheduled workflow builds and runs these (L6-02b), not `cargo xtask ci`.
+# Fuzz targets for `nepdate`. Not a workspace member: cargo-fuzz needs nightly Rust and
+# libFuzzer, so the scheduled workflow builds and runs these, not `cargo xtask ci`.
 [package]
 name = "nepdate-fuzz"
 version = "0.0.0"

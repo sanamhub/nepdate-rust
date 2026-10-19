@@ -1,4 +1,4 @@
-//! Patro data for `cargo xtask codegen` (L5-01) and `cargo xtask data-status` (L5-01b): reads
+//! Patro data for `cargo xtask codegen` and `cargo xtask data-status`: reads
 //! `shared/data/patro/*.json` and writes the dense per-day tables of ADR-0004 §6 into
 //! `crates/nepdate-patro/src/generated/patro.rs`.
 
@@ -313,7 +313,7 @@ fn tables(lengths: &Lengths, patro: &Patro) -> Result<Tables> {
     Ok(t)
 }
 
-/// The text of `crates/nepdate-patro/src/generated/patro.rs` (layout: ADR-0004 §6, L5-01).
+/// The text of `crates/nepdate-patro/src/generated/patro.rs` (layout: ADR-0004 §6).
 pub(crate) fn generate(lengths: &Lengths, patro: &Patro) -> Result<String> {
     let t = tables(lengths, patro)?;
     let (first, last) = (t.first, t.last);

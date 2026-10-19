@@ -1,5 +1,5 @@
 //! Shared helpers for the integration tests: read files from the repository's `shared/` copy,
-//! which isn't published with the crate (L2-04).
+//! which isn't published with the crate.
 
 #![allow(
     dead_code,

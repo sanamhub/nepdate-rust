@@ -1,6 +1,5 @@
 //! Maps `app` view models to Slint generated types and callbacks (ADR-0015). The only place that
-//! converts between the two. W1 adds the popup placement (W1-04); W1B wires `PopupAnchor::Above`
-//! for the taskbar text (W1B-03).
+//! converts between the two, including popup placement and the taskbar text anchor.
 
 use nepdate::{DateOrder, Lang, Month, NepaliDate, Separator};
 use slint::ComponentHandle;
@@ -15,16 +14,16 @@ use crate::{
     AppInfo, CellData, ConverterData, DayDetailData, PopupClockLine, PopupWindow, SettingsData,
 };
 
-/// Where to open the popup (W1-04).
+/// Where to open the popup.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PopupAnchor {
     /// The fixed corner of the primary monitor per OS (WR-02 AC1).
     TrayCorner,
-    /// Above a rectangle, left-aligned, clamped to the monitor work area (used by W1B).
+    /// Above a rectangle, left-aligned, clamped to the monitor work area.
     Above(Rect),
 }
 
-/// A rectangle in physical pixels (W1B's `app::taskbar::Rect` matches this shape).
+/// A rectangle in physical pixels; `app::taskbar::Rect` matches this shape.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rect {
     pub left: i32,
@@ -90,7 +89,7 @@ pub fn set_app_name(popup: &PopupWindow) {
         .set_app_name(crate::app::APP_NAME.into());
 }
 
-/// Fills the grid from `app::MonthView` (W2-02, WR-03). The language is passed separately because
+/// Fills the grid from `app::MonthView` (WR-03). The language is passed separately because
 /// the view keeps names, not the language.
 pub fn set_month(popup: &PopupWindow, view: &MonthView, lang: Lang) {
     let cells: Vec<CellData> = view
@@ -112,7 +111,7 @@ pub fn set_month(popup: &PopupWindow, view: &MonthView, lang: Lang) {
     popup.set_month_names(slint::ModelRc::new(slint::VecModel::from(months)));
     popup.set_month_index(i32::from(view.month.number()) - 1);
     popup.set_year(i32::from(view.year));
-    // W5-04: the custom year control shows the language's digits; Slint's SpinBox cannot.
+    // The custom year control shows the language's digits; Slint's SpinBox cannot.
     popup.set_year_text(lang.digits(u32::from(view.year), 0).to_string().into());
     popup.set_month_title(view.title.as_str().into());
     popup.set_can_prev(view.can_prev);
@@ -121,7 +120,7 @@ pub fn set_month(popup: &PopupWindow, view: &MonthView, lang: Lang) {
     // (widget-design §3/§4). The UI only needs the size, not the language.
     popup.set_ad_day_size(if lang == Lang::Ne { 12.0 } else { 13.0 });
     // The tithi is a Latin caption at 11 px in English; Devanagari needs 12 px or more
-    // (widget-design §3/§4, W3-00b).
+    // (widget-design §3/§4).
     popup.set_tithi_size(if lang == Lang::Ne { 12.0 } else { 11.0 });
 }
 
@@ -174,7 +173,7 @@ pub fn set_next_holiday(popup: &PopupWindow, holiday: Option<&NextHoliday>) {
     popup.set_holiday_days(days);
 }
 
-/// Fills the day detail overlay (W2-03, WR-04). `None` hides it and leaves the last text in
+/// Fills the day detail overlay (WR-04). `None` hides it and leaves the last text in
 /// place; the popup is only shown with a complete detail.
 pub fn set_detail(popup: &PopupWindow, detail: Option<&DayDetail>) {
     let Some(detail) = detail else {
@@ -196,7 +195,7 @@ pub fn set_detail(popup: &PopupWindow, detail: Option<&DayDetail>) {
     popup.set_detail_visible(true);
 }
 
-/// Fills the converter result area (W3-02). The UI shows the message, or the short and long
+/// Fills the converter result area. The UI shows the message, or the short and long
 /// forms; an empty outcome clears all three.
 pub fn set_converter(popup: &PopupWindow, outcome: &ConvertOutcome) {
     let (short, long, error) = match outcome {
@@ -256,7 +255,7 @@ pub fn filter_time_zones(zones: &[String], filter: &str) -> Vec<String> {
         .collect()
 }
 
-/// Fills the settings panel from `Settings` and the filtered zone list (W3-04).
+/// Fills the settings panel from `Settings` and the filtered zone list.
 pub fn set_settings(popup: &PopupWindow, settings: &Settings, zones: &[String]) {
     let language_index = i32::from(u8::from(settings.lang() == Lang::Ne));
     let theme_index = match settings.theme.as_str() {
@@ -368,7 +367,7 @@ fn position_tray_corner(popup: &PopupWindow) {
 }
 
 /// The popup size and the per-OS corner margins (logical px), WR-02 AC1. 520 replaced 440 in the
-/// W2 review to fit the 44 px grid cells and a 6-row month.
+/// 520 fits the 44 px grid cells and a 6-row month.
 const POPUP_W: f64 = 360.0;
 const POPUP_H: f64 = 520.0;
 
@@ -394,8 +393,8 @@ fn tray_corner_position(monitor_w: f64, monitor_h: f64) -> (f64, f64) {
     (monitor_w - POPUP_W - 12.0, 0.0)
 }
 
-/// The popup's top-left above `anchor`, left-aligned and clamped to `work_area` (W1B). Pure so
-/// the clamping is unit-tested now (W1-04). `max`/`min` never panic even when the popup is wider
+/// The popup's top-left above `anchor`, left-aligned and clamped to `work_area`. Pure so
+/// the clamping is unit-tested. `max`/`min` never panic even when the popup is wider
 /// than the work area.
 fn above_position(anchor: Rect, popup_size: (i32, i32), work_area: Rect) -> (i32, i32) {
     let (w, h) = popup_size;
@@ -558,7 +557,7 @@ mod tests {
         assert!(!popup.get_detail_visible());
     }
 
-    /// W5-03: the settings panel's zone list is a few hundred short strings, not a memory cause.
+    /// The settings panel's zone list is a few hundred short strings, not a memory cause.
     #[test]
     fn the_time_zone_list_is_small() {
         let zones = all_time_zones();

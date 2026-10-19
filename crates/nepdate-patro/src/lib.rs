@@ -21,7 +21,7 @@ const _: () = assert!(TITHI_NAMES.len() < NO_TITHI as usize);
 const _: () = assert!(NAMES.len() <= u16::MAX as usize);
 const _: () = assert!(EVENT_IDS.len() <= u16::MAX as usize);
 const _: () = assert!(HOLIDAY_BITS.len() * 64 >= PATRO_DAYS);
-// Counts from the data on 2026-10-07 (L5-01). A data update changes them on purpose.
+// Counts from the data on 2026-10-07. A data update changes them on purpose.
 const _: () = assert!(PATRO_DAYS == 2793);
 const _: () = assert!(HOLIDAY_OFFSETS.len() == 294);
 const _: () = assert!(EVENT_IDS.len() == 3032);

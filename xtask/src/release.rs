@@ -1,5 +1,5 @@
 //! `cargo xtask release-check <package> <version>` and `cargo xtask changelog <package> <version>`
-//! (L6-04, ADR-0012). `<package>` is `nepdate` (both library crates, released together) or
+//! (ADR-0012). `<package>` is `nepdate` (both library crates, released together) or
 //! `mitibar` (ADR-0017). The checks work on file contents, so the tests use small strings.
 
 use std::fmt::Write as _;
@@ -17,7 +17,7 @@ struct Package {
     name: &'static str,
     manifest: String,
     changelog: String,
-    /// The cargo-packager config, for `mitibar` only (W4-03). Its version must follow the
+    /// The cargo-packager config, for `mitibar` only. Its version must follow the
     /// manifest's, or an installer would be named for the wrong release.
     packager: Option<String>,
 }

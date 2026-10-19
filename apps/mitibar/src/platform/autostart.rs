@@ -1,4 +1,4 @@
-//! Per-user launch at login (WR-09 AC2, W3-05). Windows writes the quoted executable path to
+//! Per-user launch at login (WR-09 AC2). Windows writes the quoted executable path to
 //! the `HKCU\...\Run` value `mitibar` itself; `auto-launch` 0.6 registers a `LaunchAgent` or
 //! `SMAppService` on macOS and an `XDG` autostart file on Linux. No admin rights.
 //!
@@ -48,7 +48,7 @@ pub fn sync(enabled: bool, item: &dyn LoginItem) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Applies `enabled` to the OS login item. Startup never fails because of this (W3-05): the
+/// Applies `enabled` to the OS login item. Startup never fails because of this: the
 /// error is logged and the app continues.
 pub fn apply(enabled: bool) {
     let Some(exe) = std::env::current_exe().ok() else {

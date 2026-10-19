@@ -1,4 +1,4 @@
-//! PATRO §4 anchors, the tithi range edges, `coverage()` and `public_holidays()` (L5-02).
+//! PATRO §4 anchors, the tithi range edges, `coverage()` and `public_holidays()`.
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
 use nepdate::{Lang, NepaliDate};

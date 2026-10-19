@@ -1,8 +1,8 @@
 # Other Rust crates for the Bikram Sambat calendar
 
 Checked 2026-09-25 against the crates.io API, the crate sources and GitHub; versions rechecked
-against the crates.io API on 2026-10-08 (no crate below has released since). Used by task L6-02
-(benchmarks). No crate has reverse dependencies, so there is no established incumbent.
+against the crates.io API on 2026-10-08 (no crate below has released since). Used by the
+benchmarks. No crate has reverse dependencies, so there is no established incumbent.
 
 ## Native support
 
@@ -69,7 +69,7 @@ NepDate on the benchmark's fixed dates.
 ## Names
 
 `nepdate`, `nepdate-patro` and `mitibar` were all free on crates.io on 2026-10-17
-(the API returns "not found" for each; ADR-0017). L0's human checklist checks again before
+(the API returns "not found" for each; ADR-0017). The release checklist checks again before
 publishing. khumnath already uses "nepdate" for a GPL-3.0 Qt desktop widget
 (`github.com/khumnath/nepdate`) and the `nepdate-cli` crate, so the desktop app does not share
 that name: it is MitiBar (ADR-0017). The app is `publish = false` anyway.

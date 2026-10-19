@@ -1,6 +1,6 @@
 # Runbook: release the `nepdate` and `nepdate-patro` crates
 
-Owner: maintainer. Approver: a second person (org §10/§12). Decided in ADR-0012. One tag
+Owner: maintainer. Approver: a second maintainer. Decided in ADR-0012. One tag
 `nepdate-vX.Y.Z` releases both crates with the same version (ADR-0002).
 
 ## Before tagging
@@ -14,7 +14,7 @@ Owner: maintainer. Approver: a second person (org §10/§12). Decided in ADR-001
 3. `cargo xtask release-check nepdate X.Y.Z` passes. It is the same check the `preflight`
    job runs.
 4. From 0.1.1 on: `cargo semver-checks -p nepdate -p nepdate-patro` agrees with the bump.
-5. PR with the above → reviewed → merged.
+5. Open a pull request with the above, get approval, and merge.
 
 ## Releasing
 

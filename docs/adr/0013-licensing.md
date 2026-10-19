@@ -1,8 +1,8 @@
 # ADR-0013: Licensing of this repository
 
-- Status: Accepted
-- Date: 2026-09-24 (accepted 2026-09-25)
-- Deciders: Sanam Pakuwal
+- **Status:** accepted
+- **Date:** 2026-09-24 (accepted 2026-09-25)
+- **Approved by:** Sanam
 
 ## Context
 
@@ -19,7 +19,7 @@
 
 | Part | License | Notes |
 |---|---|---|
-| Whole repository (library, widget source, `xtask`, docs; `shared/` is the hub's MIT content) | **MIT** | One `LICENSE` file at the root, `Copyright (c) nepdate contributors`. Each published package also ships a copy |
+| Whole repository (library, widget source, `xtask`, docs; `shared/` is the hub's MIT content) | **MIT** | One `LICENSE` file at the root, `Copyright (c) 2026 NepDate contributors`. Each published package also ships a copy |
 | NepDate notice | MIT | kept in `shared/data/NOTICE`, `crates/nepdate/LICENSE-THIRD-PARTY` and `crates/nepdate-patro/LICENSE-THIRD-PARTY` (both crates ship NepDate data) |
 | Widget **binary distribution** | uses Slint under **Royalty-free 2.0** | Settings → About shows `AboutSlint`; `cargo-deny` allows `LicenseRef-Slint-Royalty-free-2.0` for Slint crates only |
 | Bundled fonts | OFL-1.1 | license files shipped alongside |

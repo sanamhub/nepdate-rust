@@ -1,5 +1,5 @@
 //! Compares each competitor's B1 (BS to AD) and B2 (AD to BS) results on the 64 dates with
-//! `nepdate` and prints one line per competitor (L6-02 AC3), followed by every differing date
+//! `nepdate` and prints one line per competitor, followed by every differing date
 //! with both answers, so a reader can check each one against the source data. An input a
 //! competitor rejects counts as a difference, so a fast wrong answer is never listed as
 //! agreeing; rejected inputs are listed as "rejected", not as wrong answers.

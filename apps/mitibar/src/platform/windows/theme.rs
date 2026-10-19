@@ -16,11 +16,11 @@ pub fn ink(dark: bool) -> [u8; 4] {
 mod tests {
     use super::*;
 
-    /// The two constants equal the `ink` row of `docs/plan/widget-design.md` §2, the same style as
-    /// the W0 theme drift test. Negative control: change one constant, see it fail, revert.
+    /// The two constants equal the `ink` row of `docs/design/widget-design.md` §2, the same style as
+    /// the theme drift test. Changing one constant makes it fail.
     #[test]
     fn wr12_ac2_ink_matches_design() {
-        let design = include_str!("../../../../../docs/plan/widget-design.md");
+        let design = include_str!("../../../../../docs/design/widget-design.md");
         let unquote = |s: &str| {
             s.strip_prefix('`')
                 .and_then(|s| s.strip_suffix('`'))

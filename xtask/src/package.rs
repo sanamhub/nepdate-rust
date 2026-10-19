@@ -1,4 +1,4 @@
-//! `cargo xtask package` (W4-03, ADR-0012): builds the widget in the `release-widget` profile
+//! `cargo xtask package` (ADR-0012): builds the widget in the `release-widget` profile
 //! (unless `MITIBAR_BINARIES_DIR` points at a prebuilt one, as the macOS universal job does) and
 //! runs `cargo-packager` with `apps/mitibar/Packager.toml` and the formats for this OS.
 //! Windows also gets the portable `.zip` that ADR-0012 lists next to the NSIS installer.
@@ -81,7 +81,7 @@ pub(crate) fn run() -> Result<()> {
         .arg("--out-dir")
         .arg(&out)
         .args(["--formats", &formats]);
-    // W5-05: the Windows ARM64 job cross-compiles, so cargo-packager must name the installer
+    // The Windows ARM64 job cross-compiles, so cargo-packager must name the installer
     // arm64. The universal macOS build leaves this unset.
     if let Some(target) = std::env::var_os("MITIBAR_TARGET") {
         command.arg("--target").arg(target);
@@ -109,7 +109,7 @@ pub(crate) fn run() -> Result<()> {
 /// The package formats for this OS, per the ADR-0012 table. cargo-packager gets one list, and
 /// passing only this OS's formats keeps it from trying another OS's tools.
 ///
-/// W5-05: the macOS workflow asks for `app` only, signs `dist/MitiBar.app`, and builds the DMG
+/// the macOS workflow asks for `app` only, signs `dist/MitiBar.app`, and builds the DMG
 /// itself, so the `.app` inside the DMG is signed. `MITIBAR_PACKAGE_FORMATS` is a test/release
 /// override, not a user setting.
 fn formats() -> Result<String> {
@@ -198,7 +198,7 @@ fn package_version(manifest: &Path) -> Result<String> {
         .with_context(|| format!("{} has no package version", manifest.display()))
 }
 
-/// `x64` or `arm64`, the names the release assets use. W5-05: the cross-compiled ARM64 job sets
+/// `x64` or `arm64`, the names the release assets use. : the cross-compiled ARM64 job sets
 /// `MITIBAR_ARCH=arm64`; otherwise the host arch decides.
 #[cfg(windows)]
 fn arch() -> String {
@@ -219,7 +219,7 @@ mod tests {
     use super::*;
 
     /// The NSIS template is a copy of cargo-packager's. It must keep the per-user default under
-    /// `Programs` (W4 review), be the one Packager.toml uses, and name the cargo-packager
+    /// `Programs`, be the one Packager.toml uses, and name the cargo-packager
     /// version the release workflow installs, so an upgrade cannot leave a stale copy behind.
     #[test]
     fn nsis_template_installs_under_programs_and_matches_the_packager_version() {

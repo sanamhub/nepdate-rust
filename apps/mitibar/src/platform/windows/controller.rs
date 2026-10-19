@@ -143,7 +143,7 @@ impl WindowsTaskbarText {
 
 impl TaskbarText for WindowsTaskbarText {
     fn set_lines(&self, lines: &TaskbarLines) {
-        // Cannot re-enter: the W1 timer runs between window messages, never while the window
+        // Cannot re-enter: the timer runs between window messages, never while the window
         // procedure holds a borrow, and the refresh under this borrow only sends messages that the
         // window procedure catches with `try_borrow_mut`.
         self.inner.borrow_mut().set_lines(lines);
@@ -400,7 +400,7 @@ impl Controller {
             let _ = ShowWindow(self.text_hwnd, SW_HIDE);
         }
         // Keep the rendered bitmap and `shown` so a hidden refresh never re-renders; the cache is
-        // only cleared when lines, ink or scale change (W1B-05 item 3).
+        // only cleared when lines, ink or scale change.
     }
 
     /// Recreates the text window after Explorer restarted (`TaskbarCreated`).

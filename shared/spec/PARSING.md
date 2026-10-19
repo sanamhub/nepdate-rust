@@ -41,6 +41,10 @@ For human input (e.g. the widget converter). Steps:
      other character folds: the long s `ſ` (U+017F) does not match `s`, and the dotless `ı`
      (U+0131) does not match `i`. Full Unicode case folding (for example Go's
      `strings.EqualFold`) is wrong here (vectors in `parse.tsv`).
+   - No Unicode normalisation: input is matched as given. There is no NFC or NFKC step, and the
+     zero-width joiners U+200C and U+200D are not removed, so `साउन` with a joiner inside is not
+     a month name (vectors in `parse.tsv`). This is the reference behaviour; a port that
+     normalises would accept input that the others reject.
    - Drop tokens that are (case-insensitive) era markers: `BS`, `B.S.`, `B.S`, `VS`,
      `V.S.`, `V.S`, `बि.सं.`, `वि.सं.`, `बि.सं`, `वि.सं`.
    - Drop tokens `गते`, `मिति`.
