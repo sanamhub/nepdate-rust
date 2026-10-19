@@ -101,8 +101,12 @@ export component PopupWindow inherits Window {
     in-out property <string> converter-focused: "";
     in-out property <string> settings-focused: "";
     in-out property <string> detail-focused: "";
+    // A reopened panel starts with nothing focused, not the control focused when it last closed.
+    changed converter-visible => { root.converter-focused = ""; }
+    changed settings-visible => { root.settings-focused = ""; }
+    changed detail-visible => { root.detail-focused = ""; }
 
-    /// The focused control's stable name (W7-01). Read by the interaction test; draws nothing.
+    /// The focused control's stable name. Read by the interaction test; draws nothing.
     out property <string> focused-control:
         root.settings-visible ? root.settings-focused
         : root.converter-visible ? root.converter-focused
@@ -136,7 +140,7 @@ export component PopupWindow inherits Window {
         focus-on-tab-navigation: false;
         focus-lost(reason) => {
             // Only the window losing activation hides the popup. Tab from the root scope to a
-            // child is also a focus loss, and W7 makes that path common.
+            // child is also a focus loss.
             if (reason == FocusReason.window-activation) {
                 root.window-deactivated();
             }

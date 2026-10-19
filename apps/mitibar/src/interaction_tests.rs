@@ -526,6 +526,10 @@ fn tab_and_shift_tab_follow_the_focus_order() {
         forward.push(focused(&popup));
     }
     assert_eq!(forward, order, "Tab order from the root");
+    assert!(
+        popup.window().is_visible(),
+        "moving focus between controls never hides the popup"
+    );
 
     // From the last day, Shift+Tab retraces the order and wraps from the first control to the
     // last. The root is not a stop, so there is no empty step.
@@ -693,6 +697,20 @@ fn overlays_take_and_return_focus() {
     press(&popup, slint::platform::Key::Escape);
     assert!(!popup.get_detail_visible());
     assert_eq!(focused(&popup), "convert", "the base resumes at Convert");
+
+    // A reopened converter does not report the control that had focus when it closed.
+    click(&popup, "Convert");
+    for _ in 0..6 {
+        press(&popup, slint::platform::Key::Tab);
+    }
+    assert_eq!(focused(&popup), "converter input");
+    press(&popup, slint::platform::Key::Escape);
+    click(&popup, "Convert");
+    assert!(popup.get_converter_visible());
+    assert_eq!(focused(&popup), "", "nothing in the reopened converter has focus yet");
+    press(&popup, slint::platform::Key::Tab);
+    assert_eq!(focused(&popup), "converter close");
+    assert!(popup.window().is_visible(), "overlays never hide the popup");
 }
 
 #[test]
