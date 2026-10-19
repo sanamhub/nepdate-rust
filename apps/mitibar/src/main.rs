@@ -242,6 +242,9 @@ struct Cli {
     /// Opens the settings panel in a snapshot (W3-04).
     #[cfg(feature = "snapshot")]
     settings_panel: bool,
+    /// Focuses Next year for a focus-ring snapshot.
+    #[cfg(feature = "snapshot")]
+    focus_year_next: bool,
     /// W5-02: run for this many seconds, then write the UI-wake count and quit. A test tool,
     /// available only with the `snapshot` feature.
     #[cfg(feature = "snapshot")]
@@ -309,6 +312,8 @@ impl Cli {
                 "--converter" => cli.converter = true,
                 #[cfg(feature = "snapshot")]
                 "--settings" => cli.settings_panel = true,
+                #[cfg(feature = "snapshot")]
+                "--focus-year-next" => cli.focus_year_next = true,
                 #[cfg(feature = "snapshot")]
                 "--wake-probe" => {
                     let value = args
@@ -405,6 +410,9 @@ impl Cli {
             }
             if cli.settings_panel && !cli.popup {
                 anyhow::bail!("--settings needs --popup --snapshot");
+            }
+            if cli.focus_year_next && !cli.popup {
+                anyhow::bail!("--focus-year-next needs --popup --snapshot");
             }
         }
         #[cfg(feature = "snapshot")]
@@ -696,6 +704,9 @@ fn snapshot_popup(
         let outcome = converter::convert("2081/01/01", Direction::BsToAd, lang);
         ui_bridge::set_converter(popup, &outcome);
         popup.set_converter_visible(true);
+    }
+    if cli.focus_year_next {
+        popup.invoke_focus_next_year();
     }
     if cli.settings_panel {
         if let Some(theme) = cli.theme {
@@ -1400,5 +1411,27 @@ mod tests {
             Some(std::path::Path::new("C:\\temp\\mitibar-settings.toml"))
         );
         assert!(cli.is_snapshot_tool());
+    }
+
+    #[cfg(feature = "snapshot")]
+    #[test]
+    fn focus_year_flag_needs_a_popup_snapshot() {
+        let cli = Cli::parse(
+            ["--popup", "--snapshot", "focus.png", "--focus-year-next"]
+                .into_iter()
+                .map(str::to_owned),
+        )
+        .expect("parse");
+        assert!(cli.focus_year_next);
+
+        assert!(Cli::parse(["--focus-year-next"].into_iter().map(str::to_owned)).is_err());
+        assert!(
+            Cli::parse(
+                ["--snapshot", "focus.png", "--focus-year-next"]
+                    .into_iter()
+                    .map(str::to_owned)
+            )
+            .is_err()
+        );
     }
 }

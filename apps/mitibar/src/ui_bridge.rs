@@ -41,6 +41,21 @@ pub fn show_popup_at(popup: &PopupWindow, anchor: PopupAnchor) -> anyhow::Result
         PopupAnchor::Above(anchor) => position_above(popup, anchor),
     }
     popup.show()?;
+    // Window deactivation reaches only the focused item. A FocusScope handler would miss a
+    // child control, so the winit filter hides the popup whatever holds focus.
+    {
+        use slint::winit_030::winit::event::WindowEvent as WinitEvent;
+        use slint::winit_030::{EventResult, WinitWindowAccessor};
+        let weak = popup.as_weak();
+        popup.window().on_winit_window_event(move |_window, event| {
+            if matches!(event, WinitEvent::Focused(false))
+                && let Some(popup) = weak.upgrade()
+            {
+                popup.invoke_window_deactivated();
+            }
+            EventResult::Propagate
+        });
+    }
     popup.invoke_focus();
     Ok(())
 }

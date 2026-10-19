@@ -79,6 +79,53 @@ fn click(popup: &PopupWindow, label: &str) {
     element(popup, label).invoke_accessible_default_action();
 }
 
+/// One key press and release. Slint handles Tab on the press.
+fn press(popup: &PopupWindow, key: slint::platform::Key) {
+    for event in [
+        slint::platform::WindowEvent::KeyPressed { text: key.into() },
+        slint::platform::WindowEvent::KeyReleased { text: key.into() },
+    ] {
+        popup.window().dispatch_event(event);
+    }
+    slint::platform::update_timers_and_animations();
+}
+
+/// Shift+Tab: press Shift, tap Tab, release Shift, so Slint sees the modifier.
+fn press_shift_tab(popup: &PopupWindow) {
+    use slint::platform::{Key, WindowEvent};
+    popup.window().dispatch_event(WindowEvent::KeyPressed {
+        text: Key::Shift.into(),
+    });
+    press(popup, Key::Tab);
+    popup.window().dispatch_event(WindowEvent::KeyReleased {
+        text: Key::Shift.into(),
+    });
+}
+
+fn focused(popup: &PopupWindow) -> String {
+    popup.get_focused_control().to_string()
+}
+
+/// The base order from the plan, with the real day labels from the populated cells.
+fn base_order(popup: &PopupWindow) -> Vec<String> {
+    let mut order = [
+        "convert",
+        "previous month",
+        "next month",
+        "month",
+        "year",
+        "previous year",
+        "next year",
+        "today",
+    ]
+    .map(str::to_owned)
+    .to_vec();
+    for cell in popup.get_cells().iter().filter(|cell| !cell.is_padding) {
+        order.push(format!("day {}", cell.bs_day));
+    }
+    order
+}
+
 #[test]
 fn previous_next_and_today_follow_the_range_edges() {
     let (popup, state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
@@ -408,9 +455,19 @@ fn the_visible_year_buttons_step_and_stop_at_the_edges() {
     // action).
     next.mock_single_click(slint::platform::PointerEventButton::Left);
     assert_eq!(popup.get_year(), 2082, "one click is one year");
+    assert_eq!(
+        focused(&popup),
+        "next year",
+        "a click moves focus to the button"
+    );
     let prev = element(&popup, "Previous year");
     prev.mock_single_click(slint::platform::PointerEventButton::Left);
     assert_eq!(popup.get_year(), 2081, "one click is one year");
+    assert_eq!(
+        focused(&popup),
+        "previous year",
+        "a click moves focus to the button"
+    );
 
     // W6-03 AC2: the buttons carry the Devanagari year text and translated labels.
     state.borrow_mut().settings.language = "ne".to_owned();
@@ -455,6 +512,311 @@ fn the_visible_year_buttons_step_and_stop_at_the_edges() {
     let year = element(&popup, "Year");
     year.scroll(0.0, -1.0);
     assert_eq!(popup.get_year(), 2082);
+}
+
+#[test]
+fn tab_and_shift_tab_follow_the_focus_order() {
+    let (popup, _state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+    let order = base_order(&popup);
+    assert_eq!(focused(&popup), "", "the root, not a control");
+
+    let mut forward = Vec::new();
+    for _ in 0..order.len() {
+        press(&popup, slint::platform::Key::Tab);
+        forward.push(focused(&popup));
+    }
+    assert_eq!(forward, order, "Tab order from the root");
+    assert!(
+        popup.window().is_visible(),
+        "moving focus between controls never hides the popup"
+    );
+
+    // From the last day, Shift+Tab retraces the order and wraps from the first control to the
+    // last. The root is not a stop, so there is no empty step.
+    let mut reverse = Vec::new();
+    for _ in 0..order.len() {
+        press_shift_tab(&popup);
+        reverse.push(focused(&popup));
+    }
+    assert_eq!(
+        reverse,
+        order[..order.len() - 1]
+            .iter()
+            .rev()
+            .chain(order[order.len() - 1..].iter())
+            .cloned()
+            .collect::<Vec<_>>(),
+        "Shift+Tab order from the last day"
+    );
+}
+
+#[test]
+fn disabled_and_hidden_controls_are_not_focus_stops() {
+    let (popup, state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+
+    // 1901 Baishakh: Previous month and Previous year are disabled.
+    show_month(&state, 1901, Month::Baishakh);
+    let mut order = Vec::new();
+    for _ in 0..6 {
+        press(&popup, slint::platform::Key::Tab);
+        order.push(focused(&popup));
+    }
+    assert_eq!(
+        order,
+        [
+            "convert",
+            "next month",
+            "month",
+            "year",
+            "next year",
+            "today"
+        ],
+        "1901 skips both previous controls"
+    );
+
+    // 2199 Chaitra: Next month and Next year are disabled.
+    show_month(&state, 2199, Month::Chaitra);
+    popup.invoke_focus();
+    let mut order = Vec::new();
+    for _ in 0..5 {
+        press(&popup, slint::platform::Key::Tab);
+        order.push(focused(&popup));
+    }
+    assert_eq!(
+        order,
+        [
+            "convert",
+            "previous month",
+            "month",
+            "year",
+            "previous year"
+        ],
+        "2199 skips both next controls"
+    );
+
+    // A closed overlay is not in the tree at all.
+    assert_eq!(
+        ElementHandle::find_by_accessible_label(&popup, "Close converter").count(),
+        0
+    );
+    assert_eq!(
+        ElementHandle::find_by_accessible_label(&popup, "Close settings").count(),
+        0
+    );
+}
+
+#[test]
+fn overlays_take_and_return_focus() {
+    let (popup, state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+
+    // The base is inert while the converter is open, so the first Tab enters the overlay.
+    click(&popup, "Convert");
+    assert!(popup.get_converter_visible());
+    assert_eq!(focused(&popup), "", "no base control keeps focus");
+    for expected in [
+        "converter close",
+        "converter convert tab",
+        "converter days tab",
+        "converter bs to ad",
+        "converter ad to bs",
+        "converter input",
+        "converter close",
+    ] {
+        press(&popup, slint::platform::Key::Tab);
+        assert_eq!(focused(&popup), expected, "converter Tab order");
+    }
+    for expected in [
+        "converter input",
+        "converter ad to bs",
+        "converter bs to ad",
+        "converter days tab",
+        "converter convert tab",
+        "converter close",
+    ] {
+        press_shift_tab(&popup);
+        assert_eq!(focused(&popup), expected, "converter Shift+Tab order");
+    }
+
+    press(&popup, slint::platform::Key::Escape);
+    assert!(!popup.get_converter_visible());
+    assert_eq!(focused(&popup), "convert", "the base resumes at Convert");
+    press(&popup, slint::platform::Key::Tab);
+    assert_eq!(
+        focused(&popup),
+        "previous month",
+        "the base order continues"
+    );
+
+    // Settings is opened by the tray menu, so the test sets the flag and refreshes the model.
+    popup.set_settings_visible(true);
+    crate::refresh_settings(&popup, &state);
+    popup.invoke_focus();
+    for expected in [
+        "settings close",
+        "settings language",
+        "settings theme",
+        "settings 24-hour",
+        "settings seconds",
+        "settings filter",
+        "settings no extra clock",
+        "settings launch",
+        "settings taskbar",
+        "settings close",
+    ] {
+        press(&popup, slint::platform::Key::Tab);
+        assert_eq!(focused(&popup), expected, "settings Tab order");
+    }
+    for expected in [
+        "settings taskbar",
+        "settings launch",
+        "settings no extra clock",
+        "settings filter",
+        "settings seconds",
+        "settings 24-hour",
+        "settings theme",
+        "settings language",
+        "settings close",
+    ] {
+        press_shift_tab(&popup);
+        assert_eq!(focused(&popup), expected, "settings Shift+Tab order");
+    }
+    press(&popup, slint::platform::Key::Escape);
+    assert!(!popup.get_settings_visible());
+    assert_eq!(focused(&popup), "convert", "the base resumes at Convert");
+
+    // The day detail holds focus on its two copy buttons.
+    popup.invoke_focus();
+    let label = day_label(&popup, "1");
+    click(&popup, &label);
+    assert!(popup.get_detail_visible());
+    assert_eq!(focused(&popup), "", "no base control keeps focus");
+    for expected in ["detail copy bs", "detail copy ad", "detail copy bs"] {
+        press(&popup, slint::platform::Key::Tab);
+        assert_eq!(focused(&popup), expected, "detail Tab order");
+    }
+    press(&popup, slint::platform::Key::Escape);
+    assert!(!popup.get_detail_visible());
+    assert_eq!(focused(&popup), "convert", "the base resumes at Convert");
+
+    // A reopened converter does not report the control that had focus when it closed.
+    click(&popup, "Convert");
+    for _ in 0..6 {
+        press(&popup, slint::platform::Key::Tab);
+    }
+    assert_eq!(focused(&popup), "converter input");
+    press(&popup, slint::platform::Key::Escape);
+    click(&popup, "Convert");
+    assert!(popup.get_converter_visible());
+    assert_eq!(
+        focused(&popup),
+        "",
+        "nothing in the reopened converter has focus yet"
+    );
+    press(&popup, slint::platform::Key::Tab);
+    assert_eq!(focused(&popup), "converter close");
+    assert!(popup.window().is_visible(), "overlays never hide the popup");
+}
+
+#[test]
+fn return_and_space_step_once_per_press() {
+    let (popup, state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+
+    // Year: one press is one year, the release adds nothing.
+    popup.invoke_focus_next_year();
+    assert_eq!(focused(&popup), "next year");
+    press(&popup, slint::platform::Key::Return);
+    assert_eq!(popup.get_year(), 2082, "Return adds one year");
+    press(&popup, slint::platform::Key::Space);
+    assert_eq!(popup.get_year(), 2083, "Space adds one year");
+    popup
+        .window()
+        .dispatch_event(slint::platform::WindowEvent::KeyReleased {
+            text: slint::platform::Key::Space.into(),
+        });
+    assert_eq!(popup.get_year(), 2083, "the release adds nothing");
+
+    // Month: the same two keys on a standard arrow button.
+    show_month(&state, 2081, Month::Baishakh);
+    popup.invoke_focus();
+    press(&popup, slint::platform::Key::Tab);
+    press(&popup, slint::platform::Key::Tab);
+    assert_eq!(focused(&popup), "previous month");
+    press(&popup, slint::platform::Key::Return);
+    assert!(
+        popup.get_month_title().starts_with("Chaitra 2080"),
+        "Return moves one month back: {}",
+        popup.get_month_title()
+    );
+    press(&popup, slint::platform::Key::Space);
+    assert!(
+        popup.get_month_title().starts_with("Falgun 2080"),
+        "Space moves one month back: {}",
+        popup.get_month_title()
+    );
+}
+
+#[test]
+fn return_and_space_skip_disabled_edges() {
+    // 1901: Previous month and Previous year are skipped.
+    let (popup, _state, _) = app(NepaliDate::new(1901, 1, 1).expect("date"));
+    press(&popup, slint::platform::Key::Tab);
+    press(&popup, slint::platform::Key::Tab);
+    assert_eq!(focused(&popup), "next month", "Previous month is skipped");
+    press(&popup, slint::platform::Key::Return);
+    assert!(popup.get_month_title().starts_with("Jestha 1901"));
+
+    popup.invoke_focus();
+    for _ in 0..6 {
+        press(&popup, slint::platform::Key::Tab);
+    }
+    assert_eq!(focused(&popup), "next year");
+    press(&popup, slint::platform::Key::Space);
+    assert_eq!(popup.get_year(), 1902);
+
+    // 2199: Next month and Next year are skipped.
+    let (popup, _state, _) = app(NepaliDate::new(2199, 12, 30).expect("date"));
+    press(&popup, slint::platform::Key::Tab);
+    press(&popup, slint::platform::Key::Tab);
+    assert_eq!(focused(&popup), "previous month");
+    press(&popup, slint::platform::Key::Space);
+    assert!(popup.get_month_title().starts_with("Falgun 2199"));
+
+    popup.invoke_focus();
+    for _ in 0..6 {
+        press(&popup, slint::platform::Key::Tab);
+    }
+    assert_eq!(focused(&popup), "previous year");
+    press(&popup, slint::platform::Key::Return);
+    assert_eq!(popup.get_year(), 2198);
+}
+
+#[test]
+fn window_deactivation_hides_the_popup_while_a_control_has_focus() {
+    let (popup, _state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+    popup.invoke_focus_next_year();
+    assert_eq!(focused(&popup), "next year");
+
+    // The winit filter calls this when Focused(false) arrives. A FocusScope focus-lost would
+    // reach only the focused button, not the popup root.
+    popup.invoke_window_deactivated();
+    assert!(
+        !popup.window().is_visible(),
+        "the popup hides when the window loses activation"
+    );
+}
+
+#[test]
+fn window_active_changed_hides_the_popup_when_the_root_has_focus() {
+    let (popup, _state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+    assert_eq!(focused(&popup), "", "the root holds focus");
+
+    popup
+        .window()
+        .dispatch_event(slint::platform::WindowEvent::WindowActiveChanged(false));
+    assert!(
+        !popup.window().is_visible(),
+        "the root FocusScope sees the activation loss"
+    );
 }
 
 #[test]

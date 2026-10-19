@@ -11,7 +11,9 @@ events.
 
 All 14 images were re-rendered on 2026-10-19 with the software renderer for W6-02 and again for
 W6-03: the year box now has visible previous-year and next-year buttons beside the language
-digits. Every verdict below stays **not verified**; the reviewer looks at the new images.
+digits. The four `day-detail-*` images were rendered once more for W7-01: the base is inert while
+the detail is open, so the controls behind the scrim draw disabled. Every verdict below stays
+**not verified**; the reviewer looks at the new images.
 
 `--today` and `--detail` exist only in the `snapshot` feature, and the parser rejects them without
 `--popup --snapshot`, so the normal app can never pin its date.

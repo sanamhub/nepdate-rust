@@ -2,6 +2,7 @@
 // provides the text; `ui_bridge::set_detail` fills it. The scrim and the close-on-outside-click
 // live in `popup.slint`.
 
+import { FocusFrame } from "focus-frame.slint";
 import { Theme } from "theme.slint";
 import { Button, ScrollView } from "std-widgets.slint";
 
@@ -20,6 +21,13 @@ export component DayDetail inherits Rectangle {
     in property <DayDetailData> data;
     callback copy-bs();
     callback copy-ad();
+    callback control-focused(string);
+
+    /// The focused control's stable name.
+    out property <string> focused-control: root.active-control;
+    /// Set by the control that gains focus inside the card.
+    in-out property <string> active-control: "";
+    changed active-control => { root.control-focused(root.active-control); }
 
     width: 280px;
     height: 320px;
@@ -91,15 +99,35 @@ export component DayDetail inherits Rectangle {
 
         HorizontalLayout {
             spacing: 8px;
-            Button {
-                text: @tr("Copy BS");
-                accessible-label: @tr("Copy BS");
-                clicked => { root.copy-bs(); }
+            FocusFrame {
+                width: copy-bs-button.width;
+                height: copy-bs-button.height;
+                focused: copy-bs-button.has-focus;
+                copy-bs-button := Button {
+                    text: @tr("Copy BS");
+                    accessible-label: @tr("Copy BS");
+                    clicked => { root.copy-bs(); }
+                    changed has-focus => {
+                        if (copy-bs-button.has-focus) {
+                            root.active-control = "detail copy bs";
+                        }
+                    }
+                }
             }
-            Button {
-                text: @tr("Copy AD");
-                accessible-label: @tr("Copy AD");
-                clicked => { root.copy-ad(); }
+            FocusFrame {
+                width: copy-ad-button.width;
+                height: copy-ad-button.height;
+                focused: copy-ad-button.has-focus;
+                copy-ad-button := Button {
+                    text: @tr("Copy AD");
+                    accessible-label: @tr("Copy AD");
+                    clicked => { root.copy-ad(); }
+                    changed has-focus => {
+                        if (copy-ad-button.has-focus) {
+                            root.active-control = "detail copy ad";
+                        }
+                    }
+                }
             }
         }
     }
