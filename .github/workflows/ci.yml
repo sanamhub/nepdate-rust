@@ -79,7 +79,7 @@ jobs:
       - if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb libxkbcommon-dev libwayland-dev libfontconfig1-dev libdbus-1-dev libgl1 libegl1
+          sudo apt-get install -y xvfb libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev libfontconfig1-dev libdbus-1-dev libgl1 libegl1
       - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # v1
         with:
           toolchain: "1.98"
