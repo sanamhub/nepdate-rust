@@ -4,6 +4,18 @@ All notable changes to MitiBar. Format: [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+### Added
+
+- Keyboard focus order (W7): Tab and Shift+Tab walk the header Convert button, the month and year controls, Today and the day cells, then the open overlay's controls. Disabled edge buttons and padding cells are skipped.
+- `--focus-year-next` (snapshot feature) focuses the next-year button for the W7 focus-ring images.
+
+### Changed
+
+- Return and Space activate the focused year button and month arrow once per press, including the 1901 and 2199 edges (W7-02).
+- Every focusable control draws a 2 px or 3 px `Theme.ink` focus ring in light and dark, replacing the accent-coloured year ring (W7-02).
+- A pointer click on a year button moves focus to it, so a following key press reaches the same button.
+- The popup hides only when the window loses activation, not when focus moves to a control inside it; the base is inert while an overlay is open (W7-01).
+
 ## [0.1.0] - 2026-10-18
 
 ### Added

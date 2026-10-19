@@ -2,6 +2,7 @@
 // Settings item. Every WR-06 key has a control; `ui_bridge` fills the model and `main` applies
 // each change immediately and saves it after 300 ms.
 
+import { FocusFrame } from "focus-frame.slint";
 import { Theme } from "theme.slint";
 import { AboutSlint, Button, ComboBox, LineEdit, ListView, ScrollView, Switch } from "std-widgets.slint";
 
@@ -31,6 +32,13 @@ export component SettingsPanel inherits Rectangle {
     callback taskbar-changed(bool);
     callback filter-zones(string);
     callback closed();
+    callback control-focused(string);
+
+    /// The focused control's stable name (W7-01).
+    out property <string> focused-control: root.active-control;
+    /// Set by the control that gains focus inside the settings panel.
+    in-out property <string> active-control: "";
+    changed active-control => { root.control-focused(root.active-control); }
 
     width: 330px;
     height: 430px;
@@ -55,10 +63,18 @@ export component SettingsPanel inherits Rectangle {
                 vertical-alignment: center;
                 horizontal-stretch: 1;
             }
-            Button {
-                text: @tr("Close");
-                accessible-label: @tr("Close settings");
-                clicked => { root.closed(); }
+            FocusFrame {
+                width: close-button.width;
+                height: close-button.height;
+                focused: close-button.has-focus;
+                close-button := Button {
+                    text: @tr("Close");
+                    accessible-label: @tr("Close settings");
+                    clicked => { root.closed(); }
+                    changed has-focus => {
+                        if (close-button.has-focus) { root.active-control = "settings close"; }
+                    }
+                }
             }
         }
 
@@ -73,38 +89,91 @@ export component SettingsPanel inherits Rectangle {
                 spacing: 8px;
 
                 Text { text: @tr("Language"); color: Theme.ink-muted; font-size: 12px; }
-                ComboBox {
-                    model: ["English", "नेपाली"];
-                    current-index <=> root.data.language-index;
-                    accessible-label: @tr("Language");
-                    selected(_value) => { root.language-picked(root.data.language-index); }
+                FocusFrame {
+                    horizontal-stretch: 1;
+                    height: language-picker.height;
+                    focused: language-picker.has-focus;
+                    language-picker := ComboBox {
+                        width: 100%;
+                        model: ["English", "नेपाली"];
+                        current-index <=> root.data.language-index;
+                        accessible-label: @tr("Language");
+                        selected(_value) => { root.language-picked(root.data.language-index); }
+                        changed has-focus => {
+                            if (language-picker.has-focus) {
+                                root.active-control = "settings language";
+                            }
+                        }
+                    }
                 }
 
                 Text { text: @tr("Theme"); color: Theme.ink-muted; font-size: 12px; }
-                ComboBox {
-                    model: [@tr("System"), @tr("Light"), @tr("Dark")];
-                    current-index <=> root.data.theme-index;
-                    accessible-label: @tr("Theme");
-                    selected(_value) => { root.theme-picked(root.data.theme-index); }
+                FocusFrame {
+                    horizontal-stretch: 1;
+                    height: theme-picker.height;
+                    focused: theme-picker.has-focus;
+                    theme-picker := ComboBox {
+                        width: 100%;
+                        model: [@tr("System"), @tr("Light"), @tr("Dark")];
+                        current-index <=> root.data.theme-index;
+                        accessible-label: @tr("Theme");
+                        selected(_value) => { root.theme-picked(root.data.theme-index); }
+                        changed has-focus => {
+                            if (theme-picker.has-focus) {
+                                root.active-control = "settings theme";
+                            }
+                        }
+                    }
                 }
 
-                Switch {
-                    text: @tr("24-hour clock");
-                    checked <=> root.data.clock-24h;
-                    toggled => { root.clock-changed(root.data.clock-24h); }
+                FocusFrame {
+                    width: clock-switch.width;
+                    height: clock-switch.height;
+                    focused: clock-switch.has-focus;
+                    clock-switch := Switch {
+                        text: @tr("24-hour clock");
+                        checked <=> root.data.clock-24h;
+                        toggled => { root.clock-changed(root.data.clock-24h); }
+                        changed has-focus => {
+                            if (clock-switch.has-focus) {
+                                root.active-control = "settings 24-hour";
+                            }
+                        }
+                    }
                 }
-                Switch {
-                    text: @tr("Show seconds");
-                    checked <=> root.data.show-seconds;
-                    toggled => { root.seconds-changed(root.data.show-seconds); }
+                FocusFrame {
+                    width: seconds-switch.width;
+                    height: seconds-switch.height;
+                    focused: seconds-switch.has-focus;
+                    seconds-switch := Switch {
+                        text: @tr("Show seconds");
+                        checked <=> root.data.show-seconds;
+                        toggled => { root.seconds-changed(root.data.show-seconds); }
+                        changed has-focus => {
+                            if (seconds-switch.has-focus) {
+                                root.active-control = "settings seconds";
+                            }
+                        }
+                    }
                 }
 
                 Text { text: @tr("Extra time zone"); color: Theme.ink-muted; font-size: 12px; }
-                LineEdit {
-                    text <=> root.zone-filter;
-                    placeholder-text: @tr("Filter zones");
-                    accessible-label: @tr("Filter zones");
-                    edited(text) => { root.filter-zones(text); }
+                FocusFrame {
+                    horizontal-stretch: 1;
+                    height: zone-filter.height;
+                    focused: zone-filter.has-focus;
+                    zone-filter := LineEdit {
+                        width: 100%;
+                        text <=> root.zone-filter;
+                        placeholder-text: @tr("Filter zones");
+                        accessible-label: @tr("Filter zones");
+                        edited(text) => { root.filter-zones(text); }
+                        changed has-focus => {
+                            if (zone-filter.has-focus) {
+                                root.active-control = "settings filter";
+                            }
+                        }
+                    }
                 }
                 ListView {
                     height: 96px;
@@ -123,20 +192,50 @@ export component SettingsPanel inherits Rectangle {
                         }
                     }
                 }
-                Button {
-                    text: @tr("No extra clock");
-                    clicked => { root.zone-picked(""); }
+                FocusFrame {
+                    width: no-extra-button.width;
+                    height: no-extra-button.height;
+                    focused: no-extra-button.has-focus;
+                    no-extra-button := Button {
+                        text: @tr("No extra clock");
+                        clicked => { root.zone-picked(""); }
+                        changed has-focus => {
+                            if (no-extra-button.has-focus) {
+                                root.active-control = "settings no extra clock";
+                            }
+                        }
+                    }
                 }
 
-                Switch {
-                    text: @tr("Launch at login");
-                    checked <=> root.data.launch-at-login;
-                    toggled => { root.launch-changed(root.data.launch-at-login); }
+                FocusFrame {
+                    width: launch-switch.width;
+                    height: launch-switch.height;
+                    focused: launch-switch.has-focus;
+                    launch-switch := Switch {
+                        text: @tr("Launch at login");
+                        checked <=> root.data.launch-at-login;
+                        toggled => { root.launch-changed(root.data.launch-at-login); }
+                        changed has-focus => {
+                            if (launch-switch.has-focus) {
+                                root.active-control = "settings launch";
+                            }
+                        }
+                    }
                 }
-                Switch {
-                    text: @tr("Taskbar text (Windows 11)");
-                    checked <=> root.data.taskbar-text;
-                    toggled => { root.taskbar-changed(root.data.taskbar-text); }
+                FocusFrame {
+                    width: taskbar-switch.width;
+                    height: taskbar-switch.height;
+                    focused: taskbar-switch.has-focus;
+                    taskbar-switch := Switch {
+                        text: @tr("Taskbar text (Windows 11)");
+                        checked <=> root.data.taskbar-text;
+                        toggled => { root.taskbar-changed(root.data.taskbar-text); }
+                        changed has-focus => {
+                            if (taskbar-switch.has-focus) {
+                                root.active-control = "settings taskbar";
+                            }
+                        }
+                    }
                 }
 
                 Rectangle { height: 1px; background: Theme.hairline; }

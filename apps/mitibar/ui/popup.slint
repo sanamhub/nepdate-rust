@@ -4,6 +4,7 @@
 import { AppInfo } from "app-info.slint";
 import { Converter, ConverterData } from "converter.slint";
 import { DayDetail, DayDetailData } from "day-detail.slint";
+import { FocusFrame } from "focus-frame.slint";
 import { MonthGrid, CellData } from "month-grid.slint";
 import { SettingsData, SettingsPanel } from "settings.slint";
 import { Theme } from "theme.slint";
@@ -92,6 +93,35 @@ export component PopupWindow inherits Window {
     callback settings-taskbar(bool);
     callback settings-filter-changed(string);
 
+    /// False while an overlay is open, so the base controls leave the Tab cycle.
+    out property <bool> base-interactive:
+        !(root.detail-visible || root.converter-visible || root.settings-visible);
+    /// Set by each overlay when one of its controls gains focus. Kept per overlay so a value
+    /// from a closed panel cannot leak into the next one.
+    in-out property <string> converter-focused: "";
+    in-out property <string> settings-focused: "";
+    in-out property <string> detail-focused: "";
+
+    /// The focused control's stable name (W7-01). Read by the interaction test; draws nothing.
+    out property <string> focused-control:
+        root.settings-visible ? root.settings-focused
+        : root.converter-visible ? root.converter-focused
+        : root.detail-visible ? root.detail-focused
+        : convert-scope.has-focus ? "convert"
+        : fs.has-focus ? ""
+        : grid.focused-control;
+
+    public function focus-next-year() { grid.focus-next-year(); }
+
+    /// Called by the winit focus filter. The FocusScope below also calls it when the root holds
+    /// focus, since window deactivation reaches only the focused item.
+    public function window-deactivated() {
+        if (root.visible) {
+            root.hidden();
+            root.hide();
+        }
+    }
+
     // Forward the window focus to the FocusScope so it receives key events and its focus-lost
     // fires when the popup is deactivated (WR-02 AC2).
     forward-focus: fs;
@@ -102,9 +132,14 @@ export component PopupWindow inherits Window {
     callback hidden();
 
     fs := FocusScope {
-        focus-lost(_) => {
-            root.hidden();
-            root.hide();
+        // The root receives initial focus for Escape and focus-loss, but Tab starts at Convert.
+        focus-on-tab-navigation: false;
+        focus-lost(reason) => {
+            // Only the window losing activation hides the popup. Tab from the root scope to a
+            // child is also a focus loss, and W7 makes that path common.
+            if (reason == FocusReason.window-activation) {
+                root.window-deactivated();
+            }
         }
         key-pressed(event) => {
             if (event.text == Key.Escape) {
@@ -112,17 +147,20 @@ export component PopupWindow inherits Window {
                 if (root.settings-visible) {
                     root.settings-visible = false;
                     root.settings-closed();
+                    convert-scope.focus();
                     return accept;
                 }
                 if (root.converter-visible) {
                     root.converter-visible = false;
                     root.converter-closed();
+                    convert-scope.focus();
                     return accept;
                 }
                 // WR-04 AC3: Escape closes the detail first, then the popup.
                 if (root.detail-visible) {
                     root.detail-visible = false;
                     root.detail-closed();
+                    convert-scope.focus();
                     return accept;
                 }
                 root.hidden();
@@ -145,7 +183,8 @@ export component PopupWindow inherits Window {
             reject
         }
 
-        // Content stacks from the top; the month grid takes the remaining height.
+        // Content stacks from the top; the month grid takes the remaining height. An open
+        // overlay makes the base inert, so Tab cannot reach a control behind the scrim.
         VerticalLayout {
             alignment: start;
             padding: 12px;
@@ -163,9 +202,10 @@ export component PopupWindow inherits Window {
                     horizontal-stretch: 1;
                     vertical-alignment: center;
                 }
-                FocusScope {
+                convert-scope := FocusScope {
                     width: 52px;
                     height: 16px;
+                    enabled: root.base-interactive;
                     accessible-role: button;
                     accessible-label: @tr("Convert");
                     accessible-action-default => {
@@ -188,6 +228,14 @@ export component PopupWindow inherits Window {
                             root.converter-opened();
                         }
                     }
+
+                    FocusFrame {
+                        width: 100%;
+                        height: 100%;
+                        focused: convert-scope.has-focus;
+                        thickness: 2px;
+                        radius: 3px;
+                    }
                 }
             }
             Text { text: root.bs; color: Theme.ink; font-size: 22px; }
@@ -207,6 +255,7 @@ export component PopupWindow inherits Window {
             }
 
             grid := MonthGrid {
+                interactive: root.base-interactive;
                 cells: root.cells;
                 weekday-headers: root.weekday-headers;
                 month-names: root.month-names;
@@ -244,10 +293,12 @@ export component PopupWindow inherits Window {
                 accessible-action-default => {
                     root.detail-visible = false;
                     root.detail-closed();
+                    convert-scope.focus();
                 }
                 clicked => {
                     root.detail-visible = false;
                     root.detail-closed();
+                    convert-scope.focus();
                 }
             }
             DayDetail {
@@ -256,6 +307,7 @@ export component PopupWindow inherits Window {
                 data: root.detail;
                 copy-bs => { root.copy-detail-bs(); }
                 copy-ad => { root.copy-detail-ad(); }
+                control-focused(name) => { root.detail-focused = name; }
             }
         }
 
@@ -272,10 +324,12 @@ export component PopupWindow inherits Window {
                 accessible-action-default => {
                     root.converter-visible = false;
                     root.converter-closed();
+                    convert-scope.focus();
                 }
                 clicked => {
                     root.converter-visible = false;
                     root.converter-closed();
+                    convert-scope.focus();
                 }
             }
             Converter {
@@ -289,9 +343,11 @@ export component PopupWindow inherits Window {
                 direction <=> root.converter-direction;
                 edited(input, direction) => { root.converter-edited(input, direction); }
                 days-edited(from, to) => { root.converter-days-edited(from, to); }
+                control-focused(name) => { root.converter-focused = name; }
                 closed => {
                     root.converter-visible = false;
                     root.converter-closed();
+                    convert-scope.focus();
                 }
             }
         }
@@ -309,10 +365,12 @@ export component PopupWindow inherits Window {
                 accessible-action-default => {
                     root.settings-visible = false;
                     root.settings-closed();
+                    convert-scope.focus();
                 }
                 clicked => {
                     root.settings-visible = false;
                     root.settings-closed();
+                    convert-scope.focus();
                 }
             }
             SettingsPanel {
@@ -328,9 +386,11 @@ export component PopupWindow inherits Window {
                 launch-changed(value) => { root.settings-launch(value); }
                 taskbar-changed(value) => { root.settings-taskbar(value); }
                 filter-zones(text) => { root.settings-filter-changed(text); }
+                control-focused(name) => { root.settings-focused = name; }
                 closed => {
                     root.settings-visible = false;
                     root.settings-closed();
+                    convert-scope.focus();
                 }
             }
         }

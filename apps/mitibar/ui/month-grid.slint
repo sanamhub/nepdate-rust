@@ -2,6 +2,7 @@
 // 7-column grid, and the next-holiday line. Presentation only: `app::MonthView` decides the
 // cells, `ui_bridge.rs` converts them, and this file never calls `nepdate`.
 
+import { FocusFrame } from "focus-frame.slint";
 import { Theme } from "theme.slint";
 import { Button, ComboBox, Palette } from "std-widgets.slint";
 
@@ -23,11 +24,13 @@ export struct CellData {
 component DayCell inherits Rectangle {
     in property <CellData> data;
     in property <int> index;
+    in property <bool> interactive: true;
     /// The AD day's size: 13 px for Latin, 12 px for Devanagari (widget-design §3/§4).
     in property <length> ad-day-size: 13px;
     /// The tithi's size: the 11 px Latin caption step, 12 px for Devanagari (W3-00b).
     in property <length> tithi-size: 12px;
     callback clicked(int);
+    callback focused(string);
 
     horizontal-stretch: 1;
     // Two lines on the 4 px grid: 4 px padding, a 20 px numeral line and a 16 px tithi line,
@@ -40,8 +43,8 @@ component DayCell inherits Rectangle {
     fs := FocusScope {
         width: 100%;
         height: 100%;
-        enabled: !data.is-padding;
-        focus-on-tab-navigation: !data.is-padding;
+        enabled: root.interactive && !data.is-padding;
+        focus-on-tab-navigation: root.interactive && !data.is-padding;
         accessible-role: button;
         accessible-label: data.accessible-label;
         // The same action a screen reader invokes (W3-00a).
@@ -54,6 +57,11 @@ component DayCell inherits Rectangle {
                 return accept;
             }
             reject
+        }
+        changed has-focus => {
+            if (fs.has-focus) {
+                root.focused(data.bs-day);
+            }
         }
 
         TouchArea {
@@ -113,10 +121,23 @@ component DayCell inherits Rectangle {
             overflow: elide;
             visible: data.tithi != "";
         }
+
+        // Inset so the 2 px today ring outside it stays visible when a day is focused.
+        FocusFrame {
+            x: 3px;
+            y: 3px;
+            width: parent.width - 6px;
+            height: parent.height - 6px;
+            focused: fs.has-focus;
+            thickness: 2px;
+            radius: 3px;
+        }
     }
 }
 
 export component MonthGrid inherits Rectangle {
+    /// False while an overlay covers the popup; every control leaves the Tab cycle.
+    in property <bool> interactive: true;
     in property <[CellData]> cells;
     in property <[string]> weekday-headers;
     in property <[string]> month-names;
@@ -143,17 +164,35 @@ export component MonthGrid inherits Rectangle {
     callback year-picked(int);
     callback wheel(int);
 
+    /// Used by the snapshot tool and the keyboard tests to put focus on a known control.
+    public function focus-next-year() {
+        year-next.focus();
+    }
+
+    /// The focused control's stable name (W7-01). Read by the interaction test; draws nothing.
+    out property <string> focused-control: root.active-control;
+    /// Set by the control that gains focus inside the grid.
+    in-out property <string> active-control: "";
+
     VerticalLayout {
         spacing: 4px;
 
         // Title with the previous and next buttons (WR-03 AC5, AC6).
         HorizontalLayout {
             spacing: 4px;
-            Button {
-                text: "<";
-                accessible-label: @tr("Previous month");
-                enabled: root.can-prev;
-                clicked => { root.prev-month(); }
+            FocusFrame {
+                width: month-prev.width;
+                height: month-prev.height;
+                focused: month-prev.has-focus;
+                month-prev := Button {
+                    text: "<";
+                    accessible-label: @tr("Previous month");
+                    enabled: root.interactive && root.can-prev;
+                    clicked => { root.prev-month(); }
+                    changed has-focus => {
+                        if (month-prev.has-focus) { root.active-control = "previous month"; }
+                    }
+                }
             }
             Text {
                 text: root.title;
@@ -163,11 +202,19 @@ export component MonthGrid inherits Rectangle {
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
-            Button {
-                text: ">";
-                accessible-label: @tr("Next month");
-                enabled: root.can-next;
-                clicked => { root.next-month(); }
+            FocusFrame {
+                width: month-next.width;
+                height: month-next.height;
+                focused: month-next.has-focus;
+                month-next := Button {
+                    text: ">";
+                    accessible-label: @tr("Next month");
+                    enabled: root.interactive && root.can-next;
+                    clicked => { root.next-month(); }
+                    changed has-focus => {
+                        if (month-next.has-focus) { root.active-control = "next month"; }
+                    }
+                }
             }
         }
 
@@ -177,12 +224,21 @@ export component MonthGrid inherits Rectangle {
         // review); the spacer keeps Today at the right edge.
         HorizontalLayout {
             spacing: 4px;
-            ComboBox {
-                model: root.month-names;
-                current-index <=> root.month-index;
-                accessible-label: @tr("Month");
-                width: 128px;
-                selected(_value) => { root.month-picked(root.month-index); }
+            FocusFrame {
+                width: month-picker.width;
+                height: month-picker.height;
+                focused: month-picker.has-focus;
+                month-picker := ComboBox {
+                    model: root.month-names;
+                    current-index <=> root.month-index;
+                    accessible-label: @tr("Month");
+                    enabled: root.interactive;
+                    width: 128px;
+                    selected(_value) => { root.month-picked(root.month-index); }
+                    changed has-focus => {
+                        if (month-picker.has-focus) { root.active-control = "month"; }
+                    }
+                }
             }
             // W5-04: the standard `SpinBox` shows ASCII digits in Nepali. This control shows
             // `root.year-text` from Rust, keeps the 1901 to 2199 range, and steps by keyboard,
@@ -192,6 +248,7 @@ export component MonthGrid inherits Rectangle {
             year-scope := FocusScope {
                 width: 112px;
                 height: 32px;
+                enabled: root.interactive;
                 accessible-role: spinbox;
                 accessible-label: @tr("Year");
                 accessible-value: root.year-text;
@@ -220,14 +277,14 @@ export component MonthGrid inherits Rectangle {
                     }
                     reject
                 }
+                focus-gained(_) => { root.active-control = "year"; }
 
                 Rectangle {
                     border-radius: 4px;
                     background: Palette.control-background;
-                    // W5 review: a keyboard user must see where focus is, as with the
-                    // standard SpinBox this control replaced.
-                    border-width: year-scope.has-focus ? 2px : 1px;
-                    border-color: year-scope.has-focus ? Palette.accent-background : Palette.border;
+                    // W7: the focus ring is the design token's ink, drawn over this box below.
+                    border-width: 1px;
+                    border-color: Palette.border;
 
                     Text {
                         x: 26px;
@@ -266,8 +323,8 @@ export component MonthGrid inherits Rectangle {
                     height: 28px;
                     accessible-role: button;
                     accessible-label: @tr("Previous year");
-                    accessible-enabled: root.year > 1901;
-                    enabled: root.year > 1901;
+                    accessible-enabled: root.interactive && root.year > 1901;
+                    enabled: root.interactive && root.year > 1901;
                     focus-on-tab-navigation: true;
                     accessible-action-default => {
                         if (root.year > 1901) { root.year-picked(root.year - 1); }
@@ -279,12 +336,13 @@ export component MonthGrid inherits Rectangle {
                         }
                         reject
                     }
+                    focus-gained(_) => { root.active-control = "previous year"; }
 
                     Rectangle {
                         border-radius: 3px;
                         background: transparent;
                         border-width: year-prev.has-focus ? 2px : 0px;
-                        border-color: Palette.accent-background;
+                        border-color: Theme.ink;
                     }
 
                     Text {
@@ -298,6 +356,7 @@ export component MonthGrid inherits Rectangle {
 
                     TouchArea {
                         clicked => {
+                            year-prev.focus();
                             if (root.year > 1901) { root.year-picked(root.year - 1); }
                         }
                     }
@@ -310,8 +369,8 @@ export component MonthGrid inherits Rectangle {
                     height: 28px;
                     accessible-role: button;
                     accessible-label: @tr("Next year");
-                    accessible-enabled: root.year < 2199;
-                    enabled: root.year < 2199;
+                    accessible-enabled: root.interactive && root.year < 2199;
+                    enabled: root.interactive && root.year < 2199;
                     focus-on-tab-navigation: true;
                     accessible-action-default => {
                         if (root.year < 2199) { root.year-picked(root.year + 1); }
@@ -323,12 +382,13 @@ export component MonthGrid inherits Rectangle {
                         }
                         reject
                     }
+                    focus-gained(_) => { root.active-control = "next year"; }
 
                     Rectangle {
                         border-radius: 3px;
                         background: transparent;
                         border-width: year-next.has-focus ? 2px : 0px;
-                        border-color: Palette.accent-background;
+                        border-color: Theme.ink;
                     }
 
                     Text {
@@ -342,16 +402,35 @@ export component MonthGrid inherits Rectangle {
 
                     TouchArea {
                         clicked => {
+                            year-next.focus();
                             if (root.year < 2199) { root.year-picked(root.year + 1); }
                         }
                     }
                 }
+
+                FocusFrame {
+                    x: 0;
+                    y: 0;
+                    width: 100%;
+                    height: 100%;
+                    focused: year-scope.has-focus;
+                    thickness: 2px;
+                }
             }
             Rectangle { horizontal-stretch: 1; }
-            Button {
-                text: @tr("Today");
-                accessible-label: @tr("Today");
-                clicked => { root.today(); }
+            FocusFrame {
+                width: today-button.width;
+                height: today-button.height;
+                focused: today-button.has-focus;
+                today-button := Button {
+                    text: @tr("Today");
+                    accessible-label: @tr("Today");
+                    enabled: root.interactive;
+                    clicked => { root.today(); }
+                    changed has-focus => {
+                        if (today-button.has-focus) { root.active-control = "today"; }
+                    }
+                }
             }
         }
 
@@ -383,11 +462,13 @@ export component MonthGrid inherits Rectangle {
                 for cell[i] in root.cells: DayCell {
                     data: cell;
                     index: i;
+                    interactive: root.interactive;
                     ad-day-size: root.ad-day-size;
                     tithi-size: root.tithi-size;
                     row: i / 7;
                     col: mod(i, 7);
                     clicked(index) => { root.day-clicked(index); }
+                    focused(day) => { root.active-control = "day " + day; }
                 }
             }
         }

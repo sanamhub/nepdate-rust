@@ -27,11 +27,17 @@ Rules:
 
 - Tab moves forward, Shift+Tab moves backward. The order is the reading order of the controls,
   top to bottom and left to right.
-- Opening an overlay moves focus to its first control. Closing it returns focus to the popup
-  root, so the next Tab starts at the first base control. The base is disabled while an
-  overlay is open, so focus cannot reach a control behind the scrim.
-- The popup root is not a Tab stop. It receives initial focus so Escape and focus-loss hiding
-  work, then the first Tab enters the base order.
+- Opening an overlay makes the base inert. The next Tab enters the overlay at its first
+  control, because no base control is in the cycle. Closing the overlay returns focus to the
+  header Convert button, the first base control. Slint ignores a `focus()` call made before
+  the overlay is attached to the window, so W7 does not promise focus on the opening click.
+- The popup root is not a Tab stop. It receives initial focus so Escape works, then the first
+  Tab enters the base order. Moving focus to a control inside the popup is not a window focus
+  loss and does not hide it.
+- The popup hides when winit reports `Focused(false)`. A FocusScope `focus-lost` handler cannot
+  do this once a child holds focus, because Slint sends that event only to the focused item. The
+  root `FocusScope` keeps a `WindowActivation` fallback for the case where the root itself holds
+  focus.
 - These are not Tab stops: padding day cells, disabled controls at the 1901 and 2199 edges,
   hidden overlays, static text, weekday headers, scrims, and the settings zone rows. The zone
   rows stay pointer-only; the filter above them is keyboard reachable. See Limits.
@@ -57,9 +63,10 @@ AC:
    year are skipped at 1901 Baishakh, that Next month and Next year are skipped at 2199
    Chaitra, and that padding cells never appear. It also checks that converter and settings
    controls are absent while their overlays are closed.
-3. `overlays_take_and_return_focus` opens the converter, asserts that Close converter has focus,
-   walks its order with Tab and Shift+Tab, closes it with Escape, and asserts that the next Tab
-   reaches Convert. The same check covers settings and the day detail.
+3. `overlays_take_and_return_focus` opens the converter, presses Tab once and asserts that
+   Close converter has focus, walks its order with Tab and Shift+Tab, closes it with Escape,
+   and asserts that focus returns to Convert and the next Tab reaches Previous month. The same
+   check covers settings and the day detail.
 4. The focused control is reported at every step; a missed or extra stop fails with the
    sequence, not only the final count.
 

@@ -7,7 +7,9 @@ Generated on Windows 11 with the MSVC toolchain. Each PNG is the popup rendered 
 `--popup --snapshot`. `--today` pins the date and the clock to 12:00, so a re-render is stable.
 
 The 18 converter and settings images and the two `tithi-after` images were re-rendered on
-2026-10-19 with the software renderer (W6-02) and again after the W6-03 year buttons.
+2026-10-19 with the software renderer (W6-02) and again after the W6-03 year buttons. The 16
+converter and settings images were rendered once more for W7-01: the base is inert while an
+overlay is open, so the controls behind the scrim draw disabled.
 `tithi-before-light-en-1x.png` is the historical femtovg image and was not re-rendered; it
 records the pre-W3-00b layout.
 

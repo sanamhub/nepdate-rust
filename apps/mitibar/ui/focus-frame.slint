@@ -1,0 +1,22 @@
+// A token-coloured focus frame for a standard Slint widget. The standard widgets draw their own
+// 3 px Fluent focus border (2 px outer, 1 px inner); this overlay sits on top of the same bounds
+// and replaces it with the design token's ink. The caller sets width and height from the child.
+import { Theme } from "theme.slint";
+
+export component FocusFrame inherits Rectangle {
+    in property <bool> focused;
+    in property <length> radius: 4px;
+    in property <length> thickness: 3px;
+
+    @children
+
+    Rectangle {
+        width: 100%;
+        height: 100%;
+        visible: focused;
+        border-width: thickness;
+        border-radius: radius;
+        border-color: Theme.ink;
+        background: transparent;
+    }
+}
