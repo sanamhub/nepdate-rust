@@ -169,7 +169,7 @@ export component MonthGrid inherits Rectangle {
         year-next.focus();
     }
 
-    /// The focused control's stable name (W7-01). Read by the interaction test; draws nothing.
+    /// The focused control's stable name. Read by the interaction test; draws nothing.
     out property <string> focused-control: root.active-control;
     /// Set by the control that gains focus inside the grid.
     in-out property <string> active-control: "";
@@ -282,7 +282,7 @@ export component MonthGrid inherits Rectangle {
                 Rectangle {
                     border-radius: 4px;
                     background: Palette.control-background;
-                    // W7: the focus ring is the design token's ink, drawn over this box below.
+                    // The focus ring is the design token's ink, drawn over this box below.
                     border-width: 1px;
                     border-color: Palette.border;
 

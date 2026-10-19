@@ -64,7 +64,7 @@ mod tests {
         );
     }
 
-    /// The W7 focus ring uses `ink`. WCAG 2.1 wants at least 3:1 for a non-text indicator;
+    /// The focus ring uses `ink`. WCAG 2.1 wants at least 3:1 for a non-text indicator;
     /// measure it against the two surfaces and the Fluent control background (white at 70 % in
     /// light, white at 6 % in dark, both over the surface).
     #[test]

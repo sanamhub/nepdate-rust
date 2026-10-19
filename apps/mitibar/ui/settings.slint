@@ -34,7 +34,7 @@ export component SettingsPanel inherits Rectangle {
     callback closed();
     callback control-focused(string);
 
-    /// The focused control's stable name (W7-01).
+    /// The focused control's stable name.
     out property <string> focused-control: root.active-control;
     /// Set by the control that gains focus inside the settings panel.
     in-out property <string> active-control: "";

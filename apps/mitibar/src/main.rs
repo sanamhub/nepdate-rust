@@ -242,7 +242,7 @@ struct Cli {
     /// Opens the settings panel in a snapshot (W3-04).
     #[cfg(feature = "snapshot")]
     settings_panel: bool,
-    /// Focuses Next year for a W7 focus-ring snapshot.
+    /// Focuses Next year for a focus-ring snapshot.
     #[cfg(feature = "snapshot")]
     focus_year_next: bool,
     /// W5-02: run for this many seconds, then write the UI-wake count and quit. A test tool,
