@@ -28,7 +28,7 @@ name = "no_alloc"
 harness = false
 
 # The C# catalogue's DateTimeExtensionsTests rows test the core's jiff and chrono conversions
-#. Same jiff features as the core, so no system time zone code is built.
+# Same jiff features as the core, so no system time zone code is built.
 [dev-dependencies]
 nepdate = { path = "../nepdate", features = ["jiff", "chrono"] }
 jiff = { version = "0.2", default-features = false, features = ["std", "tzdb-bundle-platform", "tzdb-zoneinfo", "tzdb-concatenated"] }

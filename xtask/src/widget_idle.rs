@@ -1,12 +1,12 @@
-//! `cargo xtask widget-idle` (W5-01): measure the release widget's idle footprint on Windows.
+//! `cargo xtask widget-idle`: measure the release widget's idle footprint on Windows.
 //!
 //! The harness builds `release-widget`, starts it with a temporary settings file
 //! (`launch_at_login = false`) through the app's `--settings-file` flag, waits 15 s, then samples
 //! private bytes, working set, process CPU, thread count and the all-CPU load every 5 s. It writes
-//! `docs/benchmarks/widget/<date>/idle.json`, kills the process, removes the temporary files and
+//! `target/mitibar-idle/<date>/idle.json`, kills the process, removes the temporary files and
 //! checks that no `HKCU\...\Run` value `mitibar` was created.
 //!
-//! The load rule (W5 plan): a row is LOADED when the all-CPU mean before the row or any sample
+//! The load rule: a row is LOADED when the all-CPU mean before the row or any sample
 //! during it, excluding the measured process's own CPU time, is 15 % or more. A loaded row is
 //! reported and gets no verdict.
 
@@ -25,7 +25,7 @@ const DEFAULT_MINUTES: u32 = 5;
 const WARMUP: Duration = Duration::from_secs(15);
 const SAMPLE: Duration = Duration::from_secs(5);
 /// ADR-0018 (redefining the ADR-0008 §C idle memory row): private bytes at most 40 MB. The
-/// harness uses 40 MiB, the unit W4 has reported in. The working set is recorded, not judged.
+/// harness uses 40 MiB, the unit used by ADR-0018. The working set is recorded, not judged.
 const PRIVATE_TARGET_BYTES: u64 = 40 * 1024 * 1024;
 /// ADR-0008 §C says "about 0 %". Half a percent of one core is the harness's testable edge.
 const CPU_TARGET_PERCENT: f64 = 0.5;
@@ -62,7 +62,7 @@ fn parse_minutes(value: Option<&str>) -> Result<u32> {
     Ok(minutes)
 }
 
-/// The W5 load rule: the mean before the row or any sample during it is 15.0 % or more.
+/// The load rule: the mean before the row or any sample during it is 15.0 % or more.
 pub(crate) fn is_loaded(before_mean: f64, during: &[f64]) -> bool {
     before_mean >= 15.0 || during.iter().any(|sample| *sample >= 15.0)
 }
@@ -173,7 +173,7 @@ fn windows_run(minutes: u32) -> Result<()> {
 
     let measurement = result?;
     let date = local_date()?;
-    let out_dir = root.join("docs/benchmarks/widget").join(&date);
+    let out_dir = root.join("target/mitibar-idle").join(&date);
     std::fs::create_dir_all(&out_dir).with_context(|| format!("create {}", out_dir.display()))?;
     let out = out_dir.join("idle.json");
     std::fs::write(&out, serde_json::to_string_pretty(&measurement.to_json())?)
@@ -190,7 +190,7 @@ fn measure(child: &mut std::process::Child, minutes: u32) -> Result<Measurement>
     let process = Process::open(pid)?;
     let mut previous = process.snapshot(pid)?;
     let mut warmup = Vec::new();
-    // Three 5 s samples: 15 s after start, as the plan says, so fonts and caches are warm.
+    // Three 5 s samples: 15 s after start, so fonts and caches are warm.
     for _ in 0..3 {
         std::thread::sleep(SAMPLE);
         if let Some(status) = child.try_wait()? {
@@ -642,7 +642,7 @@ mod tests {
             memory_verdict(PRIVATE_TARGET_BYTES + 1, true),
             Verdict::Loaded
         );
-        // The W5 quiet rows under ADR-0018: software passes, femtovg misses.
+        // The quiet rows under ADR-0018: software passes, femtovg misses.
         assert_eq!(memory_verdict(36_364_288, false), Verdict::Pass);
         assert_eq!(memory_verdict(64_791_552, false), Verdict::Miss);
 
