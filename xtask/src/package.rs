@@ -3,7 +3,9 @@
 //! runs `cargo-packager` with `apps/mitibar/Packager.toml` and the formats for this OS.
 //! Windows also gets the portable `.zip` that ADR-0012 lists next to the NSIS installer.
 
-use std::path::{Path, PathBuf};
+#[cfg(windows)]
+use std::path::Path;
+use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::{Context, Result, bail};

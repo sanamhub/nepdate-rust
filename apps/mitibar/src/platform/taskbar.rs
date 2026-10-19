@@ -14,6 +14,8 @@ pub struct MenuLabels {
 }
 
 /// A WR-01 AC5 menu item, shared by the tray menu and the taskbar text's right-click menu.
+/// Only the Windows taskbar text sends one; elsewhere the app's handler is never called.
+#[cfg_attr(not(windows), allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuItem {
     Open,
@@ -24,6 +26,7 @@ pub enum MenuItem {
 }
 
 /// Events the taskbar text delivers to the app (ADR-0016 point 7).
+#[cfg_attr(not(windows), allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TaskbarEvent {
     /// Left click: toggle the popup above `anchor` (the text window, in screen coordinates).

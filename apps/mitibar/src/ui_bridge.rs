@@ -229,12 +229,15 @@ pub fn reset_converter(popup: &PopupWindow, today: NepaliDate, lang: Lang) {
     set_converter(popup, &ConvertOutcome::Empty);
 }
 
-/// Every IANA zone in jiff's bundled database, sorted (WR-06 AC4).
+/// Every IANA zone that `TimeZone::get` can load, sorted (WR-06 AC4). That is jiff's bundled
+/// database on Windows and the system zoneinfo on macOS and Linux, where jiff bundles nothing.
+/// The zoneinfo helper files are not zones a person would pick, so they are left out.
 #[must_use]
 pub fn all_time_zones() -> Vec<String> {
-    let mut zones: Vec<String> = jiff::tz::TimeZoneDatabase::bundled()
+    let mut zones: Vec<String> = jiff::tz::db()
         .available()
         .map(|name| name.as_str().to_owned())
+        .filter(|name| !matches!(name.as_str(), "Factory" | "localtime" | "posixrules"))
         .collect();
     zones.sort();
     zones.dedup();
