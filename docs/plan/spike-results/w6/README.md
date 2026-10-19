@@ -47,9 +47,9 @@ English/Nepali split is covered by the W2/W3 popup sheets.
 | Tithi width | `tithi-*.png` | 3: before light en 1x, after light en 1x, after light ne 1x |
 | Font test | `font-test-*.png` | 4: light/dark, 1x/2x |
 
-55 sheets in total: 51 popup sheets at all eight combinations of theme, language and scale,
-three tithi-width images, and four font-test images. The 33 committed W2/W3 images keep their
-original flags; the other 18 fill the combinations the committed set did not cover.
+55 sheets in total: 48 popup sheets at all eight combinations of theme, language and scale,
+three tithi-width popup images, and four font-test images. The 33 committed W2/W3 images keep
+their original flags; the other 18 fill the combinations the committed set did not cover.
 
 `tithi-before-light-en-1x.png` is a historical layout image, not a current snapshot. The left
 side is the current code, so it differs from the right side by the known W3-00b change: the
@@ -102,7 +102,7 @@ No entry is "differs, acceptable" and none is "wrong".
 
 - [diff.json](diff.json) has the size, changed-pixel count, maximum channel delta and mean
   absolute delta for every sheet. It is a check that the layouts line up, not a quality score.
-- [sheets/](sheets/) holds the 37 side-by-side images, software left and femtovg right.
+- [sheets/](sheets/) holds the 55 side-by-side images, software left and femtovg right.
 - [render_sheets.py](render_sheets.py) is the generator. It needs Pillow and runs from the
   repository root.
 - Only Windows x64 was checked. macOS and Linux Devanagari rendering is still **not verified**
