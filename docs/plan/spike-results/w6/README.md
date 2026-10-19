@@ -23,10 +23,11 @@ software image. It uses the same snapshot flags recorded in the W2 and W3 README
 `--popup --snapshot <png> --theme light --lang ne --today 2083-07-01`. It writes a temporary
 file per render and keeps only the sheets and `diff.json`.
 
-The right side is the committed femtovg image. Eighteen W2 combinations had no committed
-image, so their femtovg reference was rendered before W6-02 and committed under `femtovg/`.
-The two 2x font-test images also had no committed counterpart and are committed there. The
-sheets label the former "femtovg (rendered for W6-01)" and the latter "femtovg (committed)".
+The right side is the femtovg image preserved under `femtovg/`. There is one reference for each
+of the 55 sheets: the 33 images committed at W6-01, the 18 W2 combinations that were not
+committed before, and the four font-test images at 1x/2x in light and dark. W6-02 later replaced the W2/W3 PNGs
+with the software render; these references keep this check reproducible. Every sheet labels the
+right side "femtovg (W6-01 reference)".
 
 The font-test window has no language flag. It holds both the Devanagari strings and the Latin
 fallback line, so its four sheets cover the strings at 1x and 2x in light and dark. The

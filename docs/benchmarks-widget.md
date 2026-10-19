@@ -238,3 +238,29 @@ condition that W6-01 shows Devanagari renders correctly with it: every committed
 was rendered with femtovg, and the software-renderer rows above measured memory, not text.
 `cargo xtask widget-idle` now prints the private-bytes verdict and the working set as recorded
 only.
+
+## W6-02 renderer switch (2026-10-19)
+
+W6-01 passed, so ADR-0018's condition is met and MitiBar now asks Slint for the software renderer
+only: `slint` has `default-features = false` and the features `std`, `backend-winit`,
+`renderer-software`, `accessibility`, `compat-1-2`, `system-tray` and `unstable-winit-030`. The
+`release-widget` binary was built before and after the feature change on the same Windows x64
+machine:
+
+| Build | Bytes | MiB |
+|---|---|---|
+| femtovg default, before | 12,500,992 | 11.922 |
+| software only, after | 12,073,984 | 11.514 |
+| change | -427,008 | -0.407 |
+
+`cargo tree -p mitibar -e features` contains no line with `femtovg`, `glow`, `glutin` or
+`opengl`. The output is committed as `docs/plan/spike-results/w6/cargo-tree.txt`. A default
+snapshot render without `SLINT_BACKEND` is byte-identical to the explicit
+`SLINT_BACKEND=winit-software` render (SHA-256
+`e3734f6908f3f6fe1b4829d4d2810f54ae14135de7693460a75094221e1d30d2`).
+
+`cargo xtask renderer-check` runs that tree command in CI and fails on any of the four names.
+Negative control: adding `renderer-femtovg` to the app's Slint features makes the command exit 1
+and print the `i-slint-renderer-femtovg`, `femtovg`, `glow` and `glutin` lines. Reverting the
+feature makes it pass again.
+

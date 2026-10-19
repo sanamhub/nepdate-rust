@@ -30,6 +30,7 @@ All notable changes to MitiBar. Format: [Keep a Changelog](https://keepachangelo
 ### Changed
 
 - The popup is created on first open instead of at startup, and the single-instance listener wakes the UI thread instead of being polled every 250 ms (W5-02, W5-03).
+- MitiBar renders with Slint's software renderer; femtovg and its OpenGL stack leave the dependency (W6-02, ADR-0018).
 - The month header's year box and Copy AD use the active language's digits, like Copy BS (W5-04).
 - Windows signing runs on `mitibar.exe` before packaging and on the NSIS setup afterward; macOS signs `MitiBar.app` before the DMG and notarizes and staples the DMG (W5-05).
 - Renamed the app to MitiBar (ADR-0017): the tray tooltip's first line, the popup window title and the binary are MitiBar, and the crate, folders, gettext domain, window classes and release tag use `mitibar`.

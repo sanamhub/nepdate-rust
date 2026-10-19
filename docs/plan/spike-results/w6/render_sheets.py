@@ -3,9 +3,9 @@
 
 The popup and font-test snapshots are produced by the app's snapshot feature:
 `--popup --snapshot ...` or `--font-test --snapshot ...`. Software images are
-rendered now with `SLINT_BACKEND=winit-software`; the right side is always a
-committed femtovg image. The two 2x font-test reference images were rendered
-with femtovg before W6-02 and committed under `femtovg/`.
+rendered now with `SLINT_BACKEND=winit-software`; the right side is the femtovg
+image preserved under `femtovg/` when W6-01 was made. W6-02 then replaces the
+W2/W3 PNGs with the software render.
 
 Usage, from the repository root:
 
@@ -39,7 +39,8 @@ class Case:
     args: tuple[str, ...]
     scale: str
     right: str
-    right_label: str = "femtovg (committed)"
+    target: str | None = None
+    right_label: str = "femtovg (W6-01 reference)"
 
 
 POPUP = ("--popup",)
@@ -58,6 +59,7 @@ def w2(name: str, today: tuple[str, ...], theme: str, lang: str, scale: str) -> 
         name,
         POPUP + today + ("--theme", theme, "--lang", lang),
         scale,
+        f"w6/femtovg/{name}.png",
         f"w2/{name}.png",
     )
 
@@ -82,7 +84,7 @@ def w2_extra(
         POPUP + today + ("--theme", theme, "--lang", lang),
         scale,
         f"w6/femtovg/{name}.png",
-        "femtovg (rendered for W6-01)",
+        None,
     )
 
 
@@ -98,6 +100,7 @@ def w3(
         name,
         mode + today + ("--theme", theme, "--lang", lang),
         scale,
+        f"w6/femtovg/{name}.png",
         f"w3/{name}.png",
     )
 
@@ -169,9 +172,7 @@ CASES: tuple[Case, ...] = (
             f"font-test-{theme}-{scale}",
             FONT + ("--theme", theme),
             scale,
-            f"windows-{theme}.png"
-            if scale == "1x"
-            else f"w6/femtovg/font-test-{theme}-2x.png",
+            f"w6/femtovg/font-test-{theme}-{scale}.png",
         )
         for theme in ("light", "dark")
         for scale in ("1x", "2x")
@@ -285,11 +286,36 @@ def main() -> int:
         action="store_true",
         help="render the missing femtovg references; run before W6-02",
     )
+    parser.add_argument(
+        "--write-committed",
+        action="store_true",
+        help="re-render the committed W2/W3 PNGs with the software renderer",
+    )
     args = parser.parse_args()
 
     binary = args.binary.resolve()
     if not binary.exists():
         parser.error(f"no binary at {binary}")
+
+    if args.write_committed:
+        targets = [
+            c
+            for c in CASES
+            if c.target is not None and c.name != "tithi-before-light-en-1x"
+        ]
+        with tempfile.TemporaryDirectory(prefix="mitibar-w6-") as tmp:
+            temp = Path(tmp)
+            for index, case in enumerate(targets, 1):
+                print(
+                    f"[{index}/{len(targets)}] snapshot {case.name}",
+                    flush=True,
+                )
+                rendered = run(case, binary, temp)
+                assert case.target is not None
+                target = OUT.parent / case.target
+                target.write_bytes(rendered.read_bytes())
+        print(f"wrote {len(targets)} committed snapshots")
+        return 0
 
     if args.make_femtovg_references:
         references = [
