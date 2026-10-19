@@ -188,6 +188,7 @@ export component MonthGrid inherits Rectangle {
             // `root.year-text` from Rust, keeps the 1901 to 2199 range, and steps by keyboard,
             // mouse wheel or the accessibility increment/decrement actions. The range edges
             // disable those actions instead of wrapping.
+            // W6-03: visible 24 px buttons give pointer and touch users the same steps.
             year-scope := FocusScope {
                 width: 112px;
                 height: 32px;
@@ -229,6 +230,9 @@ export component MonthGrid inherits Rectangle {
                     border-color: year-scope.has-focus ? Palette.accent-background : Palette.border;
 
                     Text {
+                        x: 26px;
+                        width: parent.width - 52px;
+                        height: 100%;
                         text: root.year-text;
                         color: Palette.control-foreground;
                         font-size: 14px;
@@ -249,6 +253,96 @@ export component MonthGrid inherits Rectangle {
                                 return accept;
                             }
                             reject
+                        }
+                    }
+                }
+
+                // 24 by 28 px inside the 112 by 32 px box: a pointer target at the 24 px
+                // minimum, with the year text keeping 60 px between the two buttons.
+                year-prev := FocusScope {
+                    x: 2px;
+                    y: 2px;
+                    width: 24px;
+                    height: 28px;
+                    accessible-role: button;
+                    accessible-label: @tr("Previous year");
+                    accessible-enabled: root.year > 1901;
+                    enabled: root.year > 1901;
+                    focus-on-tab-navigation: true;
+                    accessible-action-default => {
+                        if (root.year > 1901) { root.year-picked(root.year - 1); }
+                    }
+                    key-pressed(event) => {
+                        if (event.text == Key.Return || event.text == " ") {
+                            if (root.year > 1901) { root.year-picked(root.year - 1); }
+                            return accept;
+                        }
+                        reject
+                    }
+
+                    Rectangle {
+                        border-radius: 3px;
+                        background: transparent;
+                        border-width: year-prev.has-focus ? 2px : 0px;
+                        border-color: Palette.accent-background;
+                    }
+
+                    Text {
+                        text: "‹";
+                        color: root.year > 1901 ? Palette.control-foreground : Palette.border;
+                        font-size: 18px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        accessible-role: none;
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            if (root.year > 1901) { root.year-picked(root.year - 1); }
+                        }
+                    }
+                }
+
+                year-next := FocusScope {
+                    x: 86px;
+                    y: 2px;
+                    width: 24px;
+                    height: 28px;
+                    accessible-role: button;
+                    accessible-label: @tr("Next year");
+                    accessible-enabled: root.year < 2199;
+                    enabled: root.year < 2199;
+                    focus-on-tab-navigation: true;
+                    accessible-action-default => {
+                        if (root.year < 2199) { root.year-picked(root.year + 1); }
+                    }
+                    key-pressed(event) => {
+                        if (event.text == Key.Return || event.text == " ") {
+                            if (root.year < 2199) { root.year-picked(root.year + 1); }
+                            return accept;
+                        }
+                        reject
+                    }
+
+                    Rectangle {
+                        border-radius: 3px;
+                        background: transparent;
+                        border-width: year-next.has-focus ? 2px : 0px;
+                        border-color: Palette.accent-background;
+                    }
+
+                    Text {
+                        text: "›";
+                        color: root.year < 2199 ? Palette.control-foreground : Palette.border;
+                        font-size: 18px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        accessible-role: none;
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            if (root.year < 2199) { root.year-picked(root.year + 1); }
                         }
                     }
                 }

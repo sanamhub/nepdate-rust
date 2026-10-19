@@ -2,7 +2,8 @@
 //! coverage gate (L6-03), `cargo xtask codegen` writes the generated tables (ADR-0006), `cargo xtask catalog-check <phase>` checks the C# test catalogue
 //! (L2-08), `cargo xtask data-status` reports how far the patro data reaches (L5-01b) and
 //! `cargo xtask check-core-has-no-patro` keeps patro data out of the core (L5-06),
-//! `cargo xtask release-check` and `cargo xtask changelog` prepare a release (L6-04). Arguments
+//! `cargo xtask release-check` and `cargo xtask changelog` prepare a release (L6-04),
+//! `cargo xtask renderer-check` enforces the software-renderer dependency (W6-02). Arguments
 //! are read from `std::env::args()` to keep this tiny.
 
 mod bench;
@@ -14,6 +15,7 @@ mod icons;
 mod package;
 mod patro;
 mod release;
+mod renderer;
 mod widget_idle;
 #[cfg(test)]
 mod workflow;
@@ -41,6 +43,7 @@ fn main() -> ExitCode {
         ["package"] => package::run(),
         ["release-check", package, version] => release::run_check(package, version),
         ["changelog", package, version] => release::run_changelog(package, version),
+        ["renderer-check"] => renderer::run(),
         ["widget-idle"] => widget_idle::run(None),
         ["widget-idle", "--minutes", minutes] => widget_idle::run(Some(minutes)),
         _ => {
@@ -48,7 +51,7 @@ fn main() -> ExitCode {
                 "usage: cargo xtask <ci | coverage | bench | codegen [--check] | catalog-check <phase> [--list] | \
                  data-status [--today YYYY-MM-DD] | check-core-has-no-patro | icons [--check] | \
                  package | release-check <package> <version> | changelog <package> <version> | \
-                 widget-idle [--minutes N]>"
+                 renderer-check | widget-idle [--minutes N]>"
             );
             return ExitCode::from(2);
         }
@@ -141,6 +144,8 @@ const STEPS: &[Step] = &[
         "cargo",
         &["build", "-p", "mitibar", "--features", "snapshot"],
     ),
+    // ADR-0018: a later default feature must not bring femtovg back.
+    step("cargo", &["xtask", "renderer-check"]),
     Step {
         program: "cargo",
         args: &["deny", "check"],

@@ -1,6 +1,6 @@
 # W2 spike results (month grid, navigation, day detail)
 
-Generated on Windows 11 with the MSVC toolchain on 2026-10-18. Each PNG is the popup rendered by
+Generated on Windows 11 with the MSVC toolchain. Each PNG is the popup rendered by
 `--popup --snapshot <png> --theme light|dark --lang en|ne --today <BS date>`, with
 `SLINT_SCALE_FACTOR=1` or `2`. `--today` pins the calendar date and the clock to 12:00, so
 re-rendering an image does not change it. The eight month grids show Kartik 2083 (`--today
@@ -9,9 +9,9 @@ Baishakh 1, 2081, a Saturday and a public holiday (`--today 2081-01-01 --detail 
 max-events pair shows Ashoj 1, 2081 (`--today 2081-06-01 --detail 2081-06-01`), the day with nine
 events.
 
-All 14 images were re-rendered on 2026-10-18 for the W5-04 year control: the year box now shows
-`२०८३` in Nepali and `2083` in English. Every verdict below stays **not verified**; the reviewer
-looks at the new images.
+All 14 images were re-rendered on 2026-10-19 with the software renderer for W6-02 and again for
+W6-03: the year box now has visible previous-year and next-year buttons beside the language
+digits. Every verdict below stays **not verified**; the reviewer looks at the new images.
 
 `--today` and `--detail` exist only in the `snapshot` feature, and the parser rejects them without
 `--popup --snapshot`, so the normal app can never pin its date.

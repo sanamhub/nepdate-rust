@@ -30,6 +30,12 @@ msgstr "अघिल्लो महिना"
 msgid "Next month"
 msgstr "अर्को महिना"
 
+msgid "Previous year"
+msgstr "अघिल्लो वर्ष"
+
+msgid "Next year"
+msgstr "अर्को वर्ष"
+
 msgid "Month"
 msgstr "महिना"
 

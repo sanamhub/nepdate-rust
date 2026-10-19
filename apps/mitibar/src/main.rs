@@ -66,7 +66,7 @@ struct AppState {
     /// a test, `None` in a snapshot run or without a config directory.
     settings_path: Option<PathBuf>,
     /// The popup once it exists (W5-03). It is created on the first open, not at startup, so the
-    /// femtovg OpenGL context is not loaded while the popup has never been shown.
+    /// window and its renderer are not created while the popup has never been shown.
     popup: Weak<PopupWindow>,
     /// The one settings debounce timer (W3-04), created once and shared by the popup.
     save_timer: Rc<slint::Timer>,
@@ -164,7 +164,7 @@ fn idle_wakes() -> u64 {
 }
 
 /// Creates the popup the first time it is needed (W5-03). Until then `PopupWindow::new` has not
-/// run, so femtovg has not loaded the OpenGL driver for a window nobody has seen.
+/// run, so no window or renderer exists for a popup nobody has seen.
 fn ensure_popup(slot: &PopupSlot, state: &Rc<RefCell<AppState>>) -> Option<PopupWindow> {
     if let Some(popup) = slot.borrow().as_ref() {
         return Some(popup.clone_strong());

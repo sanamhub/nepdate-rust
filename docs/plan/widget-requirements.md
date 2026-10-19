@@ -54,8 +54,9 @@ Glossary: **BS** = Bikram Sambat (Nepali) date. **AD** = Gregorian date.
 - AC5: Title: `Ashoj 2083 · Sep/Oct 2026` (ne: `असोज २०८३ · Sep/Oct २०२६`). AD month names
   stay Latin; every number follows the language's digits (widget-design §4, W3 review).
 - AC6: Prev/next buttons, a "Today" button, month + year dropdowns (full range
-  1901–2199) and mouse wheel over the grid (one notch = one month) all navigate. At the
-  range edges the corresponding control is disabled; no crash.
+  1901–2199) and mouse wheel over the grid (one notch = one month) all navigate. The year
+  control also has visible previous-year and next-year buttons. At the range edges the
+  corresponding control is disabled; no crash.
 - AC7: Clicking a day opens the day detail (WR-04).
 - AC8: A line under the grid reads `Next holiday: <name> in N days` (or "today" /
   "tomorrow"), searching forward at most 400 days within the patro data coverage. Hidden if

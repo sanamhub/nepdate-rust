@@ -238,3 +238,65 @@ condition that W6-01 shows Devanagari renders correctly with it: every committed
 was rendered with femtovg, and the software-renderer rows above measured memory, not text.
 `cargo xtask widget-idle` now prints the private-bytes verdict and the working set as recorded
 only.
+
+## W6-02 renderer switch (2026-10-19)
+
+W6-01 passed, so ADR-0018's condition is met and MitiBar now asks Slint for the software renderer
+only: `slint` has `default-features = false` and the features `std`, `backend-winit`,
+`renderer-software`, `accessibility`, `compat-1-2`, `system-tray` and `unstable-winit-030`. The
+`release-widget` binary was built before and after the feature change on the same Windows x64
+machine:
+
+| Build | Bytes | MiB |
+|---|---|---|
+| femtovg default, before | 12,500,992 | 11.922 |
+| software only, after | 12,073,984 | 11.515 |
+| change | -427,008 | -0.407 |
+
+`cargo tree -p mitibar -e features` contains no line with `femtovg`, `glow`, `glutin` or
+`opengl`. The output is committed as `docs/plan/spike-results/w6/cargo-tree.txt`. A default
+snapshot render without `SLINT_BACKEND` is byte-identical to the explicit
+`SLINT_BACKEND=winit-software` render (SHA-256
+`e3734f6908f3f6fe1b4829d4d2810f54ae14135de7693460a75094221e1d30d2`).
+
+`cargo xtask renderer-check` runs that tree command in CI and fails on any of the four names.
+Negative control: adding `renderer-femtovg` to the app's Slint features makes the command exit 1
+and print the `i-slint-renderer-femtovg`, `femtovg`, `glow` and `glutin` lines. Reverting the
+feature makes it pass again.
+
+## W6-04 idle row and cold starts (2026-10-19)
+
+Build: `release-widget`, software renderer only, popup closed, taskbar text on, English,
+12-hour clock, seconds hidden. The idle row is `cargo xtask widget-idle --minutes 5`; its JSON is
+`docs/benchmarks/widget/2026-10-19/idle.json`.
+
+| Row | Private bytes | Working set | CPU, % of one core | Threads | All-CPU load | Verdict |
+|---|---|---|---|---|---|---|
+| 5-minute idle | 34.35 MB (36,016,128 B) | 73.59 MB (77,164,544 B) | 1.217 (3.703 CPU s in 304.2 s) | 12 | before 47.9 %, during mean 31.2 % (6.5 to 99.9) | LOADED, no verdict |
+
+The private figure is below the 40 MB target and the CPU figure is above the 0.5 % harness edge,
+but the row is LOADED: the mean before is 47.9 % and one 5-second sample reached 99.9 %. It gets
+no verdict on either metric. The working set is recorded and not judged (ADR-0018).
+
+### W6-04 cold starts
+
+Five fresh processes with the same temporary settings file. All-CPU load was sampled once before
+the run, once between process creation and the `tray ready in ...` log line, and once after the
+line. The during sample is the startup interval, not a before/after estimate; it includes the
+starting process's own CPU. The "poll saw" column is when the harness noticed the log line, which
+is later than the logged duration by 30 to 40 ms.
+
+| Run | Tray-ready (log) | Poll saw | Load before | Load during startup | Load after | Verdict |
+|---|---|---|---|---|---|---|
+| 1 | 80.4 ms | 159.5 ms | 6.6 % | 23.8 % | 19.7 % | LOADED, no verdict |
+| 2 | 68.0 ms | 107.0 ms | 15.9 % | 21.8 % | 10.6 % | LOADED, no verdict |
+| 3 | 62.4 ms | 91.0 ms | 6.9 % | 19.4 % | 12.7 % | LOADED, no verdict |
+| 4 | 63.4 ms | 105.8 ms | 10.8 % | 32.4 % | 17.0 % | LOADED, no verdict |
+| 5 | 74.0 ms | 108.3 ms | 7.9 % | 27.8 % | 19.4 % | LOADED, no verdict |
+
+Median tray-ready: 68.0 ms (range 62.4 to 80.4). Every run has a during-startup sample at or
+above 15 %, so every row is LOADED and none gets a verdict, even though the raw durations are
+below the 500 ms target. Run 2 is also LOADED by its before sample.
+
+No process, `mitibar` Run value or real `%APPDATA%\mitibar\settings.toml` was left. The temporary
+settings file was removed.
