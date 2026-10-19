@@ -18,10 +18,10 @@ The workflow creates a **draft**; a human installs the assets and publishes it.
    first, never by lowering the threshold.
 4. `docs/benchmarks-widget.md` has current numbers from a quiet machine (ADR-0008 §C), and no
    row is LOADED. Idle memory is judged on private bytes (ADR-0018). **0.1.0 is not releasable
-   yet:** W5 removed the popup-at-start cost and the 250 ms poll, but femtovg still measures
-   61.79 MB private and 0.825 % of one core. ADR-0018 moves MitiBar to the software renderer
-   (34.68 MB private, 0.335 %) once W6-01 shows Devanagari renders correctly with it; a quiet
-   5-minute row on that build must then pass.
+   yet:** W6 removed femtovg and the software build measures 34.35 MB private and 1.217 % of one
+   core, but the 5-minute row is LOADED (47.9 % before, 31.2 % during). The five cold starts are
+   62.4 to 80.4 ms, also LOADED (19.4 to 32.4 % during startup). A quiet 5-minute row and quiet
+   cold starts must pass on this build.
 5. `cargo xtask ci` passes locally.
 
 ## Build the packages locally (optional)
@@ -106,9 +106,10 @@ Get-Content SHA256SUMS | ForEach-Object {
 ### Linux
 
 1. AppImage: `chmod +x MitiBar-<version>-linux-x86_64.AppImage` and run it. It needs a desktop
-   session with a tray (StatusNotifier/AppIndicator), OpenGL (the femtovg renderer), fontconfig,
-   xkbcommon and D-Bus. MitiBar uses no GTK or WebKit. The AppImage and `.deb` names below are
-   the expected cargo-packager names; confirm them against the first workflow run.
+   session with a tray (StatusNotifier/AppIndicator), fontconfig, xkbcommon and D-Bus. The
+   renderer is software, so no OpenGL or GBM is needed. MitiBar uses no GTK or WebKit. The
+   AppImage and `.deb` names below are the expected cargo-packager names; confirm them against
+   the first workflow run.
 2. Debian/Ubuntu: `sudo apt install ./MitiBar-<version>-linux-amd64.deb` (or `dpkg -i` followed
    by `apt-get -f install`). Uninstall with `sudo apt remove mitibar`.
 3. Settings and log live in `~/.config/mitibar` and `~/.local/share/mitibar`. Remove those
@@ -144,7 +145,8 @@ These are accepted for 0.x previews and recorded here so a 1.0 release cannot sk
 | Signing credentials | The Windows and macOS signing steps exist and are gated on `WINDOWS_SIGNING_ENABLED` / `MACOS_SIGNING_ENABLED`, but no certificate, Developer ID or notarization secrets are configured here. 0.x ships unsigned and says so. | Provision Azure Artifact Signing and the Apple Developer ID plus notarization secrets, set both variables, and verify a signed asset. |
 | Signing not exercised | `xtask/src/workflow.rs` checks the order (sign `mitibar.exe`, package, sign the NSIS setup; sign `MitiBar.app`, build the DMG, notarize and staple it), but no workflow run has exercised the tools. | A `workflow_dispatch` dry run with both variables on, on all 3 OSes. |
 | Windows ARM64 package | The matrix builds `aarch64-pc-windows-msvc` and names the installer and portable zip arm64, but this was not built or installed locally. | The first workflow run on `windows-latest`; optionally a real ARM64 machine. |
-| Quiet performance | W5: femtovg 61.79 MB private and 0.825 % of one core; the software renderer 34.68 MB private and 0.335 %. The final 5-minute run was LOADED (61.66 MB private, 1.455 %). ADR-0018 judges private bytes and moves to the software renderer, conditional on W6-01 (`docs/benchmarks-widget.md`). | W6: the Devanagari check and renderer switch, then a quiet 5-minute run and 5 cold starts. |
+| Quiet performance | W6 software default: the 5-minute row is 34.35 MB private, 73.59 MB working set and 1.217 % of one core, but LOADED (47.9 % before, 31.2 % during). Cold starts are 62.4 to 80.4 ms, also LOADED (19.4 to 32.4 % during startup). The last quiet software row, from W5, was 34.68 MB and 0.335 %. | A quiet 5-minute row that passes private bytes and CPU on the shipped build, and quiet cold starts. |
+| Text quality at 100 % and 200 % | W6-01 checked Windows x64 with 55 software/femtovg sheets: every conjunct, reph and matra is the same, none is wrong. macOS and Linux were not checked. | Look at `docs/plan/spike-results/w6/` and tick the 3-OS checklist line on macOS and Linux. |
 | macOS and Linux packages | Built only in the release workflow; not built or installed locally on this Windows machine. | The first workflow run and the 3-OS manual checklist. |
 
 ## Releasing
