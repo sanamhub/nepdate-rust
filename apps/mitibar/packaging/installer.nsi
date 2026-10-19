@@ -1,4 +1,4 @@
-; MitiBar NSIS template (W4 review). A copy of cargo-packager 0.11.8's
+; MitiBar NSIS template. A copy of cargo-packager 0.11.8's
 ; src/package/nsis/installer.nsi with one change in .onInit: the per-user default install
 ; directory is $LOCALAPPDATA\Programs\${PRODUCTNAME} instead of $LOCALAPPDATA\${PRODUCTNAME},
 ; so the directory page shows the real target. /D still wins because .onInit only sets

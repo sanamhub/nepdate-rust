@@ -1,2 +1,2 @@
-# The crate READMEs are rustdoc (L6-01) and name the upstream project NepDate in prose.
+# The crate READMEs are rustdoc and name the upstream project NepDate in prose.
 doc-valid-idents = ["NepDate", ".."]

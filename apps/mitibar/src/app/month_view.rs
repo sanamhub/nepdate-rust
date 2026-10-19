@@ -1,5 +1,5 @@
 //! Month grid model: the title and the cells the grid renders (WR-03). Pure Rust, no Slint and no
-//! OS calls (ADR-0015); patro data comes only through `nepdate_patro::info` (W2-01, W2-04).
+//! OS calls (ADR-0015); patro data comes only through `nepdate_patro::info`.
 
 use nepdate::{DateOrder, GregorianDate, Lang, LongDate, Month, NepaliDate, Separator, Weekday};
 use nepdate_patro as patro;
@@ -199,7 +199,7 @@ pub fn step_month(year: u16, month: Month, delta: i32) -> Option<(u16, Month)> {
     }
 }
 
-/// Maps a grid index back to its date, or `None` for a padding cell (W2-03). The index is the
+/// Maps a grid index back to its date, or `None` for a padding cell. The index is the
 /// `cells` position the repeater hands to `day-clicked`.
 #[must_use]
 pub fn date_at(year: u16, month: Month, index: i32) -> Option<NepaliDate> {
@@ -389,7 +389,7 @@ mod tests {
     #[test]
     fn wr03_ac3_saturday_and_holiday_tint() {
         // New Year 2081-01-01 is a Saturday and a public holiday. Both flags stay set; the UI
-        // gives the holiday colour priority, so the cell is red, not slate (W2 review).
+        // gives the holiday colour priority, so the cell is red, not slate.
         let new_year = month_view(2081, Month::Baishakh, date(2081, 1, 1), Lang::En);
         let new_year_cell = new_year
             .cells
@@ -574,7 +574,7 @@ mod tests {
         assert_eq!(detail.copy_bs, "2081/01/01");
         assert_eq!(detail.copy_ad, "2024-04-13");
 
-        // W5-04: Copy AD follows the language's digits, like Copy BS.
+        // Copy AD follows the language's digits, like Copy BS.
         let detail = day_detail(date(2081, 1, 1), Lang::Ne);
         assert_eq!(detail.copy_bs, "२०८१/०१/०१");
         assert_eq!(detail.copy_ad, "२०२४-०४-१३");

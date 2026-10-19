@@ -58,7 +58,7 @@ pub struct Rendered {
 
 /// Renders `lines` at `scale` (dpi / 96) in `ink` (premultiplied RGBA). Every pixel gets at least
 /// alpha 1, so the whole rectangle takes clicks (ADR-0016 point 4). The DirectWrite and Direct2D
-/// factories, the font loader and the font collection are built once per thread (W1B-05 item 2).
+/// factories, the font loader and the font collection are built once per thread.
 pub fn render(lines: &TaskbarLines, scale: f32, ink: [u8; 4]) -> anyhow::Result<Rendered> {
     FONTS.with(|cell| {
         if cell.get().is_none() {

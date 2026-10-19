@@ -1,11 +1,11 @@
-//! C# `NepDate`'s own test suite, phase 4 rows of `shared/spec/vectors/csharp-tests/catalog.tsv`
-//! (L5-07). Names come from `cargo xtask catalog-check 4 --list`.
+//! C# `NepDate`'s own test suite, the patro rows of `shared/spec/vectors/csharp-tests/catalog.tsv`
+//! Names come from `cargo xtask catalog-check 4 --list`.
 //!
 //! C# keeps its patro tables in public classes (`CalendarOffsets`, `TithiData`, `EventData`,
 //! `HolidayData`) with offsets from BS 2001. This crate's tables are private and per day (ADR-0004
 //! §6), so the rows about C#'s layout assert the same fact through the public API, each with a
-//! one-line comment naming the L5-01 table fact it stands for.
-// `non_snake_case`: the L2-08 name rule turns the `.` in a row id into `__`.
+//! one-line comment naming the table fact it stands for.
+// `non_snake_case`: the catalogue name rule turns the `.` in a row id into `__`.
 #![allow(non_snake_case, clippy::unwrap_used, clippy::indexing_slicing)]
 
 use std::collections::BTreeSet;
@@ -63,14 +63,14 @@ fn tithi(date: NepaliDate, lang: Lang) -> &'static str {
 
 #[test]
 fn cs_calendar_data_tests__calendar_strings_pool_is_non_empty() {
-    // L5-01: NAMES holds 721 distinct event name pairs.
+    // NAMES holds 721 distinct event name pairs.
     let distinct: BTreeSet<_> = all_event_names().into_iter().collect();
     assert_eq!(distinct.len(), 721);
 }
 
 #[test]
 fn cs_calendar_data_tests__calendar_strings_pool_all_entries_have_non_empty_np_and_en() {
-    // L5-01: every entry of NAMES and TITHI_NAMES has both names.
+    // Every entry of NAMES and TITHI_NAMES has both names.
     assert!(
         all_event_names()
             .iter()
@@ -83,7 +83,7 @@ fn cs_calendar_data_tests__calendar_strings_pool_all_entries_have_non_empty_np_a
 
 #[test]
 fn cs_calendar_data_tests__calendar_offsets_month_start_has_expected_length() {
-    // L5-01: the per-day tables span PATRO_DAYS = 2793 days, whole months 2077-01 to 2084-07
+    // The per-day tables span PATRO_DAYS = 2793 days, whole months 2077-01 to 2084-07
     // plus 20 days of 2084-08.
     let months = (2077..=2084)
         .flat_map(|y| (1..=12).map(move |m| (y, m)))
@@ -97,28 +97,28 @@ fn cs_calendar_data_tests__calendar_offsets_month_start_has_expected_length() {
 
 #[test]
 fn cs_calendar_data_tests__calendar_offsets_month_start_is_strictly_monotonic() {
-    // L5-01: table index o = serial - PATRO_FIRST grows by one per day of the coverage.
+    // Table index o = serial - PATRO_FIRST grows by one per day of the coverage.
     let days: Vec<NepaliDate> = coverage().days().collect();
     assert!(days.windows(2).all(|w| w[0].days_until(w[1]) == 1));
 }
 
 #[test]
 fn cs_calendar_data_tests__calendar_offsets_total_days_matches_expected_count() {
-    // L5-01: PATRO_DAYS is 2793 (C#'s 32509 counts BS 2001 to 2089).
+    // PATRO_DAYS is 2793 (C#'s 32509 counts BS 2001 to 2089).
     assert_eq!(coverage().len(), 2793);
     assert_eq!(c_sharp_years().count(), 32509);
 }
 
 #[test]
 fn cs_calendar_data_tests__tithi_data_day_offsets_is_strictly_sorted() {
-    // L5-01: tithi days are one gap-free run (codegen fails on a gap).
+    // Tithi days are one gap-free run (codegen fails on a gap).
     let days = tithi_days();
     assert!(days.windows(2).all(|w| w[0].days_until(w[1]) == 1));
 }
 
 #[test]
 fn cs_calendar_data_tests__tithi_data_all_pool_ids_are_in_range() {
-    // L5-01: every DAY_TITHI entry indexes the 32 TITHI_NAMES.
+    // Every DAY_TITHI entry indexes the 32 TITHI_NAMES.
     let names: BTreeSet<&str> = tithi_days()
         .into_iter()
         .map(|d| tithi(d, Lang::En))
@@ -137,14 +137,14 @@ fn cs_calendar_data_tests__tithi_data_entry_count_matches2190() {
 
 #[test]
 fn cs_calendar_data_tests__event_data_day_offsets_is_strictly_sorted() {
-    // L5-01: DAY_EVENTS is per day, so event days come out in date order.
+    // DAY_EVENTS is per day, so event days come out in date order.
     let days = event_days();
     assert!(days.windows(2).all(|w| w[0] < w[1]));
 }
 
 #[test]
 fn cs_calendar_data_tests__event_data_slice_start_is_non_decreasing() {
-    // L5-01: DAY_EVENTS[o] <= DAY_EVENTS[o + 1], seen as each day's slice length.
+    // DAY_EVENTS[o] <= DAY_EVENTS[o + 1], seen as each day's slice length.
     for date in coverage().days() {
         let events = info(date).events();
         assert_eq!(events.len(), events.clone().count(), "{date}");
@@ -153,14 +153,14 @@ fn cs_calendar_data_tests__event_data_slice_start_is_non_decreasing() {
 
 #[test]
 fn cs_calendar_data_tests__event_data_slice_start_sentinel_equals_entries_length() {
-    // L5-01: DAY_EVENTS[PATRO_DAYS] == EVENT_IDS.len() == 3032.
+    // DAY_EVENTS[PATRO_DAYS] == EVENT_IDS.len() == 3032.
     let total: usize = coverage().days().map(|d| info(d).events().len()).sum();
     assert_eq!(total, 3032);
 }
 
 #[test]
 fn cs_calendar_data_tests__event_data_all_entries_are_in_range() {
-    // L5-01: every EVENT_IDS entry indexes NAMES; an out-of-range one would give "".
+    // Every EVENT_IDS entry indexes NAMES; an out-of-range one would give "".
     assert!(
         all_event_names()
             .iter()
@@ -186,7 +186,7 @@ fn cs_calendar_data_tests__holiday_data_count_matches294() {
 
 #[test]
 fn cs_calendar_data_tests__calendar_offsets_get_offset_base_year_month1_day1_returns_zero() {
-    // L5-01: o = 0 is COVERAGE_FIRST, 2077-01-01, and it has data.
+    // o = 0 is COVERAGE_FIRST, 2077-01-01, and it has data.
     let first = coverage().start();
     assert_eq!(first, bs(2077, 1, 1));
     assert!(info(first).is_public_holiday());
@@ -194,7 +194,7 @@ fn cs_calendar_data_tests__calendar_offsets_get_offset_base_year_month1_day1_ret
 
 #[test]
 fn cs_calendar_data_tests__calendar_offsets_get_offset_out_of_range_returns_negative_one() {
-    // L5-01: a date outside the tables gets the empty info, never an error.
+    // A date outside the tables gets the empty info, never an error.
     for date in [bs(2000, 1, 1), bs(2090, 1, 1), NepaliDate::MIN] {
         let info = info(date);
         assert!(info.tithi().is_none() && !info.is_public_holiday() && !info.has_events());
@@ -203,7 +203,7 @@ fn cs_calendar_data_tests__calendar_offsets_get_offset_out_of_range_returns_nega
 
 #[test]
 fn cs_calendar_data_tests__calendar_offsets_get_offset_all_offsets_are_unique_sentinel() {
-    // L5-01: both ends of the tables hold data, so neither is padding.
+    // Both ends of the tables hold data, so neither is padding.
     assert!(info(coverage().start()).is_public_holiday());
     assert!(info(coverage().end()).has_events());
 }
@@ -298,7 +298,7 @@ fn cs_calendar_data_tests__get_calendar_info_tithi_matches_flat_properties() {
 
 #[test]
 fn cs_calendar_data_tests__all_days_in_scraped_range_offsets_are_in_bounds() {
-    // L5-01: only days inside the coverage reach the tables; every other day is empty.
+    // Only days inside the coverage reach the tables; every other day is empty.
     let mut outside_with_data = 0;
     for date in c_sharp_years() {
         let info = info(date);

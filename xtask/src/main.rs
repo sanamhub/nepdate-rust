@@ -1,9 +1,9 @@
 //! Repository tasks: `cargo xtask ci` runs every quality gate, `cargo xtask coverage` the
-//! coverage gate (L6-03), `cargo xtask codegen` writes the generated tables (ADR-0006), `cargo xtask catalog-check <phase>` checks the C# test catalogue
-//! (L2-08), `cargo xtask data-status` reports how far the patro data reaches (L5-01b) and
-//! `cargo xtask check-core-has-no-patro` keeps patro data out of the core (L5-06),
-//! `cargo xtask release-check` and `cargo xtask changelog` prepare a release (L6-04),
-//! `cargo xtask renderer-check` enforces the software-renderer dependency (W6-02). Arguments
+//! coverage gate, `cargo xtask codegen` writes the generated tables (ADR-0006),
+//! `cargo xtask catalog-check <phase>` checks the C# test catalogue, `cargo xtask data-status` reports how far the patro data reaches and
+//! `cargo xtask check-core-has-no-patro` keeps patro data out of the core,
+//! `cargo xtask release-check` and `cargo xtask changelog` prepare a release,
+//! `cargo xtask renderer-check` enforces the software-renderer dependency. Arguments
 //! are read from `std::env::args()` to keep this tiny.
 
 mod bench;
@@ -139,7 +139,7 @@ const STEPS: &[Step] = &[
     ),
     step("cargo", &["xtask", "codegen", "--check"]),
     step("cargo", &["xtask", "icons", "--check"]),
-    // W1B-00: the snapshot feature stays off by default; this build keeps its code compiling.
+    // The snapshot feature stays off by default; this build keeps its code compiling.
     step(
         "cargo",
         &["build", "-p", "mitibar", "--features", "snapshot"],
@@ -156,7 +156,7 @@ const STEPS: &[Step] = &[
     step("cargo", &["xtask", "catalog-check", "2"]),
     step("cargo", &["xtask", "catalog-check", "3"]),
     step("cargo", &["xtask", "catalog-check", "4"]),
-    // L5-06: each feature combination on its own, since `cargo hack` isn't in the budget.
+    // Each feature combination on its own, since `cargo hack` isn't in the budget.
     step(
         "cargo",
         &[
@@ -187,7 +187,7 @@ const STEPS: &[Step] = &[
     step("cargo", &["xtask", "check-core-has-no-patro"]),
 ];
 
-/// L6-03: line coverage of both libraries, at least 90 % (ADR-0014). Not a `ci` step, because
+/// Line coverage of both libraries, at least 90 % (ADR-0014). Not a `ci` step, because
 /// it needs `cargo-llvm-cov` and the `llvm-tools-preview` component; CI runs it as its own job.
 const COVERAGE: Step = step(
     "cargo",

@@ -1,4 +1,4 @@
-//! One Slint testing backend per test thread (W3-00a). `init_no_event_loop` sets a platform
+//! One Slint testing backend per test thread. `init_no_event_loop` sets a platform
 //! per thread, and Slint panics if it is set twice on one thread, so the flag is thread-local.
 //! `cargo nextest` gives each test its own process; `cargo test` may reuse a thread, which this
 //! guard tolerates.

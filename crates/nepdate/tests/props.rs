@@ -1,4 +1,4 @@
-//! Property tests (L3-05 arithmetic, L4-05 formatting and parsing; ADR-0014).
+//! Property tests for arithmetic, formatting and parsing (ADR-0014).
 //!
 //! proptest runs without its `std` feature: that feature pulls in `getrandom`, which needs an
 //! assembler to build on the `windows-gnu` host. Without it the generator seed is fixed, so every

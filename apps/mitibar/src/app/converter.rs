@@ -1,4 +1,4 @@
-//! Converter input to result text or error (WR-07, W3-01). Pure: no Slint, no OS calls. BS input
+//! Converter input to result text or error (WR-07). Pure: no Slint, no OS calls. BS input
 //! uses the library's lenient parser. AD input is the strict `YYYY-MM-DD` / `YYYY/MM/DD` form of
 //! PARSING §1, with ASCII or Devanagari digits.
 
@@ -162,7 +162,7 @@ fn parse_ad(input: &str) -> Result<(i32, u8, u8), ()> {
         match c {
             '0'..='9' | '/' | '-' => ascii.push(c),
             // Devanagari digits U+0966 to U+096F; the mapping is ten entries, so no library
-            // change is needed (W3-01).
+            // change is needed.
             '\u{0966}'..='\u{096F}' => {
                 let digit = u32::from(c) - 0x0966;
                 ascii.push(char::from_digit(digit, 10).ok_or(())?);

@@ -1,4 +1,4 @@
-//! `cargo xtask bench` (L6-02): runs the `alloc` and `agree` binaries and the criterion bench,
+//! `cargo xtask bench`: runs the `alloc` and `agree` binaries and the criterion bench,
 //! one at a time, each pinned to logical CPU 2 (affinity mask `0x4`, BENCHMARK §1).
 
 use std::process::Command;

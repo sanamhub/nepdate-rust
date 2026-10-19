@@ -1,5 +1,5 @@
 //! Zero-allocation check for B7 and B8 (BENCHMARK §2) and a full `public_holidays()` walk
-//! (L5-07). Same counter as `crates/nepdate/tests/no_alloc.rs`. Runs without the test harness,
+//!. Same counter as `crates/nepdate/tests/no_alloc.rs`. Runs without the test harness,
 //! on one thread, so nothing else allocates while the counter is read.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 // A global allocator can only be written with `unsafe`; the libraries themselves forbid it.

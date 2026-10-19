@@ -1,7 +1,7 @@
 //! Tray icon and menu (WR-01), implementation A: Slint `SystemTrayIcon` (ADR-0010).
 //!
-//! W1 uses implementation A on every OS. Slint's `SystemTrayIcon` covers Windows (notification
-//! area), macOS (menu bar) and Linux (`StatusNotifierItem`). If a later phase finds it cannot meet
+//! This is implementation A on every OS. Slint's `SystemTrayIcon` covers Windows (notification
+//! area), macOS (menu bar) and Linux (`StatusNotifierItem`). If it cannot meet
 //! WR-01 on some OS, implementation B (`tray-icon` + `muda`, ADR-0010) replaces this module; the
 //! `Tray` trait keeps the rest of the app unchanged.
 
@@ -20,7 +20,7 @@ pub enum TrayEvent {
     Quit,
 }
 
-/// The tray surface the app updates once per tick (W1-05).
+/// The tray surface the app updates once per tick.
 pub trait Tray {
     fn set_title(&self, text: &str);
     fn set_icon_day(&self, day: &str);
@@ -38,12 +38,12 @@ pub struct SlintTray {
 
 impl SlintTray {
     /// Creates the tray and wires the menu and click events to `on_event`. The language is fixed
-    /// at construction in W1; W3's settings UI will update `is_ne` when it changes.
+    /// at construction; the settings UI updates `is_ne` when it changes.
     pub fn new(lang: Lang, on_event: impl FnMut(TrayEvent) + 'static) -> anyhow::Result<Self> {
         let component = TrayComponent::new()?;
         component.set_is_ne(lang == Lang::Ne);
         // The five callbacks share `on_event`, so it lives behind Rc<RefCell> and each borrow is
-        // dropped before the next event (learn/09 §3).
+        // dropped before the next event.
         let events = std::rc::Rc::new(std::cell::RefCell::new(on_event));
         {
             let events = events.clone();
@@ -68,7 +68,7 @@ impl SlintTray {
         Ok(SlintTray { component })
     }
 
-    /// The translated WR-01 AC5 labels, for the taskbar text's right-click menu (W5-03). The
+    /// The translated WR-01 AC5 labels, for the taskbar text's right-click menu. The
     /// popup may not exist yet; the tray component always does.
     pub fn menu_labels(&self) -> MenuLabels {
         MenuLabels {

@@ -1,6 +1,6 @@
-//! Zero-allocation check for the benchmark operations (BENCHMARK §2): L2-09 for B1 and B2, L3-06
-//! for B3, B4 and the other phase 2 operations, L4-07 for B5, B6 and the other formatters and
-//! parsers. Runs without the
+//! Zero-allocation check for the benchmark operations (BENCHMARK §2): B1 and B2, the
+//! arithmetic operations B3 and B4, the formatters and parsers B5 and B6, and the patro
+//! operations B7 and B8. Runs without the
 //! test harness, on one thread, so nothing else allocates while the counter is read.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 // A global allocator can only be written with `unsafe`; the libraries themselves forbid it.
@@ -126,7 +126,7 @@ fn main() {
     let after = ALLOCATED.load(Ordering::Relaxed);
     if after != before {
         eprintln!(
-            "no_alloc: phase 2 operations allocated {} bytes",
+            "no_alloc: arithmetic operations allocated {} bytes",
             after - before
         );
         std::process::exit(1);
@@ -172,7 +172,7 @@ fn main() {
     let after = ALLOCATED.load(Ordering::Relaxed);
     if after != before {
         eprintln!(
-            "no_alloc: phase 3 operations allocated {} bytes",
+            "no_alloc: formatting and parsing operations allocated {} bytes",
             after - before
         );
         std::process::exit(1);

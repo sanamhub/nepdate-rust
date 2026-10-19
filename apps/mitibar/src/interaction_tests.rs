@@ -1,4 +1,4 @@
-//! Headless interaction tests (W3-00a). Slint's testing backend finds controls by their
+//! Headless interaction tests. Slint's testing backend finds controls by their
 //! accessible label and invokes the same actions a screen reader would. No test touches the
 //! system clipboard: the app gets a fake `Clipboard` port.
 
@@ -106,7 +106,7 @@ fn focused(popup: &PopupWindow) -> String {
     popup.get_focused_control().to_string()
 }
 
-/// The base order from the plan, with the real day labels from the populated cells.
+/// The base order in visual order, with the real day labels from the populated cells.
 fn base_order(popup: &PopupWindow) -> Vec<String> {
     let mut order = [
         "convert",
@@ -257,7 +257,7 @@ fn copy_buttons_write_the_exact_strings_to_the_injected_clipboard() {
         ]
     );
 
-    // W5-04: Nepali gets Devanagari digits in both copies, not only Copy BS.
+    // Nepali gets Devanagari digits in both copies, not only Copy BS.
     state.borrow_mut().settings.language = "ne".to_owned();
     let _ = slint::select_bundled_translation("ne");
     crate::copy_bs(&state);
@@ -322,7 +322,7 @@ fn every_control_has_a_label_and_a_role() {
     );
 }
 
-/// W3-04 switches language at runtime; Slint must be able to go back to the source language.
+/// Switching language at runtime; Slint must be able to go back to the source language.
 #[test]
 fn bundled_translation_switches_to_nepali_and_back() {
     crate::test_support::init_platform();
@@ -469,7 +469,7 @@ fn the_visible_year_buttons_step_and_stop_at_the_edges() {
         "a click moves focus to the button"
     );
 
-    // W6-03 AC2: the buttons carry the Devanagari year text and translated labels.
+    // The buttons carry the Devanagari year text and translated labels.
     state.borrow_mut().settings.language = "ne".to_owned();
     let _ = slint::select_bundled_translation("ne");
     update_popup(&state);
@@ -496,7 +496,7 @@ fn the_visible_year_buttons_step_and_stop_at_the_edges() {
     next.invoke_accessible_default_action();
     assert_eq!(popup.get_year(), 2199, "2199 is the upper edge");
 
-    // Keyboard and wheel still reach the same control (W6-03 AC3).
+    // Keyboard and wheel still reach the same control.
     show_month(&state, 2081, Month::Baishakh);
     let year = element(&popup, "Year");
     year.mock_single_click(slint::platform::PointerEventButton::Left);
@@ -849,7 +849,7 @@ fn the_lazy_popup_is_created_once_and_honours_the_theme_flag() {
         Some(today),
         Rc::new(FakeClipboard::default()),
     )));
-    // W5 review: `--theme` reached the eager popup; the lazy one must still apply it.
+    // `--theme` reached the eager popup; the lazy one must still apply it.
     state.borrow_mut().theme_override = Some(crate::ThemeChoice::Dark);
     let slot: crate::PopupSlot = Rc::new(RefCell::new(None));
     let first = crate::ensure_popup(&slot, &state).expect("popup");

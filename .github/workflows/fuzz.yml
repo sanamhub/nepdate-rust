@@ -1,4 +1,4 @@
-# L6-02b: scheduled fuzzing of the three `fuzz/` targets (ADR-0014). Not a `cargo xtask ci`
+# Scheduled fuzzing of the three `fuzz/` targets (ADR-0014). Not a `cargo xtask ci`
 # step: cargo-fuzz needs nightly Rust and libFuzzer, which the per-PR gate does not install.
 
 name: fuzz
@@ -27,7 +27,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # v1
         with:
           toolchain: nightly
-      # Pinned, so a new cargo-fuzz release can't change or break the weekly run unreviewed.
+      # Pinned, so a new cargo-fuzz release cannot change the weekly run on its own.
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz --locked --version 0.13.2
       - name: Fuzz ${{ matrix.target }}

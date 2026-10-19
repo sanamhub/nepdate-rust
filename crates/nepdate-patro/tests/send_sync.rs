@@ -1,5 +1,4 @@
-//! Every public type is `Send + Sync`, and `info` gives the same answers on many threads (L5-07,
-//! ADR-0014).
+//! Every public type is `Send + Sync`, and `info` gives the same answers on many threads (ADR-0014).
 #![allow(clippy::unwrap_used)]
 
 use nepdate::{Lang, NepaliDate};

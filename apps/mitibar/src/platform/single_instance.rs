@@ -1,7 +1,7 @@
-//! Single instance (WR-09 AC1, W3-06). The first instance listens on a local socket. A second
+//! Single instance (WR-09 AC1). The first instance listens on a local socket. A second
 //! instance connects, sends `open\n` and exits 0. The listener runs on a background thread and
 //! wakes the UI thread with `slint::invoke_from_event_loop`, because a Slint component is not
-//! `Send`. W5-02 replaced the 250 ms polling timer with this wake, so an idle app has no
+//! `Send`. The listener replaced the 250 ms polling timer, so an idle app has no
 //! four-times-a-second UI wake.
 //!
 //! The name is `mitibar-<username-hash>.sock` in the OS namespace when available (Windows,

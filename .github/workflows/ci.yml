@@ -36,7 +36,7 @@ jobs:
           tool: cargo-deny,cargo-nextest
       - run: cargo xtask ci
 
-  # W0-04: the widget's own gate. Slint's MSRV is 1.92, satisfied by the 1.98 toolchain.
+  # The widget's own gate. Slint's MSRV is 1.92, satisfied by the 1.98 toolchain.
   # Linux needs winit's system libraries to link.
   widget:
     strategy:
@@ -59,8 +59,8 @@ jobs:
       - run: cargo clippy -p mitibar -- -D warnings
       - run: cargo test -p mitibar
 
-  # W0-03 follow-up: reproducible light and dark spike screenshots, written by the app itself
-  # (Slint's Window::take_snapshot), uploaded for the human to look at. Ubuntu renders under
+  # Reproducible light and dark font-test screenshots, written by the app itself
+  # (Slint's Window::take_snapshot), uploaded as artifacts. Ubuntu renders under
   # xvfb with Mesa's software GL; macOS and Windows runners have a desktop session.
   snapshot:
     strategy:
@@ -117,13 +117,13 @@ jobs:
             taskbar-*.png
           if-no-files-found: error
 
-  # L6-06: fails when shared/ differs from the hub at the commit in shared/VERSION (ADR-0003).
+  # Fails when shared/ differs from the hub at the commit in shared/VERSION (ADR-0003).
   shared-check:
     permissions:
       contents: read
     uses: sanamhub/nepdate/.github/workflows/shared-check.yml@e2f977849877be6828e6d6ebbb638fcf708638e7
 
-  # L6-03: not a `cargo xtask ci` step, because llvm-cov needs the llvm-tools component.
+  # Not a `cargo xtask ci` step, because llvm-cov needs the llvm-tools component.
   coverage:
     runs-on: ubuntu-latest
     timeout-minutes: 30

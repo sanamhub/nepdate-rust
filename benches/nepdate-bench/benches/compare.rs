@@ -1,12 +1,12 @@
 //! criterion groups `b1_` to `b8_` of `shared/spec/BENCHMARK.md` §3: our operations plus the
-//! four competitor crates for B1 and B2 (L6-02). Run with `cargo xtask bench`, which pins the
+//! four competitor crates for B1 and B2. Run with `cargo xtask bench`, which pins the
 //! process to logical CPU 2.
 //!
 //! Every iteration runs the operation over all 64 inputs; `Throughput::Elements(64)` makes the
 //! report show time per operation. Results are consumed with `std::hint::black_box`.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
-// One `bench` function registers all eight groups in plan order; splitting it would add
+// One `bench` function registers all eight groups in benchmark order; splitting it would add
 // boilerplate without making the per-operation closures shorter.
 #![allow(clippy::too_many_lines)]
 

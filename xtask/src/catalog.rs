@@ -1,6 +1,6 @@
 //! `cargo xtask catalog-check <phase> [--list]`: proves every row of the C# test catalogue
 //! (`shared/spec/vectors/csharp-tests/catalog.tsv`) for one PORT-PLAN phase has a Rust test or a
-//! deviation comment (L2-08).
+//! deviation comment.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -122,7 +122,7 @@ fn is_covered(row: &Row, sources: &[String], deviations: &BTreeSet<String>) -> b
     })
 }
 
-/// The Rust test name for a catalogue id (L2-08): `.` becomes `__`, `#` becomes `_`, CamelCase
+/// The Rust test name for a catalogue id: `.` becomes `__`, `#` becomes `_`, CamelCase
 /// becomes `snake_case` and anything else outside `[a-z0-9_]` becomes `_`.
 fn test_name(id: &str) -> String {
     let chars: Vec<char> = id.chars().collect();

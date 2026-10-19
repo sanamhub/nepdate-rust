@@ -1,9 +1,9 @@
 //! C# `NepDate`'s own test suite, one test per row of `shared/spec/vectors/csharp-tests/catalog.tsv`
-//! (L2-08). Names come from `cargo xtask catalog-check <phase> --list`; `cargo xtask
+//! Names come from `cargo xtask catalog-check <phase> --list`; `cargo xtask
 //! catalog-check` fails when a row has neither a test nor a `// cs:<id> D-xx` comment.
-//! Phase 1 rows (L2-08), phase 2 (L3-06) and phase 3 (L4-06). Rows that read the clock need the
-//! `jiff` feature (L5).
-// `non_snake_case`: the L2-08 name rule turns the `.` in a row id into `__`.
+//! Rows that read the clock need the
+//! `jiff` feature.
+// `non_snake_case`: the catalogue name rule turns the `.` in a row id into `__`.
 // `nonminimal_bool` and `manual_assert_eq`: the `Operator_*` rows test each operator itself
 // (`!(a < b)` calls `<`, not `>=`), so the expressions stay as C# wrote them.
 #![allow(
@@ -801,7 +801,7 @@ fn cs_optimization_verification_tests__day_of_week_matches_english_date_day_of_w
 // cs:OptimizationVerificationTests.IsDefault_ValidDate_ReturnsFalse D-01 IsDefault exists only because of the C# default value, which the port can't construct
 
 // ======================================================================================
-// Phase 2 (L3-06): arithmetic, fiscal year, ranges.
+// Arithmetic, fiscal year, ranges.
 // ======================================================================================
 
 fn range(start: NepaliDate, end: NepaliDate) -> NepaliDateRange {
@@ -1509,8 +1509,7 @@ fn cs_nepali_date_manipulation_tests__subtract_same_date_returns_zero() {
 // ---------- Core/NepaliDateRangeExtendedTests.cs ----------
 
 // C# can build an empty range (end before start); `NepaliDateRange::new` returns `None` instead
-// (D-09), so "empty range" rows use `Option<NepaliDateRange>`, as C# null maps to `None` in
-// phase 1.
+// (D-09), so "empty range" rows use `Option<NepaliDateRange>`, as C# null maps to `None`.
 
 fn empty() -> Option<NepaliDateRange> {
     NepaliDateRange::new(bs(2080, 5, 10), bs(2080, 5, 1))
@@ -1922,7 +1921,7 @@ fn cs_nepali_date_is_relative_tests__is_today_arbitrary_past_date_returns_false(
 // cs:NepaliDateIsRelativeTests.TwoDaysBehind_NoneAreTrue D-14 no IsYesterday or IsTomorrow
 
 // ======================================================================================
-// Phase 3 (L4-06): formatting and parsing.
+// Formatting and parsing.
 // ======================================================================================
 
 /// C# `ToString(format, null)` maps to `format_pattern(format, Lang::En)` (FORMATTING §5).
@@ -1958,7 +1957,7 @@ fn cs_nepali_date_formattable_tests__to_string_null_format_returns_default() {
 }
 
 // The ids `ToString_G_SameAsDefault` and `ToString_g_SameAsDefault` differ only in case, so the
-// L2-08 name rule gives both rows this one name; the test checks both patterns.
+// The catalogue name rule gives both rows this one name; the test checks both patterns.
 #[test]
 fn cs_nepali_date_formattable_tests__to_string_g_same_as_default() {
     let d = formattable_date();

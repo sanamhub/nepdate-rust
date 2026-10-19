@@ -1,12 +1,12 @@
-# W4-04: one tag `mitibar-vX.Y.Z` builds the widget on all three OSes and creates a DRAFT
+# One tag `mitibar-vX.Y.Z` builds the widget on all three OSes and creates a DRAFT
 # GitHub Release. Preflight is seconds; the build matrix packages NSIS on Windows, a universal
 # .app/.dmg on macOS and .AppImage/.deb on Linux; checksums, a CycloneDX SBOM and build
 # provenance attestations are attached. Signing is optional for 0.x and runs only when its
-# repository variable is true (ADR-0012). Nothing here publishes: a human installs the draft
+# repository variable is true (ADR-0012). Nothing here publishes: the maintainer installs the draft
 # assets, ticks docs/runbooks/release-mitibar.md and publishes the draft.
 #
-# It cannot run in this repository until a GitHub remote exists. The static test in
-# xtask/src/workflow.rs parses this file (not a regex) and checks the structure.
+# The static test in xtask/src/workflow.rs parses this file (not a regex) and checks the
+# structure.
 
 name: release-mitibar
 
@@ -69,7 +69,7 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: cargo xtask release-check mitibar "$VERSION"
-      # W4-00: holidays must have 183 days; tithi and events only warn and are copied into the PR.
+      # Holidays must have 183 days; tithi and events only warn and are copied into the PR.
       - name: Data freshness gate
         run: cargo xtask data-status
 
@@ -107,7 +107,7 @@ jobs:
       # The version is the ADR-0012 one; a newer release is a decision, not a float.
       - name: Install cargo-packager
         run: cargo install cargo-packager --version 0.11.8 --locked
-      # W5-05: build the Windows binary before packaging, so the signing step can sign the exact
+      # Build the Windows binary before packaging, so the signing step can sign the exact
       # file that NSIS and the portable zip carry. Both Windows arches cross-compile where needed.
       - name: Build the Windows binary
         if: matrix.os == 'windows-latest'
@@ -154,7 +154,7 @@ jobs:
       - name: Package (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: cargo xtask package
-      # W5-05: package the .app only, sign it, then build the DMG around the signed bundle.
+      # Package the .app only, sign it, then build the DMG around the signed bundle.
       - name: Package (macOS app)
         if: matrix.os == 'macos-latest'
         env:
@@ -284,7 +284,7 @@ jobs:
 
   release:
     needs: [preflight, checksums, attest]
-    # A manual run on a branch never creates a release. A tag created by a human does; the
+    # A manual run on a branch never creates a release. A tag created by the maintainer does; the
     # dry-run input only affects workflow_dispatch, where the default is true.
     if: github.ref_type == 'tag' && (github.event_name == 'push' || inputs.dry-run == false)
     runs-on: ubuntu-latest

@@ -61,7 +61,7 @@ pub(crate) fn read_json(path: &Path) -> Result<Value> {
     serde_json::from_str(&text).with_context(|| format!("parsing {}", path.display()))
 }
 
-/// `crates/nepdate/src/generated/calendar.rs`: `PACKED_YEARS`, two bits per month (L1-01).
+/// `crates/nepdate/src/generated/calendar.rs`: `PACKED_YEARS`, two bits per month.
 fn calendar(root: &Path) -> Result<Output> {
     let json = read_json(&root.join("shared/data/calendar/bs-calendar.json"))?;
     let commit = json["source"]["commit"]
@@ -148,7 +148,7 @@ pub(crate) fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
-/// `crates/nepdate-patro/src/generated/patro.rs`: the per-day patro tables (L5-01).
+/// `crates/nepdate-patro/src/generated/patro.rs`: the per-day patro tables.
 fn patro(root: &Path) -> Result<Output> {
     let lengths = crate::patro::read_lengths(root)?;
     let data = crate::patro::read(root)?;

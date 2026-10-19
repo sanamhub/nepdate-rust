@@ -1,4 +1,4 @@
-//! The taskbar's light or dark scheme, which picks the tray icon's ink (W1-03) and, in W1B, the
+//! The taskbar's light or dark scheme, which picks the tray icon's ink and the
 //! taskbar text colour (ADR-0016 point 5). Windows keeps it apart from the app scheme:
 //! `SystemUsesLightTheme` for the taskbar, `AppsUseLightTheme` for apps. It is read through the
 //! registry API, never by spawning a process.

@@ -1,4 +1,4 @@
-//! Compiles the `.slint` files into Rust before the crate compiles (learn/08 §2).
+//! Compiles the `.slint` files into Rust before the crate compiles.
 //! A typo in the markup is a compile error here, with the file and line.
 //!
 //! Bundles the Nepali translations from `i18n/ne/LC_MESSAGES/mitibar.po` (ADR-0008 A.3).
@@ -9,11 +9,11 @@
 //! per-monitor-v2 DPI awareness and the UTF-8 active code page. The layered child window needs
 //! the `supportedOS` entry.
 
-// Build scripts may panic (W0-01); a bad `.slint` file should fail the build loudly.
+// Build scripts may panic; a bad `.slint` file should fail the build loudly.
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 fn main() {
-    // Slint element ids and accessible metadata are in debug builds only. The W3-00a tests
+    // Slint element ids and accessible metadata are in debug builds only. The interaction tests
     // find elements by accessible label, which needs the metadata; release keeps its smaller
     // generated code.
     let debug_info = std::env::var("PROFILE").as_deref() == Ok("debug");

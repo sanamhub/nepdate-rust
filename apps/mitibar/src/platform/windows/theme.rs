@@ -17,7 +17,7 @@ mod tests {
     use super::*;
 
     /// The two constants equal the `ink` row of `docs/design/widget-design.md` §2, the same style as
-    /// the W0 theme drift test. Negative control: change one constant, see it fail, revert.
+    /// the theme drift test. Changing one constant makes it fail.
     #[test]
     fn wr12_ac2_ink_matches_design() {
         let design = include_str!("../../../../../docs/design/widget-design.md");

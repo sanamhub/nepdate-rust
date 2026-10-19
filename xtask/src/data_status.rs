@@ -1,5 +1,5 @@
-//! `cargo xtask data-status [--today YYYY-MM-DD]` (L5-01b): when each kind of patro data ends,
-//! whether a release still has half a year of holidays left (W4-00 gate), and a warning when the
+//! `cargo xtask data-status [--today YYYY-MM-DD]`: when each kind of patro data ends,
+//! whether a release still has half a year of holidays left ( gate), and a warning when the
 //! tithi or events data is shorter than that. Only holidays fail the gate: the hub rule (H1-02)
 //! makes the public-holiday range a release blocker and the other two a warning copied into the
 //! release PR.
