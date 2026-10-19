@@ -147,6 +147,7 @@ These are accepted for 0.x previews and recorded here so a 1.0 release cannot sk
 | Windows ARM64 package | The matrix builds `aarch64-pc-windows-msvc` and names the installer and portable zip arm64, but this was not built or installed locally. | The first workflow run on `windows-latest`; optionally a real ARM64 machine. |
 | Quiet performance | W6 software default: the 5-minute row is 34.35 MB private, 73.59 MB working set and 1.217 % of one core, but LOADED (47.9 % before, 31.2 % during). Cold starts are 62.4 to 80.4 ms, also LOADED (19.4 to 32.4 % during startup). The last quiet software row, from W5, was 34.68 MB and 0.335 %. | A quiet 5-minute row that passes private bytes and CPU on the shipped build, and quiet cold starts. |
 | Text quality at 100 % and 200 % | W6-01 checked Windows x64 with 55 software/femtovg sheets: every conjunct, reph and matra is the same, none is wrong. macOS and Linux were not checked. | Look at `docs/plan/spike-results/w6/` and tick the 3-OS checklist line on macOS and Linux. |
+| Keyboard and focus rings | W7 interaction tests and eight focus snapshots cover Windows x64. The settings zone rows stay pointer-only, and macOS and Linux were not run. | Tick the W7 checklist line on all 3 OSes and decide whether the zone list needs keyboard navigation. |
 | macOS and Linux packages | Built only in the release workflow; not built or installed locally on this Windows machine. | The first workflow run and the 3-OS manual checklist. |
 
 ## Releasing
