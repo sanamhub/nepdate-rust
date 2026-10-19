@@ -24,7 +24,8 @@ Each run is a fresh process with the same settings. The load is sampled before t
 startup interval and after it. A run is LOADED when any of those samples is 15 % or more.
 
 ADR-0018 judges idle memory on private bytes and records the working set without a verdict. The
-CPU edge is 0.5 % of one core. Binary size is load-independent.
+CPU edge is 0.5 % of one core. Binary size is load-independent. Memory is in MiB, written MB as
+in ADR-0018; the exact byte counts are in brackets.
 
 ## Results
 
