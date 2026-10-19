@@ -17,4 +17,5 @@ All notable changes to `nepdate` are recorded here. The format follows
 - Formatting in English and Nepali, including patterns, long dates and Devanagari digits.
 - Strict parsing through `FromStr` and lenient parsing for month names and era markers.
 - Features `serde`, `chrono` and `jiff`, including `today()` in `Asia/Kathmandu`.
-- `no_std` by default, no dependencies, no allocation and no `unsafe`.
+- A `no_std` crate (`std` is a default feature) with no required dependencies, no allocation
+  and no `unsafe`.
