@@ -6,6 +6,10 @@ All notable changes to MitiBar are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-beta.1] - 2026-10-22
+
+First public pre-release, unsigned on Windows and macOS. Behaviour and settings may still change before 0.1.0.
+
 ### Added
 
 - Tray icon and menu: Open, Copy today (BS), Copy today (AD), Settings and Quit, translated into

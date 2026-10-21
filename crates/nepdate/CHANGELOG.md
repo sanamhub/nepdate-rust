@@ -6,6 +6,10 @@ All notable changes to `nepdate` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-beta.1] - 2026-10-22
+
+First public pre-release. The API may still change before 0.1.0.
+
 ### Added
 
 - Bikram Sambat dates for BS 1901-01-01 to 2199-12-30, with `NepaliDate`, `Month`, `Weekday` and

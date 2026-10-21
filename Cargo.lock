@@ -2877,7 +2877,7 @@ dependencies = [
 
 [[package]]
 name = "mitibar"
-version = "0.1.0"
+version = "0.1.0-beta.1"
 dependencies = [
  "anyhow",
  "arboard",
@@ -3020,7 +3020,7 @@ dependencies = [
 
 [[package]]
 name = "nepdate"
-version = "0.1.0"
+version = "0.1.0-beta.1"
 dependencies = [
  "chrono",
  "jiff",
@@ -3054,7 +3054,7 @@ dependencies = [
 
 [[package]]
 name = "nepdate-patro"
-version = "0.1.0"
+version = "0.1.0-beta.1"
 dependencies = [
  "chrono",
  "jiff",

@@ -1,6 +1,6 @@
 [package]
 name = "nepdate"
-version = "0.1.0"
+version = "0.1.0-beta.1"
 description = "Bikram Sambat (Nepali) calendar: fast, no_std, zero-dependency BS↔AD conversion"
 edition.workspace = true
 license.workspace = true
