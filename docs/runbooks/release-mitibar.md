@@ -21,7 +21,8 @@ The workflow creates a **draft**; a second maintainer installs the assets and pu
    yet:** the software build measures 34.35 MB private and 1.217 % of one core, but the 5-minute
    row is LOADED (47.9 % before, 31.2 % during). The five cold starts are 62.4 to 80.4 ms, also
    LOADED (19.4 to 32.4 % during startup). A quiet 5-minute row and quiet cold starts must pass
-   on this build.
+   on this build. A pre-release (`X.Y.Z-beta.N`) may go out without the quiet rows, as long as
+   its changelog section says the performance targets are not yet confirmed.
 5. `cargo xtask ci` passes locally.
 
 ## Build the packages locally (optional)
