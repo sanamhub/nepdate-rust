@@ -142,8 +142,10 @@ fn check_permissions(root: &Mapping) -> Result<()> {
                 );
             }
         } else if get(permissions, "id-token").is_some()
-            || get(permissions, "attestations").is_some()
+            || get(permissions, "attestations")
+                .is_some_and(|value| !(name == "verify" && value.as_str() == Some("read")))
         {
+            // The verify job reads attestations to check them; nothing else may touch them.
             bail!("only the attest job may have id-token or attestations");
         }
         if name == "release"
@@ -165,6 +167,7 @@ fn check_jobs(root: &Mapping) -> Result<()> {
         "sbom",
         "checksums",
         "attest",
+        "verify",
         "release",
     ] {
         if get(jobs, name).is_none() {
@@ -246,7 +249,21 @@ fn check_jobs(root: &Mapping) -> Result<()> {
         bail!("attest job does not attest the artifacts");
     }
 
+    let verify = job(jobs, "verify")?;
+    let verify_text = run_text(verify)?;
+    for command in ["sha256sum -c SHA256SUMS", "gh attestation verify"] {
+        if !verify_text.contains(command) {
+            bail!("verify job does not run `{command}`");
+        }
+    }
+
     let release = job(jobs, "release")?;
+    let release_needs = field(release, "needs")?;
+    if !seq_field(release, "needs")
+        .is_ok_and(|needs| needs.iter().any(|n| n.as_str() == Some("verify")))
+    {
+        bail!("release job must need verify, got {release_needs:?}");
+    }
     if field(release, "environment")?.as_str() != Some("production") {
         bail!("release job must use the production environment");
     }
@@ -576,6 +593,30 @@ mod tests {
             "    environment: staging\n",
         );
         expect_failure(&text, "production environment");
+    }
+
+    #[test]
+    fn a_release_that_skips_verify_fails() {
+        let text = mutated(
+            "    needs: [preflight, checksums, attest, verify]\n",
+            "    needs: [preflight, checksums, attest]\n",
+        );
+        expect_failure(&text, "release job must need verify");
+    }
+
+    #[test]
+    fn a_verify_job_without_the_attestation_check_fails() {
+        let text = mutated(
+            "            gh attestation verify \"$file\" --repo \"$REPOSITORY\"\n",
+            "            echo \"$file\"\n",
+        );
+        expect_failure(&text, "gh attestation verify");
+    }
+
+    #[test]
+    fn attestations_write_outside_attest_fails() {
+        let text = mutated("      attestations: read\n", "      attestations: write\n");
+        expect_failure(&text, "only the attest job");
     }
 
     #[test]

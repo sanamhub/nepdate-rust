@@ -1,0 +1,45 @@
+name: verify-published
+
+# Builds a published version of nepdate and nepdate-patro from crates.io in a new cargo project on
+# every runner OS and checks the output (scripts/verify-published.sh). release-lib.yml calls it after
+# the upload; a release made with GITHUB_TOKEN fires no event, so a trigger would never run. It can
+# also be dispatched by hand for any published version. The script comes from the ref the run is
+# on, so a released tag can be re-checked with the script on main.
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: published version, for example 0.1.0-beta.1
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: published version, for example 0.1.0-beta.1
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: "1.98"
+      - name: Build and run against crates.io
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: bash scripts/verify-published.sh "$VERSION" 20
