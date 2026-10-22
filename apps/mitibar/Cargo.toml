@@ -49,7 +49,7 @@ arboard = { version = "3", default-features = false, features = ["wayland-data-c
 # Logging (ADR-0015): file logger + panic hook.
 log = "0.4"
 simplelog = "0.12"
-dirs = "6"
+dirs = "7"
 # PNG encoding for the snapshot flags, behind the `snapshot` feature (ADR-0016).
 image = { version = "0.25", default-features = false, features = ["png"], optional = true }
 
