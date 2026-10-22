@@ -197,6 +197,11 @@ jobs:
             --team-id "$MACOS_NOTARY_TEAM_ID" --password "$MACOS_NOTARY_PASSWORD" --wait
           xcrun stapler staple "$dmg"
           xcrun stapler validate "$dmg"
+      # The DMG carries the app; the bare bundle is a directory, which sha256sum and the release
+      # can't take.
+      - name: Keep only the DMG (macOS)
+        if: matrix.os == 'macos-latest'
+        run: rm -rf dist/MitiBar.app
       - name: Sign Windows installer
         if: matrix.os == 'windows-latest' && vars.WINDOWS_SIGNING_ENABLED == 'true'
         shell: pwsh

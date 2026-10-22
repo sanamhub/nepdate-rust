@@ -431,6 +431,18 @@ fn check_macos_signing(job: &Mapping) -> Result<()> {
     if !(package < sign && sign < dmg && dmg < notarize) {
         bail!("the macOS steps must package the app, sign it, build the DMG, then notarize");
     }
+
+    // The bare .app is a directory: sha256sum fails on it and the release must not carry it.
+    let keep = step_named(job, "Keep only the DMG (macOS)")?;
+    let keep_run = get(map(keep)?, "run")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if !keep_run.contains("rm -rf dist/MitiBar.app") {
+        bail!("the macOS build must remove dist/MitiBar.app after the DMG");
+    }
+    if step_position(job, "Keep only the DMG (macOS)")? < notarize {
+        bail!("the macOS build removes dist/MitiBar.app before the DMG is notarized");
+    }
     Ok(())
 }
 
