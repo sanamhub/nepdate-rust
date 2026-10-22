@@ -227,8 +227,13 @@ fn check_jobs(root: &Mapping) -> Result<()> {
     check_macos_signing(build)?;
     check_windows_arm64(build)?;
 
-    if !run_text(job(jobs, "sbom")?)?.contains("cargo cyclonedx") {
+    let sbom_text = run_text(job(jobs, "sbom")?)?;
+    if !sbom_text.contains("cargo cyclonedx") {
         bail!("sbom job does not run cargo cyclonedx");
+    }
+    // cargo-cyclonedx adds only ".json" to an override, and verify expects MitiBar-<v>.cdx.json.
+    if !sbom_text.contains(r#"--override-filename "MitiBar-${VERSION}.cdx""#) {
+        bail!("sbom job must name the SBOM MitiBar-${{VERSION}}.cdx (the tool appends .json)");
     }
     if !run_text(job(jobs, "checksums")?)?.contains("sha256sum") {
         bail!("checksums job does not run sha256sum");
@@ -425,6 +430,18 @@ fn check_macos_signing(job: &Mapping) -> Result<()> {
     let notarize = step_position(job, "Notarize and staple macOS DMG")?;
     if !(package < sign && sign < dmg && dmg < notarize) {
         bail!("the macOS steps must package the app, sign it, build the DMG, then notarize");
+    }
+
+    // The bare .app is a directory: sha256sum fails on it and the release must not carry it.
+    let keep = step_named(job, "Keep only the DMG (macOS)")?;
+    let keep_run = get(map(keep)?, "run")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if !keep_run.contains("rm -rf dist/MitiBar.app") {
+        bail!("the macOS build must remove dist/MitiBar.app after the DMG");
+    }
+    if step_position(job, "Keep only the DMG (macOS)")? < notarize {
+        bail!("the macOS build removes dist/MitiBar.app before the DMG is notarized");
     }
     Ok(())
 }
