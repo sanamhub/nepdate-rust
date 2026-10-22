@@ -208,7 +208,7 @@ jobs:
           if (-not $installer) { throw "no NSIS installer in dist" }
           & signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /sha1 $env:SIGNING_CERT_SHA1 $installer.FullName
           if ($LASTEXITCODE -ne 0) { throw "signtool failed for $($installer.Name)" }
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: packages-${{ matrix.os }}-${{ matrix.arch }}
           path: dist/*
@@ -225,7 +225,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: "1.98"
-      - uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2.87.26
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: cargo-cyclonedx
       - name: CycloneDX SBOM
@@ -237,7 +237,7 @@ jobs:
             --spec-version 1.5 --override-filename "MitiBar-${VERSION}"
           mkdir -p sbom
           find . -name "MitiBar-${VERSION}*.cdx.json" -print -quit | xargs -r -I{} cp {} sbom/
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom
           path: sbom/*
@@ -258,7 +258,7 @@ jobs:
           cd artifacts
           sha256sum -- * > SHA256SUMS
           cat SHA256SUMS
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: checksums
           path: artifacts/SHA256SUMS
