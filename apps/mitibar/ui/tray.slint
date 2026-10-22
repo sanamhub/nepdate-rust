@@ -16,11 +16,18 @@ export component TrayComponent inherits SystemTrayIcon {
     in property <bool> dark-taskbar: Palette.color-scheme == ColorScheme.dark;
     in-out property <string> title-text: "";
     in-out property <string> tooltip-text: "";
-    // The taskbar text's menu uses the same translated labels, and it exists before the
-    // popup. These read the one `MenuText` global the tray menu also reads.
+    // The Show bar item exists only where the app has a bar (Windows, WR-01 AC5), and is checked
+    // while the bar is shown.
+    in property <bool> bar-supported: false;
+    in property <bool> bar-shown: false;
+    // The bar's menu uses the same translated labels, and it exists before the popup. These read
+    // the one `MenuText` global the tray menu also reads.
     out property <string> menu-open: MenuText.open;
     out property <string> menu-copy-bs: MenuText.copy-bs;
     out property <string> menu-copy-ad: MenuText.copy-ad;
+    out property <string> menu-customize-bar: MenuText.customize-bar;
+    out property <string> menu-lock-position: MenuText.lock-position;
+    out property <string> menu-hide-bar: MenuText.hide-bar;
     out property <string> menu-settings: MenuText.settings;
     out property <string> menu-quit: MenuText.quit;
 
@@ -39,6 +46,12 @@ export component TrayComponent inherits SystemTrayIcon {
         MenuItem { title: MenuText.open; activated => { root.open(); } }
         MenuItem { title: MenuText.copy-bs; activated => { root.copy-bs(); } }
         MenuItem { title: MenuText.copy-ad; activated => { root.copy-ad(); } }
+        if root.bar-supported : MenuItem {
+            title: MenuText.show-bar;
+            checkable: true;
+            checked: root.bar-shown;
+            activated => { root.show-bar(); }
+        }
         MenuItem { title: MenuText.settings; activated => { root.settings(); } }
         MenuItem { title: MenuText.quit; activated => { root.quit(); } }
     }
@@ -46,6 +59,7 @@ export component TrayComponent inherits SystemTrayIcon {
     callback open();
     callback copy-bs();
     callback copy-ad();
+    callback show-bar();
     callback settings();
     callback quit();
 }

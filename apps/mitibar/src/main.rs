@@ -30,12 +30,13 @@ use std::rc::Rc;
 use nepdate::{DateOrder, Lang, LongDate, Month, NepaliDate, Separator};
 use slint::{ComponentHandle, Weak};
 
+use crate::app::bar::bar_lines;
+use crate::app::bar_place::Saved;
 use crate::app::converter::{self, Direction};
 use crate::app::settings::Settings;
-use crate::app::taskbar::taskbar_lines;
 use crate::app::{APP_NAME, clock, holidays, month_view};
+use crate::platform::bar::{Anchor, Bar, BarEvent, MenuItem};
 use crate::platform::clipboard::{Clipboard, SystemClipboard};
-use crate::platform::taskbar::{MenuItem, TaskbarEvent, TaskbarText};
 use crate::platform::tray::{SlintTray, Tray, TrayEvent};
 
 slint::include_modules!();
@@ -58,9 +59,9 @@ struct AppState {
     clipboard: Rc<dyn Clipboard>,
     /// Every IANA zone, for the settings filter.
     zones: Vec<String>,
-    /// The live tray and taskbar text, so a settings change can reach them.
+    /// The live tray and bar, so a settings change can reach them.
     tray: Option<Rc<SlintTray>>,
-    taskbar: Option<Rc<dyn TaskbarText>>,
+    bar: Option<Rc<dyn Bar>>,
     /// Where the settings panel saves: the per-user file in the app, a temporary file in
     /// a test, `None` in a snapshot run or without a config directory.
     settings_path: Option<PathBuf>,
@@ -74,7 +75,7 @@ struct AppState {
 }
 
 /// The strong popup handle. `AppState` keeps only a `Weak`, so the popup's own callbacks (which
-/// capture `AppState`) do not keep the popup alive through the state. The tray and taskbar
+/// capture `AppState`) do not keep the popup alive through the state. The tray and bar
 /// closures do hold this slot and the state, and `AppState` holds the tray, so a reference cycle
 /// exists; it lives exactly as long as the process, which never drops these objects before exit.
 type PopupSlot = Rc<RefCell<Option<PopupWindow>>>;
@@ -96,7 +97,7 @@ impl AppState {
             clipboard,
             zones: Vec::new(),
             tray: None,
-            taskbar: None,
+            bar: None,
             settings_path: None,
             popup: Weak::default(),
             save_timer: Rc::new(slint::Timer::default()),
@@ -254,16 +255,17 @@ struct Cli {
     wake_out: Option<PathBuf>,
     theme: Option<ThemeChoice>,
     lang: Option<Lang>,
-    no_taskbar_text: bool,
+    /// Hides the bar for this run, whatever `bar` says in the settings file.
+    no_bar: bool,
     /// Use this settings file instead of the per-user one, and do not touch the login item
     /// or the single-instance socket. It is how the idle harness starts a measured process.
     settings_file: Option<PathBuf>,
     #[cfg(all(windows, feature = "snapshot"))]
-    taskbar_snapshot: Option<PathBuf>,
+    bar_snapshot: Option<PathBuf>,
     #[cfg(all(windows, feature = "snapshot"))]
-    taskbar_theme: Option<bool>, // Some(true) = dark taskbar
+    bar_theme: Option<bool>, // Some(true) = dark taskbar
     #[cfg(all(windows, feature = "snapshot"))]
-    taskbar_scale: Option<f32>,
+    bar_scale: Option<f32>,
 }
 
 /// Reads one `--today` or `--detail` value. Both flags are snapshot tools, so this helper is too.
@@ -290,7 +292,7 @@ impl Cli {
             match arg.as_str() {
                 "--font-test" => cli.font_test = true,
                 "--popup" => cli.popup = true,
-                "--no-taskbar-text" => cli.no_taskbar_text = true,
+                "--no-bar" => cli.no_bar = true,
                 "--settings-file" => {
                     let path = args
                         .next()
@@ -356,22 +358,22 @@ impl Cli {
                     });
                 }
                 #[cfg(all(windows, feature = "snapshot"))]
-                "--taskbar-snapshot" => {
+                "--bar-snapshot" => {
                     let path = args
                         .next()
-                        .ok_or_else(|| anyhow::anyhow!("--taskbar-snapshot needs a path"))?;
-                    cli.taskbar_snapshot = Some(PathBuf::from(path));
+                        .ok_or_else(|| anyhow::anyhow!("--bar-snapshot needs a path"))?;
+                    cli.bar_snapshot = Some(PathBuf::from(path));
                 }
                 #[cfg(all(windows, feature = "snapshot"))]
-                "--taskbar-theme" => {
+                "--bar-theme" => {
                     let value = args
                         .next()
-                        .ok_or_else(|| anyhow::anyhow!("--taskbar-theme needs light or dark"))?;
-                    cli.taskbar_theme = Some(match value.as_str() {
+                        .ok_or_else(|| anyhow::anyhow!("--bar-theme needs light or dark"))?;
+                    cli.bar_theme = Some(match value.as_str() {
                         "light" => false,
                         "dark" => true,
                         other => {
-                            anyhow::bail!("--taskbar-theme must be light or dark, got {other}")
+                            anyhow::bail!("--bar-theme must be light or dark, got {other}")
                         }
                     });
                 }
@@ -380,7 +382,7 @@ impl Cli {
                     let value = args
                         .next()
                         .ok_or_else(|| anyhow::anyhow!("--scale needs 1, 1.5 or 2"))?;
-                    cli.taskbar_scale = Some(match value.as_str() {
+                    cli.bar_scale = Some(match value.as_str() {
                         "1" => 1.0,
                         "1.5" => 1.5,
                         "2" => 2.0,
@@ -448,7 +450,7 @@ impl Cli {
             return true;
         }
         #[cfg(all(windows, feature = "snapshot"))]
-        if self.taskbar_snapshot.is_some() {
+        if self.bar_snapshot.is_some() {
             return true;
         }
         false
@@ -468,7 +470,7 @@ fn load_settings(cli: &Cli) -> (Settings, Vec<String>) {
         return (Settings::default(), Vec::new());
     }
     #[cfg(all(windows, feature = "snapshot"))]
-    if cli.taskbar_snapshot.is_some() {
+    if cli.bar_snapshot.is_some() {
         return (Settings::default(), Vec::new());
     }
     let _ = cli;
@@ -525,26 +527,25 @@ fn main() -> anyhow::Result<()> {
             Lang::En => String::from("en"),
         };
     }
-    // The `--no-taskbar-text` flag turns WR-12 off for this run.
-    if cli.no_taskbar_text {
-        settings.taskbar_text = false;
+    // The `--no-bar` flag hides the bar for this run.
+    if cli.no_bar {
+        settings.bar = false;
     }
     // WR-09 AC2: match the login item to the setting. A snapshot never touches it.
     if !cli.is_snapshot_tool() {
-        platform::autostart::apply(settings.launch_at_login);
+        platform::autostart::apply_on_start(settings.launch_at_login);
     }
     let lang = settings.lang();
 
-    // Taskbar snapshot: render the text and composite it over a taskbar
-    // strip, exactly as the controller sends it to `UpdateLayeredWindow`.
+    // Bar snapshot: render the bar and composite it over a taskbar strip, exactly as the window
+    // sends it to `UpdateLayeredWindow`.
     #[cfg(all(windows, feature = "snapshot"))]
-    if let Some(path) = cli.taskbar_snapshot.clone() {
-        let now = jiff::Zoned::now();
-        let lines = taskbar_lines(&now, &settings);
+    if let Some(path) = cli.bar_snapshot.clone() {
+        let lines = snapshot_bar_lines(&settings);
         let dark = cli
-            .taskbar_theme
+            .bar_theme
             .unwrap_or_else(|| platform::taskbar_scheme::taskbar_is_dark().unwrap_or(false));
-        return write_taskbar_snapshot(&lines, cli.taskbar_scale.unwrap_or(1.0), dark, &path);
+        return write_bar_snapshot(&lines, cli.bar_scale.unwrap_or(1.0), dark, &path);
     }
 
     // Keep the popup out of the Windows taskbar. The hook runs before winit creates the
@@ -613,13 +614,13 @@ fn main() -> anyhow::Result<()> {
         slint::select_bundled_translation("ne")?;
     }
 
-    // Taskbar text: WR-12 on Windows 11, a no-op elsewhere. Its events run the same
-    // actions as the tray menu; its scheme callback keeps the tray icon ink in step.
-    let taskbar: Rc<dyn TaskbarText> = Rc::from(platform::taskbar::create(
+    // The bar: WR-08 on Windows, a no-op elsewhere. Its events run the same actions as the tray
+    // menu; its scheme callback keeps the tray icon ink in step.
+    let bar: Rc<dyn Bar> = Rc::from(platform::bar::create(
         {
             let state = state.clone();
             let slot = slot.clone();
-            move |event| handle_taskbar_event(event, &state, &slot)
+            move |event| handle_bar_event(event, &state, &slot)
         },
         {
             let tray = tray.clone();
@@ -627,19 +628,23 @@ fn main() -> anyhow::Result<()> {
         },
     ));
     // The labels come from the tray component, which exists before the popup.
-    taskbar.set_menu_labels(&tray.menu_labels());
-    taskbar.set_enabled(state.borrow().settings.taskbar_text);
-    // First taskbar lines, then the timer updates them each tick (WR-12 AC1).
+    bar.set_menu_labels(&tray.menu_labels());
+    // First lines, then the timer updates them each tick (WR-08 AC9). The bar is shown last, so
+    // it appears fully configured.
     {
         let s = state.borrow();
-        let now = jiff::Zoned::now();
-        taskbar.set_lines(&taskbar_lines(&now, &s.settings));
+        bar.set_locked(s.settings.bar_locked);
+        bar.set_position(&s.settings.bar_position());
+        bar.set_lines(&bar_lines(&jiff::Zoned::now(), &s.settings));
+        bar.set_shown(s.settings.bar);
+        tray.set_bar_supported(cfg!(windows));
+        tray.set_bar_shown(s.settings.bar);
     }
 
-    // The settings panel needs the live tray and taskbar for language and taskbar-text
-    // changes. The debounce timer lives in `AppState`, so a lazily created popup shares it.
+    // The settings panel needs the live tray and bar for language and bar changes. The debounce
+    // timer lives in `AppState`, so a lazily created popup shares it.
     state.borrow_mut().tray = Some(tray.clone());
-    state.borrow_mut().taskbar = Some(taskbar.clone());
+    state.borrow_mut().bar = Some(bar.clone());
 
     // First paint of the tray, then the once-per-minute (or per-second) timer.
     update_tray(&state, &tray);
@@ -653,7 +658,7 @@ fn main() -> anyhow::Result<()> {
         platform::single_instance::start(listener, wake_ui);
     }
 
-    arm_timer(state.clone(), tray, taskbar);
+    arm_timer(state.clone(), tray, bar);
 
     // Count UI wakes in a headless window, write the count and quit. Snapshot tool only.
     #[cfg(feature = "snapshot")]
@@ -739,34 +744,106 @@ fn handle_tray_event(event: TrayEvent, state: &Rc<RefCell<AppState>>, slot: &Pop
         }
         TrayEvent::CopyBs => copy_bs(state),
         TrayEvent::CopyAd => copy_ad(state),
-        TrayEvent::Settings => open_settings(state, slot),
+        TrayEvent::ShowBar => {
+            let shown = !state.borrow().settings.bar;
+            set_bar_shown(state, shown);
+        }
+        TrayEvent::Settings => open_settings(state, slot, ui_bridge::PopupAnchor::TrayCorner),
         TrayEvent::Quit => {
             let _ = slint::quit_event_loop();
         }
     }
 }
 
-/// Handles a WR-12 taskbar event. `Toggle` opens or hides the popup above the text; `Menu` runs
-/// the same actions as the tray menu (ADR-0016 point 7).
-fn handle_taskbar_event(event: TaskbarEvent, state: &Rc<RefCell<AppState>>, slot: &PopupSlot) {
+/// Handles a WR-08 bar event (ADR-0019 points 5 and 8). A click toggles the popup, a double-click
+/// opens it and never closes it, a drag's end is saved, and the right-click menu runs the same
+/// actions as the tray menu, with the popup opening at the bar.
+fn handle_bar_event(event: BarEvent, state: &Rc<RefCell<AppState>>, slot: &PopupSlot) {
     match event {
-        TaskbarEvent::Toggle { anchor } => {
+        BarEvent::Toggle(anchor) => {
             if popup_visible(state) {
                 hide_popup(state);
             } else {
-                open_popup(slot, state, ui_bridge::PopupAnchor::Above(anchor.into()));
+                open_popup(slot, state, ui_bridge::PopupAnchor::Bar(anchor));
             }
         }
-        TaskbarEvent::Menu(item) => {
-            let tray_event = match item {
-                MenuItem::Open => TrayEvent::Open,
-                MenuItem::CopyBs => TrayEvent::CopyBs,
-                MenuItem::CopyAd => TrayEvent::CopyAd,
-                MenuItem::Settings => TrayEvent::Settings,
-                MenuItem::Quit => TrayEvent::Quit,
-            };
-            handle_tray_event(tray_event, state, slot);
+        BarEvent::Open(anchor) => open_popup_if_hidden(slot, state, anchor),
+        BarEvent::Moved(saved) => {
+            state.borrow_mut().settings.set_bar_position(&saved);
+            save_later(state);
         }
+        BarEvent::Menu { item, anchor } => match item {
+            MenuItem::Open => open_popup_if_hidden(slot, state, anchor),
+            MenuItem::CopyBs => copy_bs(state),
+            MenuItem::CopyAd => copy_ad(state),
+            // The Bar section of Settings is W8-3; until then Settings holds the bar's switches.
+            MenuItem::Customize | MenuItem::Settings => {
+                open_settings(state, slot, ui_bridge::PopupAnchor::Bar(anchor));
+            }
+            MenuItem::Lock => {
+                let locked = !state.borrow().settings.bar_locked;
+                state.borrow_mut().settings.bar_locked = locked;
+                let bar = state.borrow().bar.clone();
+                if let Some(bar) = bar {
+                    bar.set_locked(locked);
+                }
+                save_later(state);
+            }
+            MenuItem::Hide => set_bar_shown(state, false),
+            MenuItem::Quit => {
+                let _ = slint::quit_event_loop();
+            }
+        },
+    }
+}
+
+/// Opens the popup at the bar unless it is already open: a double-click and the menu's Open item
+/// leave an open popup open.
+fn open_popup_if_hidden(slot: &PopupSlot, state: &Rc<RefCell<AppState>>, anchor: Anchor) {
+    if !popup_visible(state) {
+        open_popup(slot, state, ui_bridge::PopupAnchor::Bar(anchor));
+    }
+}
+
+/// Shows or hides the bar (the `bar` setting): the bar itself, the tray's Show bar check mark and
+/// the Settings switch follow, and the setting is saved (WR-01 AC5, WR-08 AC6).
+fn set_bar_shown(state: &Rc<RefCell<AppState>>, shown: bool) {
+    state.borrow_mut().settings.bar = shown;
+    let (bar, tray, popup) = {
+        let s = state.borrow();
+        (s.bar.clone(), s.tray.clone(), s.popup.upgrade())
+    };
+    if let Some(bar) = bar {
+        bar.set_shown(shown);
+    }
+    if let Some(tray) = tray {
+        tray.set_bar_shown(shown);
+    }
+    if let Some(popup) = popup {
+        refresh_settings(&popup, state);
+    }
+    save_later(state);
+}
+
+/// Puts the bar back at its default position and forgets the saved one (WR-08 AC5).
+fn reset_bar_position(state: &Rc<RefCell<AppState>>) {
+    state
+        .borrow_mut()
+        .settings
+        .set_bar_position(&Saved::default());
+    let bar = state.borrow().bar.clone();
+    if let Some(bar) = bar {
+        bar.set_position(&Saved::default());
+    }
+    save_later(state);
+}
+
+/// Repaints the bar's lines from the clock and settings. A no-op when nothing changed.
+fn update_bar(state: &Rc<RefCell<AppState>>) {
+    let bar = state.borrow().bar.clone();
+    if let Some(bar) = bar {
+        let lines = bar_lines(&jiff::Zoned::now(), &state.borrow().settings);
+        bar.set_lines(&lines);
     }
 }
 
@@ -1037,20 +1114,17 @@ fn wire_settings(
             let _ = slint::select_bundled_translation(language);
             if let Some(popup) = popup.upgrade() {
                 update_popup(&state);
-                let (tray, taskbar) = {
+                let (tray, bar) = {
                     let s = state.borrow();
-                    (s.tray.clone(), s.taskbar.clone())
+                    (s.tray.clone(), s.bar.clone())
                 };
                 if let Some(tray) = &tray {
                     update_tray(&state, tray);
                 }
-                if let Some(taskbar) = taskbar {
-                    if let Some(tray) = &tray {
-                        taskbar.set_menu_labels(&tray.menu_labels());
-                    }
-                    let lines = taskbar_lines(&jiff::Zoned::now(), &state.borrow().settings);
-                    taskbar.set_lines(&lines);
+                if let (Some(bar), Some(tray)) = (&bar, &tray) {
+                    bar.set_menu_labels(&tray.menu_labels());
                 }
+                update_bar(&state);
                 refresh_settings(&popup, &state);
             }
             schedule_save(&save_timer, &state);
@@ -1079,6 +1153,7 @@ fn wire_settings(
         move |value| {
             state.borrow_mut().settings.clock_24h = value;
             update_popup(&state);
+            update_bar(&state);
             schedule_save(&save_timer, &state);
         }
     });
@@ -1088,6 +1163,7 @@ fn wire_settings(
         move |value| {
             state.borrow_mut().settings.show_seconds = value;
             update_popup(&state);
+            update_bar(&state);
             schedule_save(&save_timer, &state);
         }
     });
@@ -1098,6 +1174,7 @@ fn wire_settings(
         move |zone| {
             state.borrow_mut().settings.extra_time_zone = zone.to_string();
             update_popup(&state);
+            update_bar(&state);
             if let Some(popup) = popup.upgrade() {
                 refresh_settings(&popup, &state);
             }
@@ -1113,17 +1190,13 @@ fn wire_settings(
             schedule_save(&save_timer, &state);
         }
     });
-    popup.on_settings_taskbar({
+    popup.on_settings_bar({
         let state = state.clone();
-        let save_timer = save_timer.clone();
-        move |value| {
-            state.borrow_mut().settings.taskbar_text = value;
-            let taskbar = state.borrow().taskbar.clone();
-            if let Some(taskbar) = taskbar {
-                taskbar.set_enabled(value);
-            }
-            schedule_save(&save_timer, &state);
-        }
+        move |value| set_bar_shown(&state, value)
+    });
+    popup.on_settings_reset_bar({
+        let state = state.clone();
+        move || reset_bar_position(&state)
     });
     popup.on_settings_filter_changed({
         let state = state.clone();
@@ -1157,6 +1230,13 @@ fn schedule_save(timer: &Rc<slint::Timer>, state: &Rc<RefCell<AppState>>) {
     );
 }
 
+/// `schedule_save` for a change that did not come from the settings panel, so it has no timer in
+/// hand: the one shared timer lives in `AppState`.
+fn save_later(state: &Rc<RefCell<AppState>>) {
+    let timer = state.borrow().save_timer.clone();
+    schedule_save(&timer, state);
+}
+
 /// Writes the current settings to `AppState::settings_path`, if there is one.
 fn save_settings(state: &Rc<RefCell<AppState>>) {
     let (settings, path) = {
@@ -1171,15 +1251,15 @@ fn save_settings(state: &Rc<RefCell<AppState>>) {
     }
 }
 
-/// Opens the settings panel, showing the popup first if it was hidden.
-fn open_settings(state: &Rc<RefCell<AppState>>, slot: &PopupSlot) {
+/// Opens the settings panel, showing the popup at `anchor` first if it was hidden.
+fn open_settings(state: &Rc<RefCell<AppState>>, slot: &PopupSlot, anchor: ui_bridge::PopupAnchor) {
     let Some(popup) = ensure_popup(slot, state) else {
         return;
     };
     if !popup.window().is_visible() {
         prepare_show(state);
         update_popup(state);
-        let _ = ui_bridge::show_popup_at(&popup, ui_bridge::PopupAnchor::TrayCorner);
+        let _ = ui_bridge::show_popup_at(&popup, anchor);
     }
     popup.set_settings_filter("".into());
     refresh_settings(&popup, state);
@@ -1256,25 +1336,25 @@ fn update_tray(state: &Rc<RefCell<AppState>>, tray: &Rc<SlintTray>) {
     ));
 }
 
-/// One tick of the timer: tray, popup, taskbar text, then re-arms (WR-05 AC5/AC6).
-fn update_tick(state: &Rc<RefCell<AppState>>, tray: &Rc<SlintTray>, taskbar: &Rc<dyn TaskbarText>) {
+/// One tick of the timer: tray, popup, bar, then re-arms (WR-05 AC5/AC6). This is the only timer
+/// that runs at idle; the bar adds none (WR-08 AC9).
+fn update_tick(state: &Rc<RefCell<AppState>>, tray: &Rc<SlintTray>, bar: &Rc<dyn Bar>) {
     note_wake();
     update_tray(state, tray);
     update_popup(state);
     let s = state.borrow();
-    let now = jiff::Zoned::now();
-    taskbar.set_lines(&taskbar_lines(&now, &s.settings));
+    bar.set_lines(&bar_lines(&jiff::Zoned::now(), &s.settings));
 }
 
 /// Schedules the next single-shot tick. The closure re-arms itself, so the process sleeps about
 /// 60 s between wakes when seconds are hidden (WR-05 AC5).
-fn arm_timer(state: Rc<RefCell<AppState>>, tray: Rc<SlintTray>, taskbar: Rc<dyn TaskbarText>) {
+fn arm_timer(state: Rc<RefCell<AppState>>, tray: Rc<SlintTray>, bar: Rc<dyn Bar>) {
     let now = jiff::Zoned::now();
     let show_seconds = state.borrow().settings.show_seconds;
     let delay = clock::next_wakeup(&now, show_seconds);
     slint::Timer::single_shot(delay, move || {
-        update_tick(&state, &tray, &taskbar);
-        arm_timer(state, tray, taskbar);
+        update_tick(&state, &tray, &bar);
+        arm_timer(state, tray, bar);
     });
 }
 
@@ -1331,43 +1411,51 @@ fn snapshot<C: ComponentHandle + 'static>(ui: &C, path: &std::path::Path) -> any
         .unwrap_or_else(|| Err(anyhow::anyhow!("snapshot timer never fired")))
 }
 
-/// Renders the taskbar text at `scale` and composites it over a taskbar-coloured strip
-/// (`#F3F3F3` light, `#202020` dark, 48 px scaled high), exactly as the controller sends the text
-/// to `UpdateLayeredWindow`.
+/// The lines a bar snapshot shows: the moment of the WR-08 AC2 table (Thursday, 2083 Kartik 5,
+/// 6:31 PM in Kathmandu) with Singapore as the extra clock, so the image never changes with the
+/// clock and shows the defaults. `--lang` picks the language through `settings`.
+#[cfg(all(windows, feature = "snapshot"))]
+fn snapshot_bar_lines(settings: &Settings) -> crate::app::bar::BarLines {
+    let now: jiff::Zoned = "2026-10-22T18:31:00+05:45[Asia/Kathmandu]"
+        .parse()
+        .expect("a fixed valid timestamp");
+    let settings = Settings {
+        extra_time_zone: "Asia/Singapore".to_owned(),
+        ..settings.clone()
+    };
+    bar_lines(&now, &settings)
+}
+
+/// Renders the bar at `scale` and composites it over a taskbar-coloured strip (`#F3F3F3` light,
+/// `#202020` dark, 48 px scaled high), exactly as the window sends it to `UpdateLayeredWindow`.
 // The strip height and inset are 12 or 48 times a scale of at most a few, so the f32-to-u32 cast
 // only drops the fractional rounding.
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 #[cfg(all(windows, feature = "snapshot"))]
-fn write_taskbar_snapshot(
-    lines: &crate::app::taskbar::TaskbarLines,
+fn write_bar_snapshot(
+    lines: &crate::app::bar::BarLines,
     scale: f32,
     dark: bool,
     path: &std::path::Path,
 ) -> anyhow::Result<()> {
-    use crate::platform::taskbar::{render_taskbar_text, taskbar_ink};
+    use crate::platform::bar::{bar_palette, render_bar};
 
     // The renderer caches its DirectWrite and Direct2D objects per thread. Render on a worker,
-    // as the controller does, so that cache is released when the worker ends; on the main thread
-    // it would be released during process exit, after DirectWrite has shut down.
+    // as the bar does, so that cache is released when the worker ends; on the main thread it would
+    // be released during process exit, after DirectWrite has shut down.
     let rendered = std::thread::scope(|scope| {
         scope
-            .spawn(|| render_taskbar_text(lines, scale, taskbar_ink(dark)))
+            .spawn(|| render_bar(lines, scale, bar_palette(dark), false))
             .join()
     })
-    .map_err(|_| anyhow::anyhow!("the taskbar render thread panicked"))??;
+    .map_err(|_| anyhow::anyhow!("the bar render thread panicked"))??;
     let strip = (48.0 * scale).round() as u32;
     let inset = (12.0 * scale).round() as u32;
     let width = rendered.width + inset * 2;
-    let (blue, green, red) = if dark {
-        (0x20u8, 0x20u8, 0x20u8)
-    } else {
-        (0xF3u8, 0xF3u8, 0xF3u8)
-    };
-    let mut out = vec![0u8; (width * strip * 4) as usize];
+    let background: u8 = if dark { 0x20 } else { 0xF3 };
+    // RGBA bytes: an opaque, grey strip.
+    let mut out = vec![background; (width * strip * 4) as usize];
     for pixel in out.as_chunks_mut::<4>().0 {
-        pixel[0] = blue;
-        pixel[1] = green;
-        pixel[2] = red;
         pixel[3] = 255;
     }
     let y_off = (strip - rendered.height) / 2;
@@ -1375,18 +1463,19 @@ fn write_taskbar_snapshot(
         for x in 0..rendered.width {
             let src = ((y * rendered.width + x) * 4) as usize;
             let dst = (((y + y_off) * width + x + inset) * 4) as usize;
-            // Premultiplied source over opaque background: out = src + bg * (1 - a). The sum is
-            // always 0..=255, so the u8 cast only drops the fractional rounding.
+            // The renderer's pixels are premultiplied BGRA; the PNG is RGBA. Premultiplied source
+            // over an opaque background: out = src + bg * (1 - a). The sum is always 0..=255, so
+            // the u8 cast only drops the fractional rounding.
             let alpha = u32::from(rendered.pixels[src + 3]);
-            for channel in 0..3 {
-                let s = u32::from(rendered.pixels[src + channel]);
+            for (channel, source) in [(0, 2), (1, 1), (2, 0)] {
+                let s = u32::from(rendered.pixels[src + source]);
                 let b = u32::from(out[dst + channel]);
                 out[dst + channel] = (s + b * (255 - alpha) / 255) as u8;
             }
         }
     }
     let img = image::RgbaImage::from_raw(width, strip, out).ok_or_else(|| {
-        anyhow::anyhow!("taskbar snapshot buffer is {width}x{strip} but the byte count is wrong")
+        anyhow::anyhow!("bar snapshot buffer is {width}x{strip} but the byte count is wrong")
     })?;
     img.save_with_format(path, image::ImageFormat::Png)?;
     println!("wrote {}", path.display());

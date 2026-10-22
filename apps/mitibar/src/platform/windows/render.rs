@@ -1,32 +1,35 @@
-//! Direct2D + DirectWrite into a premultiplied BGRA buffer (ADR-0016 point 4). No window: the
-//! caller passes the two lines, the DPI scale and the ink colour, and gets back the pixels and
-//! their size, so the rendering is testable without a display. The bundled Noto fonts are loaded
-//! from memory into a private collection, so there is no system-font dependency.
+//! Direct2D + DirectWrite into a premultiplied BGRA buffer (ADR-0019 point 2, widget-design §5).
+//! No window: the caller passes the two lines, the DPI scale, the palette and the hover state, and
+//! gets back the pixels of the pill and their size, so the rendering is testable without a
+//! display. The bundled Noto fonts are loaded from memory into a private collection, so there is
+//! no system-font dependency.
 // FFI conventions the renderer cannot avoid: `&x` where `*const T` is expected, and the text
 // dimensions, font sizes and DIB metrics, which are all a few hundred pixels or bytes at most.
 #![allow(
     clippy::borrow_as_ptr,
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
     clippy::cast_sign_loss
 )]
 
 use anyhow::{Context, bail};
 use windows::Win32::Foundation::RECT;
 use windows::Win32::Graphics::Direct2D::Common::{
-    D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F, D2D1_PIXEL_FORMAT,
+    D2D_RECT_F, D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F, D2D1_PIXEL_FORMAT,
 };
 use windows::Win32::Graphics::Direct2D::{
     D2D1_DRAW_TEXT_OPTIONS_NONE, D2D1_FACTORY_TYPE_SINGLE_THREADED, D2D1_FEATURE_LEVEL_DEFAULT,
     D2D1_RENDER_TARGET_PROPERTIES, D2D1_RENDER_TARGET_TYPE_DEFAULT,
-    D2D1_RENDER_TARGET_USAGE_GDI_COMPATIBLE, D2D1CreateFactory, ID2D1DCRenderTarget, ID2D1Factory,
+    D2D1_RENDER_TARGET_USAGE_GDI_COMPATIBLE, D2D1_ROUNDED_RECT, D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE,
+    D2D1CreateFactory, ID2D1DCRenderTarget, ID2D1Factory,
 };
 use windows::Win32::Graphics::DirectWrite::{
     DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_PROPERTY, DWRITE_FONT_PROPERTY_ID_FAMILY_NAME,
     DWRITE_FONT_SIMULATIONS_NONE, DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL,
     DWRITE_FONT_WEIGHT, DWRITE_FONT_WEIGHT_REGULAR, DWRITE_FONT_WEIGHT_SEMI_BOLD,
-    DWRITE_TEXT_METRICS, DWRITE_UNICODE_RANGE, DWRITE_WORD_WRAPPING_NO_WRAP, DWriteCreateFactory,
-    IDWriteFactory, IDWriteFactory3, IDWriteFactory5, IDWriteFontCollection,
+    DWRITE_TEXT_METRICS, DWRITE_TEXT_RANGE, DWRITE_UNICODE_RANGE, DWRITE_WORD_WRAPPING_NO_WRAP,
+    DWriteCreateFactory, IDWriteFactory, IDWriteFactory3, IDWriteFactory5, IDWriteFontCollection,
     IDWriteFontFaceReference, IDWriteFontFallback, IDWriteFontFallbackBuilder, IDWriteFontSet,
     IDWriteFontSetBuilder, IDWriteInMemoryFontFileLoader, IDWriteTextFormat, IDWriteTextFormat1,
     IDWriteTextLayout,
@@ -36,18 +39,25 @@ use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAPINFO, BITMAPINFOHEADER, CreateCompatibleDC, CreateDIBSection, DIB_RGB_COLORS,
     DeleteDC, DeleteObject, GetDC, HBITMAP, HDC, HGDIOBJ, RGBQUAD, ReleaseDC, SelectObject,
 };
-use windows::core::Interface as _;
 use windows::core::w;
+use windows::core::{IUnknown, Interface as _};
 
-use crate::app::taskbar::TaskbarLines;
+use super::theme::{Palette, SURFACE_ALPHA};
+use crate::app::bar::{BarLines, SEPARATOR};
 
-/// The bundled fonts, embedded at compile time (ADR-0010, ADR-0016 point 4).
+/// The bundled fonts, embedded at compile time (ADR-0010, ADR-0019 point 2).
 const NOTO_SANS: &[u8] = include_bytes!("../../../ui/fonts/NotoSans-Variable.ttf");
 const NOTO_DEVANAGARI: &[u8] = include_bytes!("../../../ui/fonts/NotoSansDevanagari-Variable.ttf");
 
-/// widget-design.md §5: line 1 regular, line 2 semibold, 12 px at 100 % scale, 2 px line gap.
+/// widget-design.md §5: line 1 regular, line 2 semibold, 12 px at 100 % scale, 2 px line gap,
+/// 10 px padding left and right, 2 px top and bottom, and a 26 px pill for one line.
 const FONT_SIZE: f32 = 12.0;
 const LINE_GAP: f32 = 2.0;
+const PAD_X: f32 = 10.0;
+const PAD_Y: f32 = 2.0;
+/// Corner radius at 100 % scale: a soft rectangle, not a capsule, to sit with the Windows 11 shell.
+const RADIUS: f32 = 6.0;
+const ONE_LINE_HEIGHT: f32 = 26.0;
 
 /// A rendered buffer: premultiplied BGRA, top-down, one byte per channel.
 pub struct Rendered {
@@ -56,22 +66,28 @@ pub struct Rendered {
     pub height: u32,
 }
 
-/// Renders `lines` at `scale` (dpi / 96) in `ink` (premultiplied RGBA). Every pixel gets at least
-/// alpha 1, so the whole rectangle takes clicks (ADR-0016 point 4). The DirectWrite and Direct2D
+/// Renders the bar's pill at `scale` (dpi / 96) in `palette`; `hover` raises the surface to
+/// `surface-raised` (widget-design §5). Every pixel gets at least alpha 1, so the whole rectangle
+/// takes clicks (ADR-0016 point 4, kept by ADR-0019 point 2). The DirectWrite and Direct2D
 /// factories, the font loader and the font collection are built once per thread.
-pub fn render(lines: &TaskbarLines, scale: f32, ink: [u8; 4]) -> anyhow::Result<Rendered> {
+pub fn render(
+    lines: &BarLines,
+    scale: f32,
+    palette: &Palette,
+    hover: bool,
+) -> anyhow::Result<Rendered> {
     FONTS.with(|cell| {
         if cell.get().is_none() {
             // A failed init leaves the cell empty, so the next render tries again.
             let _ = cell.set(init_fonts()?);
         }
         let fonts = cell.get().context("font cache is empty after init")?;
-        render_with(fonts, lines, scale, ink)
+        render_with(fonts, lines, scale, palette, hover)
     })
 }
 
-/// The shared DirectWrite and Direct2D state for this thread. The controller thread is the only
-/// render caller; the `--taskbar-snapshot` tool reuses the same cache.
+/// The shared DirectWrite and Direct2D state for this thread. The bar's thread is the only
+/// render caller; the `--bar-snapshot` tool reuses the same cache.
 struct Fonts {
     dw: IDWriteFactory5,
     d2d: ID2D1Factory,
@@ -101,33 +117,96 @@ fn init_fonts() -> anyhow::Result<Fonts> {
     })
 }
 
+/// One laid-out line: the layout, its measured size and where its separators are.
+struct Line {
+    layout: IDWriteTextLayout,
+    width: f32,
+    height: f32,
+    separators: Vec<DWRITE_TEXT_RANGE>,
+}
+
+/// A straight-alpha Direct2D colour from an `[r, g, b]` token.
+fn colour(rgb: [u8; 3], alpha: f32) -> D2D1_COLOR_F {
+    D2D1_COLOR_F {
+        r: f32::from(rgb[0]) / 255.0,
+        g: f32::from(rgb[1]) / 255.0,
+        b: f32::from(rgb[2]) / 255.0,
+        a: alpha,
+    }
+}
+
+/// Where each ` · ` separator sits in `text`, in UTF-16 units, which is what DirectWrite counts.
+fn separator_ranges(text: &str) -> Vec<DWRITE_TEXT_RANGE> {
+    let units: Vec<u16> = text.encode_utf16().collect();
+    let separator: Vec<u16> = SEPARATOR.encode_utf16().collect();
+    let mut ranges = Vec::new();
+    let mut at = 0;
+    while at + separator.len() <= units.len() {
+        if units[at..at + separator.len()] == separator[..] {
+            ranges.push(DWRITE_TEXT_RANGE {
+                startPosition: at as u32,
+                length: separator.len() as u32,
+            });
+            at += separator.len();
+        } else {
+            at += 1;
+        }
+    }
+    ranges
+}
+
 /// The render body, using the cached factories, collection and fallback.
+// Drawing one pill is one linear sequence of Direct2D calls; splitting it would scatter the
+// order the calls have to run in.
+#[allow(clippy::too_many_lines)]
 fn render_with(
     fonts: &Fonts,
-    lines: &TaskbarLines,
+    lines: &BarLines,
     scale: f32,
-    ink: [u8; 4],
+    palette: &Palette,
+    hover: bool,
 ) -> anyhow::Result<Rendered> {
     let dw = &fonts.dw;
     let collection = &fonts.collection;
     let fallback = &fonts.fallback;
 
-    let format1 = text_format(dw, collection, DWRITE_FONT_WEIGHT_REGULAR, scale, fallback)?;
-    let format2 = text_format(
-        dw,
-        collection,
-        DWRITE_FONT_WEIGHT_SEMI_BOLD,
-        scale,
-        fallback,
-    )?;
+    // A line with nothing to show is not drawn; the other is then the only line. Each line keeps
+    // its weight: the top is regular and the bottom semibold.
+    let mut rows: Vec<Line> = Vec::new();
+    for (text, weight) in [
+        (&lines.top, DWRITE_FONT_WEIGHT_REGULAR),
+        (&lines.bottom, DWRITE_FONT_WEIGHT_SEMI_BOLD),
+    ] {
+        if text.is_empty() {
+            continue;
+        }
+        let format = text_format(dw, collection, weight, scale, fallback)?;
+        let layout = layout(dw, text, &format)?;
+        let (width, height) = metrics(&layout)?;
+        rows.push(Line {
+            layout,
+            width,
+            height,
+            separators: separator_ranges(text),
+        });
+    }
+    if rows.is_empty() {
+        bail!("the bar has no text to draw");
+    }
 
-    let layout1 = layout(dw, &lines.line1, &format1)?;
-    let layout2 = layout(dw, &lines.line2, &format2)?;
-    let (w1, h1) = metrics(&layout1)?;
-    let (w2, h2) = metrics(&layout2)?;
-
-    let width = w1.max(w2).ceil().max(1.0) as u32;
-    let height = (h1 + LINE_GAP * scale + h2).ceil().max(1.0) as u32;
+    let gap = LINE_GAP * scale;
+    let text_width = rows.iter().map(|row| row.width).fold(0.0, f32::max);
+    let text_height =
+        rows.iter().map(|row| row.height).sum::<f32>() + gap * (rows.len() - 1) as f32;
+    let pad_x = (PAD_X * scale).round();
+    let pad_y = (PAD_Y * scale).round();
+    let min_height = if rows.len() == 1 {
+        (ONE_LINE_HEIGHT * scale).round()
+    } else {
+        0.0
+    };
+    let width = (text_width.ceil() + 2.0 * pad_x).max(1.0) as u32;
+    let height = (text_height.ceil() + 2.0 * pad_y).max(min_height).max(1.0) as u32;
 
     let dib = Dib::new(width, height)?;
     let d2d = &fonts.d2d;
@@ -152,34 +231,73 @@ fn render_with(
     };
     // SAFETY: the DIB's DC is valid for the render target's lifetime; `bounds` is the DIB's size.
     unsafe { target.BindDC(dib.hdc, &bounds)? };
-    let colour = D2D1_COLOR_F {
-        r: f32::from(ink[0]) / 255.0,
-        g: f32::from(ink[1]) / 255.0,
-        b: f32::from(ink[2]) / 255.0,
-        a: f32::from(ink[3]) / 255.0,
+    // SAFETY: grayscale is the right antialiasing on a surface with per-pixel alpha, where
+    // ClearType would fringe (ADR-0016 point 4).
+    unsafe { target.SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE) };
+    let fill = if hover {
+        palette.surface_raised
+    } else {
+        palette.surface
     };
-    // SAFETY: the brush is used only while `colour` and the target are alive.
-    let brush = unsafe { target.CreateSolidColorBrush(&colour, None)? };
+    // SAFETY: the brushes are used only while the target is alive.
+    let (fill_brush, border_brush, ink_brush, muted_brush) = unsafe {
+        (
+            target.CreateSolidColorBrush(&colour(fill, SURFACE_ALPHA), None)?,
+            target.CreateSolidColorBrush(&colour(palette.hairline, 1.0), None)?,
+            target.CreateSolidColorBrush(&colour(palette.ink, 1.0), None)?,
+            target.CreateSolidColorBrush(&colour(palette.ink_muted, 1.0), None)?,
+        )
+    };
+    // The separators are `ink-muted`; every other character takes the default `ink` brush.
+    let muted: IUnknown = muted_brush.cast()?;
+    for row in &rows {
+        for range in &row.separators {
+            // SAFETY: the range lies inside the text the layout was built from; the brush
+            // outlives the draw below.
+            unsafe { row.layout.SetDrawingEffect(&muted, *range)? };
+        }
+    }
 
-    // SAFETY: the layouts and brush outlive the draw; the origins stay inside the DIB.
+    let (w, h) = (width as f32, height as f32);
+    let radius = (RADIUS * scale).round().min(h / 2.0);
+    let pill = D2D1_ROUNDED_RECT {
+        rect: D2D_RECT_F {
+            left: 0.0,
+            top: 0.0,
+            right: w,
+            bottom: h,
+        },
+        radiusX: radius,
+        radiusY: radius,
+    };
+    // The 1 px hairline is drawn inside the pill, centred on a line half a pixel in.
+    let border = D2D1_ROUNDED_RECT {
+        rect: D2D_RECT_F {
+            left: 0.5,
+            top: 0.5,
+            right: w - 0.5,
+            bottom: h - 0.5,
+        },
+        radiusX: radius - 0.5,
+        radiusY: radius - 0.5,
+    };
+
+    // SAFETY: the layouts and brushes outlive the draw; the origins stay inside the DIB.
     unsafe {
         target.BeginDraw();
         target.Clear(None);
-        target.DrawTextLayout(
-            windows_numerics::Vector2 { X: 0.0, Y: 0.0 },
-            &layout1,
-            &brush,
-            D2D1_DRAW_TEXT_OPTIONS_NONE,
-        );
-        target.DrawTextLayout(
-            windows_numerics::Vector2 {
-                X: 0.0,
-                Y: h1 + LINE_GAP * scale,
-            },
-            &layout2,
-            &brush,
-            D2D1_DRAW_TEXT_OPTIONS_NONE,
-        );
+        target.FillRoundedRectangle(&pill, &fill_brush);
+        target.DrawRoundedRectangle(&border, &border_brush, 1.0, None);
+        let mut y = (h - text_height) / 2.0;
+        for row in &rows {
+            target.DrawTextLayout(
+                windows_numerics::Vector2 { X: pad_x, Y: y },
+                &row.layout,
+                &ink_brush,
+                D2D1_DRAW_TEXT_OPTIONS_NONE,
+            );
+            y += row.height + gap;
+        }
         target.EndDraw(None, None)?;
     }
     drop(target); // release the DC binding before the DIB is destroyed
@@ -440,17 +558,39 @@ mod tests {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    fn lines() -> TaskbarLines {
-        TaskbarLines {
-            line1: "Thursday | 1:50 PM".to_owned(),
-            line2: "Ashoj 29, 2083 | Oct 15, 2026".to_owned(),
+    fn lines() -> BarLines {
+        BarLines {
+            top: "Thu · 6:31 PM · Singapore 8:46 PM".to_owned(),
+            bottom: "Kartik 5, 2083 · Oct 22".to_owned(),
         }
+    }
+
+    fn nepali_lines() -> BarLines {
+        BarLines {
+            top: "बिहि · ६:३१ PM · Singapore ८:४६ PM".to_owned(),
+            bottom: "कार्तिक ५, २०८३ · Oct २२".to_owned(),
+        }
+    }
+
+    fn draw(lines: &BarLines, scale: f32, hover: bool) -> Rendered {
+        render(lines, scale, &theme::LIGHT, hover).expect("render")
+    }
+
+    /// The straight-alpha premultiplied pixel at `(x, y)`: `[b, g, r, a]`.
+    fn pixel(rendered: &Rendered, x: u32, y: u32) -> [u8; 4] {
+        let at = ((y * rendered.width + x) * 4) as usize;
+        [
+            rendered.pixels[at],
+            rendered.pixels[at + 1],
+            rendered.pixels[at + 2],
+            rendered.pixels[at + 3],
+        ]
     }
 
     #[test]
     fn render_is_premultiplied_and_hit_testable() {
         let _guard = render_guard();
-        let rendered = render(&lines(), 1.0, theme::INK_LIGHT).expect("render");
+        let rendered = draw(&lines(), 1.0, false);
         assert!(rendered.width > 0 && rendered.height > 0);
         assert_eq!(
             rendered.pixels.len(),
@@ -474,24 +614,165 @@ mod tests {
     #[test]
     fn render_width_is_reasonable() {
         let _guard = render_guard();
-        let rendered = render(&lines(), 1.0, theme::INK_LIGHT).expect("render");
-        // The two English lines are around 170 px wide; a much smaller width means the Latin
-        // glyphs did not shape.
+        let rendered = draw(&lines(), 1.0, false);
+        // The widest English line is about 200 px; a much smaller width means the Latin glyphs
+        // did not shape.
         assert!(
-            rendered.width > 100,
+            rendered.width > 150,
             "rendered width too small: {}",
             rendered.width
         );
-        assert!(rendered.height > 20, "rendered height too small");
     }
 
     #[test]
     fn render_twice_is_stable() {
         let _guard = render_guard();
-        let first = render(&lines(), 1.0, theme::INK_LIGHT).expect("render");
-        let second = render(&lines(), 1.0, theme::INK_LIGHT).expect("render");
+        let first = draw(&lines(), 1.0, false);
+        let second = draw(&lines(), 1.0, false);
         assert_eq!(first.width, second.width, "render width not stable");
-        assert!(first.width > 100, "width too small: {}", first.width);
+        assert_eq!(first.pixels, second.pixels, "render pixels not stable");
+    }
+
+    /// widget-design §5: two lines stay under 44 px so they fit a 48 px taskbar, in both scripts.
+    #[test]
+    fn wr08_ac7_two_lines_stay_under_44_px_at_100_percent() {
+        let _guard = render_guard();
+        for (name, lines) in [("en", lines()), ("ne", nepali_lines())] {
+            let rendered = draw(&lines, 1.0, false);
+            eprintln!(
+                "two {name} lines: {} x {} px",
+                rendered.width, rendered.height
+            );
+            assert!(
+                rendered.height < 44,
+                "two {name} lines are {} px high",
+                rendered.height
+            );
+            assert!(rendered.height >= 30, "two {name} lines are too short");
+        }
+    }
+
+    /// widget-design §5: one line gives a 26 px pill.
+    #[test]
+    fn wr08_ac7_one_line_is_a_26_px_pill_and_the_other_line_is_enough() {
+        let _guard = render_guard();
+        let top_only = BarLines {
+            bottom: String::new(),
+            ..lines()
+        };
+        let bottom_only = BarLines {
+            top: String::new(),
+            ..lines()
+        };
+        assert_eq!(draw(&top_only, 1.0, false).height, 26);
+        assert_eq!(draw(&bottom_only, 1.0, false).height, 26);
+        assert_eq!(draw(&top_only, 2.0, false).height, 52);
+        assert_eq!(draw(&top_only, 1.5, false).height, 39);
+    }
+
+    #[test]
+    fn wr08_ac7_the_pill_is_padded_10_px_and_scales_with_dpi() {
+        let _guard = render_guard();
+        let one = draw(&lines(), 1.0, false);
+        let two = draw(&lines(), 2.0, false);
+        // Text width plus 2 x 10 px of padding; at 200 % everything doubles, so the width does
+        // within a pixel of rounding.
+        assert!(
+            two.width.abs_diff(one.width * 2) <= 4,
+            "{} px at 100 %, {} px at 200 %",
+            one.width,
+            two.width
+        );
+        assert!(two.height.abs_diff(one.height * 2) <= 2);
+    }
+
+    #[test]
+    fn wr08_ac7_the_surface_is_90_percent_opaque_with_round_ends_and_a_hairline() {
+        let _guard = render_guard();
+        let rendered = draw(&lines(), 1.0, false);
+        let middle = rendered.width / 2;
+        // Row 0 is the 1 px hairline, fully opaque.
+        assert_eq!(pixel(&rendered, middle, 0)[3], 255);
+        // Row 1 is the surface at 90 %: alpha 230 (0.9 x 255 = 229.5).
+        let surface = pixel(&rendered, middle, 1);
+        assert!(
+            surface[3].abs_diff(230) <= 2,
+            "surface alpha {} is not 90 %",
+            surface[3]
+        );
+        // The corner is outside the pill: it keeps alpha 1 to take clicks, and shows nothing.
+        let corner = pixel(&rendered, 0, 0);
+        assert_eq!(corner, [0, 0, 0, 1]);
+        let last = pixel(&rendered, rendered.width - 1, rendered.height - 1);
+        assert_eq!(last, [0, 0, 0, 1]);
+    }
+
+    #[test]
+    fn wr08_ac7_hover_raises_the_surface() {
+        let _guard = render_guard();
+        let calm = draw(&lines(), 1.0, false);
+        let hover = draw(&lines(), 1.0, true);
+        assert_eq!((calm.width, calm.height), (hover.width, hover.height));
+        let middle = calm.width / 2;
+        // `surface-raised` is white in the light theme, so the blue channel rises from 0xF8.
+        let (b_calm, b_hover) = (pixel(&calm, middle, 1)[0], pixel(&hover, middle, 1)[0]);
+        assert!(b_hover > b_calm, "hover {b_hover} is not above {b_calm}");
+    }
+
+    #[test]
+    fn wr08_ac2_the_separator_is_dimmer_than_the_text() {
+        let _guard = render_guard();
+        // A bare dot has no separator around it, so it is `ink`; with the spaces it is the
+        // separator, which is `ink-muted`. At 300 % the dot covers whole pixels, so the darkest
+        // opaque pixel of each image is the colour the dot was drawn in.
+        let darkest = |top: &str| {
+            let rendered = draw(
+                &BarLines {
+                    top: top.to_owned(),
+                    bottom: String::new(),
+                },
+                3.0,
+                false,
+            );
+            let mut darkest = 255u8;
+            // Skip the hairline rows and columns, which are opaque too.
+            for y in 3..rendered.height - 3 {
+                for x in 3..rendered.width - 3 {
+                    let [b, _, _, a] = pixel(&rendered, x, y);
+                    if a == 255 {
+                        darkest = darkest.min(b);
+                    }
+                }
+            }
+            darkest
+        };
+        let (ink, muted) = (darkest("·"), darkest(" · "));
+        assert_eq!(ink, theme::LIGHT.ink[2], "the bare dot is drawn in `ink`");
+        assert_eq!(
+            muted,
+            theme::LIGHT.ink_muted[2],
+            "the separator is drawn in `ink-muted`"
+        );
+    }
+
+    #[test]
+    fn separator_ranges_find_every_separator_in_utf16_units() {
+        assert!(separator_ranges("Thu").is_empty());
+        let ranges = separator_ranges("Thu · 6:31 PM · Singapore");
+        let spans: Vec<(u32, u32)> = ranges.iter().map(|r| (r.startPosition, r.length)).collect();
+        assert_eq!(spans, vec![(3, 3), (13, 3)]);
+        // Devanagari is one UTF-16 unit per scalar here, so offsets still count units.
+        let spans: Vec<u32> = separator_ranges("बिहि · ६")
+            .iter()
+            .map(|r| r.startPosition)
+            .collect();
+        assert_eq!(spans, vec![4]);
+    }
+
+    #[test]
+    fn an_empty_bar_is_an_error_not_a_zero_size_window() {
+        let _guard = render_guard();
+        assert!(render(&BarLines::default(), 1.0, &theme::LIGHT, false).is_err());
     }
 
     #[test]
@@ -521,10 +802,10 @@ mod tests {
 
         let _guard = render_guard();
         // The first render pays the one-time font load; the next 1000 must not add a loader.
-        render(&lines(), 1.0, theme::INK_LIGHT).expect("warm render");
+        draw(&lines(), 1.0, false);
         let before = private_bytes();
         for _ in 0..1000 {
-            render(&lines(), 1.0, theme::INK_LIGHT).expect("render");
+            draw(&lines(), 1.0, false);
         }
         let after = private_bytes();
         let growth = after.saturating_sub(before);

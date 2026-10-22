@@ -2,11 +2,11 @@
 //! Slint types except `tray.rs`.
 
 pub mod autostart;
+pub mod bar;
 pub mod clipboard;
 pub mod logging;
 pub mod settings_store;
 pub mod single_instance;
-pub mod taskbar;
 pub mod taskbar_scheme;
 pub mod tray;
 #[cfg(windows)]

@@ -153,9 +153,9 @@ fn windows_run(minutes: u32) -> Result<()> {
     let settings = temp.join("settings.toml");
     std::fs::write(
         &settings,
-        "schema = 1\nlanguage = \"en\"\ntheme = \"system\"\nclock_24h = false\n\
+        "schema = 2\nlanguage = \"en\"\ntheme = \"system\"\nclock_24h = false\n\
          show_seconds = false\nextra_time_zone = \"Asia/Kathmandu\"\n\
-         launch_at_login = false\ntaskbar_text = true\n",
+         launch_at_login = false\nbar = true\n",
     )
     .with_context(|| format!("write {}", settings.display()))?;
 
@@ -384,7 +384,7 @@ impl Measurement {
                 "show_seconds": false,
                 "extra_time_zone": "Asia/Kathmandu",
                 "launch_at_login": false,
-                "taskbar_text": true,
+                "bar": true,
             },
             "warmup_seconds": self.warmup_seconds,
             "minutes": self.minutes,

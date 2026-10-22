@@ -2,21 +2,40 @@
 //! the `HKCU\...\Run` value `mitibar` itself; `auto-launch` 0.6 registers a `LaunchAgent` or
 //! `SMAppService` on macOS and an `XDG` autostart file on Linux. No admin rights.
 //!
+//! Two entry points, because the rules differ. `apply_on_start` runs when the app starts with the
+//! setting on: it writes the item only when it is missing or points at a file that no longer
+//! exists, so a portable copy never takes over from an installed one. `apply` runs when the user
+//! flips the switch: turning it on always points the item at the running copy.
+//!
 //! The tests use a fake `LoginItem`; they never create a registry value, `LaunchAgent` or desktop
 //! file. The real registration is behind the same trait.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::app::APP_NAME;
 
+/// Where a login item points.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Target {
+    /// There is no login item.
+    Missing,
+    /// The item runs this file.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    Path(PathBuf),
+    /// The item exists, but the platform can't say what it runs (`auto-launch` 0.6 has no getter
+    /// for the path on macOS and Linux).
+    #[cfg_attr(windows, allow(dead_code))]
+    Unknown,
+}
+
 /// The small part of a login item the app needs. Tests provide a fake.
 pub trait LoginItem {
-    /// Whether an entry currently exists.
+    /// What the item points at, if it exists.
     ///
     /// # Errors
     ///
     /// Returns the platform error when the entry cannot be read.
-    fn is_enabled(&self) -> anyhow::Result<bool>;
+    fn target(&self) -> anyhow::Result<Target>;
     /// Creates or replaces the entry with the current executable.
     ///
     /// # Errors
@@ -31,32 +50,65 @@ pub trait LoginItem {
     fn disable(&self) -> anyhow::Result<()>;
 }
 
-/// Makes the login item match `enabled` (WR-09 AC2). Enabling always writes the entry, so a
-/// moved executable is re-registered; `auto-launch` 0.6 exposes no getter for the path.
+/// Makes the login item match `enabled` when the user flips the setting (WR-09 AC2). Enabling
+/// always writes the entry, so it points at the copy that is running.
 ///
 /// # Errors
 ///
 /// Returns the first platform error.
 pub fn sync(enabled: bool, item: &dyn LoginItem) -> anyhow::Result<()> {
-    if enabled {
-        // Always write, so a moved executable re-registers. `auto-launch` 0.6 exposes no getter
-        // for the registered path.
-        item.enable()?;
-    } else if item.is_enabled()? {
+    if enabled { item.enable() } else { remove(item) }
+}
+
+/// Makes the login item match the setting when the app starts (WR-09 AC2). With the setting on,
+/// the item is written only when it is missing or points at a file that no longer exists
+/// (`exists`). One that points at an existing file is left alone, whichever copy that is, so a
+/// portable copy never replaces an item that points at an installed copy. Where the platform can't
+/// say what the item runs (`Target::Unknown`), it is written, as before.
+///
+/// # Errors
+///
+/// Returns the first platform error.
+pub fn sync_on_start(
+    enabled: bool,
+    item: &dyn LoginItem,
+    exists: &dyn Fn(&Path) -> bool,
+) -> anyhow::Result<()> {
+    if !enabled {
+        return remove(item);
+    }
+    match item.target()? {
+        Target::Path(path) if exists(&path) => Ok(()),
+        Target::Missing | Target::Path(_) | Target::Unknown => item.enable(),
+    }
+}
+
+fn remove(item: &dyn LoginItem) -> anyhow::Result<()> {
+    if item.target()? != Target::Missing {
         item.disable()?;
     }
     Ok(())
 }
 
-/// Applies `enabled` to the OS login item. Startup never fails because of this: the
-/// error is logged and the app continues.
+/// Applies the setting when the user flips it. Never fails the app: the error is logged.
 pub fn apply(enabled: bool) {
+    run(enabled, |item| sync(enabled, item));
+}
+
+/// Applies the setting at startup (see `sync_on_start`). Never fails the app: the error is logged.
+pub fn apply_on_start(enabled: bool) {
+    run(enabled, |item| {
+        sync_on_start(enabled, item, &|path| path.exists())
+    });
+}
+
+fn run(enabled: bool, action: impl FnOnce(&dyn LoginItem) -> anyhow::Result<()>) {
     let Some(exe) = std::env::current_exe().ok() else {
         log::warn!("autostart: cannot find the current executable");
         return;
     };
     let item = platform_item(&exe);
-    if let Err(err) = sync(enabled, item.as_ref()) {
+    if let Err(err) = action(item.as_ref()) {
         log::warn!("autostart: {err}");
     } else {
         log::debug!("autostart: launch at login is {enabled}");
@@ -82,6 +134,16 @@ fn run_command(exe: &Path) -> String {
     format!("\"{}\"", exe.display())
 }
 
+/// The executable a `Run` value starts: the quoted path, or the whole value when it has no quotes.
+#[cfg(any(target_os = "windows", test))]
+fn command_path(command: &str) -> PathBuf {
+    let command = command.trim();
+    match command.strip_prefix('"') {
+        Some(rest) => PathBuf::from(rest.split('"').next().unwrap_or(rest)),
+        None => PathBuf::from(command),
+    }
+}
+
 /// `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `APP_NAME`.
 #[cfg(target_os = "windows")]
 struct RunKeyItem {
@@ -92,20 +154,20 @@ struct RunKeyItem {
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 
 #[cfg(target_os = "windows")]
-fn is_not_found(err: &windows_core::Error) -> bool {
+fn is_not_found(err: &windows::core::Error) -> bool {
     // ERROR_FILE_NOT_FOUND, for a missing key or value.
-    err.code() == windows_core::HRESULT::from_win32(2)
+    err.code() == windows::core::HRESULT::from_win32(2)
 }
 
 #[cfg(target_os = "windows")]
 impl LoginItem for RunKeyItem {
-    fn is_enabled(&self) -> anyhow::Result<bool> {
+    fn target(&self) -> anyhow::Result<Target> {
         match windows_registry::CURRENT_USER
             .open(RUN_KEY)
             .and_then(|key| key.get_string(APP_NAME))
         {
-            Ok(_) => Ok(true),
-            Err(err) if is_not_found(&err) => Ok(false),
+            Ok(command) => Ok(Target::Path(command_path(&command))),
+            Err(err) if is_not_found(&err) => Ok(Target::Missing),
             Err(err) => Err(err.into()),
         }
     }
@@ -173,8 +235,12 @@ struct AutoItem(auto_launch::AutoLaunch);
 
 #[cfg(not(target_os = "windows"))]
 impl LoginItem for AutoItem {
-    fn is_enabled(&self) -> anyhow::Result<bool> {
-        Ok(self.0.is_enabled()?)
+    fn target(&self) -> anyhow::Result<Target> {
+        Ok(if self.0.is_enabled()? {
+            Target::Unknown
+        } else {
+            Target::Missing
+        })
     }
 
     fn enable(&self) -> anyhow::Result<()> {
@@ -190,48 +256,163 @@ impl LoginItem for AutoItem {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
+    use std::cell::{Cell, RefCell};
 
     use super::*;
 
+    /// A fake registry value: what it holds, and how often it was written or removed.
     #[derive(Default)]
     struct FakeItem {
-        enabled: Cell<bool>,
+        value: RefCell<Option<Target>>,
+        /// The file `enable` writes: the running copy.
+        writes_as: PathBuf,
         enables: Cell<u32>,
         disables: Cell<u32>,
     }
 
+    impl FakeItem {
+        fn running(exe: &str) -> Self {
+            Self {
+                writes_as: PathBuf::from(exe),
+                ..Self::default()
+            }
+        }
+
+        fn holding(exe: &str, target: Target) -> Self {
+            let item = Self::running(exe);
+            *item.value.borrow_mut() = Some(target);
+            item
+        }
+
+        fn target_now(&self) -> Target {
+            self.value.borrow().clone().unwrap_or(Target::Missing)
+        }
+    }
+
     impl LoginItem for FakeItem {
-        fn is_enabled(&self) -> anyhow::Result<bool> {
-            Ok(self.enabled.get())
+        fn target(&self) -> anyhow::Result<Target> {
+            Ok(self.target_now())
         }
 
         fn enable(&self) -> anyhow::Result<()> {
-            self.enabled.set(true);
+            *self.value.borrow_mut() = Some(Target::Path(self.writes_as.clone()));
             self.enables.set(self.enables.get() + 1);
             Ok(())
         }
 
         fn disable(&self) -> anyhow::Result<()> {
-            self.enabled.set(false);
+            *self.value.borrow_mut() = None;
             self.disables.set(self.disables.get() + 1);
             Ok(())
         }
     }
 
+    const INSTALLED: &str = r"C:\Users\sam\AppData\Local\Programs\MitiBar\MitiBar.exe";
+    const PORTABLE: &str = r"C:\Users\sam\Downloads\MitiBar\MitiBar.exe";
+
+    fn path(text: &str) -> Target {
+        Target::Path(PathBuf::from(text))
+    }
+
+    /// Every path in `present` exists; nothing else does.
+    fn files(present: &'static [&'static str]) -> impl Fn(&Path) -> bool {
+        move |path| present.iter().any(|file| Path::new(file) == path)
+    }
+
     #[test]
-    fn wr09_ac2_sync_follows_the_setting_and_refreshes_the_path() {
-        let item = FakeItem::default();
-        sync(true, &item).expect("enable");
-        assert!(item.enabled.get());
+    fn wr09_ac2_a_missing_item_is_written_on_start() {
+        let item = FakeItem::running(INSTALLED);
+        sync_on_start(true, &item, &files(&[INSTALLED])).expect("start");
         assert_eq!(item.enables.get(), 1);
-        sync(true, &item).expect("still enabled");
-        assert_eq!(item.enables.get(), 2, "the path is written again on start");
-        sync(false, &item).expect("disable");
-        assert!(!item.enabled.get());
+        assert_eq!(item.target_now(), path(INSTALLED));
+    }
+
+    #[test]
+    fn wr09_ac2_an_item_pointing_at_a_file_that_is_gone_is_written_on_start() {
+        // The installed copy was uninstalled; the item still points at it.
+        let item = FakeItem::holding(PORTABLE, path(INSTALLED));
+        sync_on_start(true, &item, &files(&[PORTABLE])).expect("start");
+        assert_eq!(item.enables.get(), 1, "a stale item is repaired");
+        assert_eq!(item.target_now(), path(PORTABLE));
+    }
+
+    #[test]
+    fn wr09_ac2_an_item_pointing_at_an_existing_file_is_left_alone_on_start() {
+        let item = FakeItem::holding(INSTALLED, path(INSTALLED));
+        sync_on_start(true, &item, &files(&[INSTALLED])).expect("start");
+        assert_eq!(item.enables.get(), 0, "no write when nothing is wrong");
+        assert_eq!(item.disables.get(), 0);
+    }
+
+    #[test]
+    fn wr09_ac2_a_portable_copy_never_replaces_an_item_for_an_existing_installed_copy() {
+        let item = FakeItem::holding(PORTABLE, path(INSTALLED));
+        sync_on_start(true, &item, &files(&[INSTALLED, PORTABLE])).expect("start");
+        assert_eq!(item.enables.get(), 0);
+        assert_eq!(item.target_now(), path(INSTALLED));
+    }
+
+    #[test]
+    fn wr09_ac2_a_portable_copy_writes_when_the_installed_copy_is_gone_or_never_was() {
+        let stale = FakeItem::holding(PORTABLE, path(INSTALLED));
+        sync_on_start(true, &stale, &files(&[PORTABLE])).expect("start");
+        assert_eq!(stale.target_now(), path(PORTABLE));
+
+        let missing = FakeItem::running(PORTABLE);
+        sync_on_start(true, &missing, &files(&[PORTABLE])).expect("start");
+        assert_eq!(missing.target_now(), path(PORTABLE));
+    }
+
+    #[test]
+    fn wr09_ac2_an_installed_copy_leaves_an_item_for_an_existing_portable_copy_alone() {
+        // The rule is about missing and stale items only; the user's Settings switch is how an
+        // installed copy takes the item over.
+        let item = FakeItem::holding(INSTALLED, path(PORTABLE));
+        sync_on_start(true, &item, &files(&[INSTALLED, PORTABLE])).expect("start");
+        assert_eq!(item.enables.get(), 0);
+        assert_eq!(item.target_now(), path(PORTABLE));
+    }
+
+    #[test]
+    fn wr09_ac2_an_item_whose_target_the_platform_cannot_read_is_written_on_start() {
+        let item = FakeItem::holding(INSTALLED, Target::Unknown);
+        sync_on_start(true, &item, &files(&[])).expect("start");
+        assert_eq!(item.enables.get(), 1);
+    }
+
+    #[test]
+    fn wr09_ac2_with_the_setting_off_the_item_is_removed_on_start_and_never_written() {
+        let item = FakeItem::holding(INSTALLED, path(INSTALLED));
+        sync_on_start(false, &item, &files(&[INSTALLED])).expect("start");
+        assert_eq!(item.target_now(), Target::Missing);
         assert_eq!(item.disables.get(), 1);
-        sync(false, &item).expect("still disabled");
+        sync_on_start(false, &item, &files(&[INSTALLED])).expect("start again");
         assert_eq!(item.disables.get(), 1, "no second remove");
+        assert_eq!(item.enables.get(), 0);
+    }
+
+    #[test]
+    fn wr09_ac2_turning_the_setting_on_always_points_the_item_at_the_running_copy() {
+        // The item points at an existing installed copy; the portable copy's user turns the
+        // switch on, which is an explicit choice, so the item moves.
+        let item = FakeItem::holding(PORTABLE, path(INSTALLED));
+        sync(true, &item).expect("turn on");
+        assert_eq!(item.target_now(), path(PORTABLE));
+        assert_eq!(item.enables.get(), 1);
+        // And once more with the item already right: written again, so a moved copy re-registers.
+        sync(true, &item).expect("turn on again");
+        assert_eq!(item.enables.get(), 2);
+    }
+
+    #[test]
+    fn wr09_ac2_turning_the_setting_off_removes_the_item_once() {
+        let item = FakeItem::holding(INSTALLED, path(INSTALLED));
+        sync(false, &item).expect("turn off");
+        assert_eq!(item.target_now(), Target::Missing);
+        assert_eq!(item.disables.get(), 1);
+        sync(false, &item).expect("still off");
+        assert_eq!(item.disables.get(), 1, "no second remove");
+        assert_eq!(item.enables.get(), 0);
     }
 
     #[test]
@@ -244,11 +425,17 @@ mod tests {
     }
 
     #[test]
-    fn wr09_ac2_sync_starts_from_an_existing_entry() {
-        let item = FakeItem::default();
-        item.enabled.set(true);
-        sync(false, &item).expect("disable");
-        assert!(!item.enabled.get());
-        assert_eq!(item.enables.get(), 0);
+    fn wr09_ac2_the_run_value_is_read_back_as_a_path() {
+        let exe = Path::new(r"C:\Program Files\MitiBar\mitibar.exe");
+        assert_eq!(command_path(&run_command(exe)), exe);
+        // An unquoted value, such as one written by an older build or by hand.
+        assert_eq!(
+            command_path(r"C:\MitiBar\mitibar.exe"),
+            Path::new(r"C:\MitiBar\mitibar.exe")
+        );
+        assert_eq!(
+            command_path(r#"  "C:\MitiBar\mitibar.exe" --flag"#),
+            Path::new(r"C:\MitiBar\mitibar.exe")
+        );
     }
 }

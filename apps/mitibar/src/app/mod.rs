@@ -5,10 +5,12 @@
 /// uses it directly, and `ui_bridge::set_app_name` fills the Slint global from it.
 pub const APP_NAME: &str = "MitiBar";
 
+pub mod bar;
+pub mod bar_place;
+pub mod bar_pointer;
 pub mod clock;
 pub mod converter;
 pub mod format;
 pub mod holidays;
 pub mod month_view;
 pub mod settings;
-pub mod taskbar;

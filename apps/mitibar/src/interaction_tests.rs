@@ -9,7 +9,10 @@ use i_slint_backend_testing::{AccessibleRole, ElementHandle};
 use nepdate::{Lang, Month, NepaliDate};
 use slint::{ComponentHandle, Model};
 
+use crate::app::bar::BarLines;
+use crate::app::bar_place::{Rect, Saved};
 use crate::app::settings::Settings;
+use crate::platform::bar::{Anchor, Bar, BarEvent, MenuItem, MenuLabels};
 use crate::platform::clipboard::Clipboard;
 use crate::{AppState, PopupWindow, update_popup, wire_popup, wire_settings};
 
@@ -651,7 +654,8 @@ fn overlays_take_and_return_focus() {
     popup.set_settings_visible(true);
     crate::refresh_settings(&popup, &state);
     popup.invoke_focus();
-    for expected in [
+    // The bar's two controls are in the cycle only where there is a bar (Windows).
+    let mut order = vec![
         "settings close",
         "settings language",
         "settings theme",
@@ -660,25 +664,18 @@ fn overlays_take_and_return_focus() {
         "settings filter",
         "settings no extra clock",
         "settings launch",
-        "settings taskbar",
-        "settings close",
-    ] {
+    ];
+    if cfg!(windows) {
+        order.extend(["settings bar", "settings reset position"]);
+    }
+    // Tab walks the order and wraps to the first stop; Shift+Tab walks it back from there.
+    for expected in order.iter().copied().chain(["settings close"]) {
         press(&popup, slint::platform::Key::Tab);
         assert_eq!(focused(&popup), expected, "settings Tab order");
     }
-    for expected in [
-        "settings taskbar",
-        "settings launch",
-        "settings no extra clock",
-        "settings filter",
-        "settings seconds",
-        "settings 24-hour",
-        "settings theme",
-        "settings language",
-        "settings close",
-    ] {
+    for expected in order.iter().rev() {
         press_shift_tab(&popup);
-        assert_eq!(focused(&popup), expected, "settings Shift+Tab order");
+        assert_eq!(focused(&popup), *expected, "settings Shift+Tab order");
     }
     press(&popup, slint::platform::Key::Escape);
     assert!(!popup.get_settings_visible());
@@ -807,7 +804,7 @@ fn window_deactivation_hides_the_popup_while_a_control_has_focus() {
 
 #[test]
 fn a_toggle_hides_an_open_popup_without_panicking() {
-    // The taskbar text never takes focus, so a click on it while the popup is open reaches
+    // The bar never takes focus, so a click on it while the popup is open reaches
     // `hide_popup` instead of the focus-loss path. The beta panicked here with "RefCell already
     // borrowed" on every such click.
     let (popup, state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
@@ -895,5 +892,290 @@ fn wr09_ac1_second_launch_opens_the_first_instance_popup() {
     assert!(
         popup.window().is_visible(),
         "the second-launch wake shows the popup"
+    );
+}
+
+// The bar's events and the settings that drive it, against a fake `Bar` port: no window, no
+// registry and no real clipboard.
+
+/// Records every call the app makes on the bar.
+#[derive(Default)]
+struct FakeBar {
+    lines: RefCell<Vec<BarLines>>,
+    shown: RefCell<Vec<bool>>,
+    locked: RefCell<Vec<bool>>,
+    positions: RefCell<Vec<Saved>>,
+}
+
+impl Bar for FakeBar {
+    fn set_lines(&self, lines: &BarLines) {
+        self.lines.borrow_mut().push(lines.clone());
+    }
+
+    fn set_shown(&self, shown: bool) {
+        self.shown.borrow_mut().push(shown);
+    }
+
+    fn set_locked(&self, locked: bool) {
+        self.locked.borrow_mut().push(locked);
+    }
+
+    fn set_position(&self, saved: &Saved) {
+        self.positions.borrow_mut().push(saved.clone());
+    }
+
+    fn set_menu_labels(&self, _labels: &MenuLabels) {}
+}
+
+/// An app with a fake bar, its settings saved to a temporary file, and the settings panel wired.
+struct BarApp {
+    popup: PopupWindow,
+    state: Rc<RefCell<AppState>>,
+    bar: Rc<FakeBar>,
+    slot: crate::PopupSlot,
+    clipboard: Rc<FakeClipboard>,
+    settings_path: std::path::PathBuf,
+    _dir: tempfile::TempDir,
+    _save_timer: Rc<slint::Timer>,
+}
+
+fn bar_app() -> BarApp {
+    let (popup, state, clipboard) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+    let bar = Rc::new(FakeBar::default());
+    state.borrow_mut().bar = Some(bar.clone());
+    let dir = tempfile::tempdir().expect("tempdir");
+    let settings_path = dir.path().join("settings.toml");
+    state.borrow_mut().settings_path = Some(settings_path.clone());
+    let save_timer = Rc::new(slint::Timer::default());
+    wire_settings(&popup, &state, &save_timer);
+    let slot = Rc::new(RefCell::new(Some(popup.clone_strong())));
+    BarApp {
+        popup,
+        state,
+        bar,
+        slot,
+        clipboard,
+        settings_path,
+        _dir: dir,
+        _save_timer: save_timer,
+    }
+}
+
+/// A bar at the bottom of a 1080p screen, centred in a 48 px taskbar.
+fn bar_anchor() -> Anchor {
+    Anchor {
+        bar: Rect::new(500, 1037, 720, 1075),
+        work: Rect::new(0, 0, 1920, 1032),
+        dpi: 96,
+    }
+}
+
+fn bar_event(app: &BarApp, event: BarEvent) {
+    crate::handle_bar_event(event, &app.state, &app.slot);
+}
+
+fn bar_menu(app: &BarApp, item: MenuItem) {
+    bar_event(
+        app,
+        BarEvent::Menu {
+            item,
+            anchor: bar_anchor(),
+        },
+    );
+}
+
+/// Waits out the 300 ms save debounce, as the event loop would.
+fn let_the_save_happen() {
+    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(350));
+    slint::platform::update_timers_and_animations();
+}
+
+#[test]
+fn wr08_ac6_a_click_on_the_bar_toggles_the_popup() {
+    let app = bar_app();
+    assert!(app.popup.window().is_visible());
+    bar_event(&app, BarEvent::Toggle(bar_anchor()));
+    assert!(
+        !app.popup.window().is_visible(),
+        "a click closes an open popup"
+    );
+    bar_event(&app, BarEvent::Toggle(bar_anchor()));
+    assert!(app.popup.window().is_visible(), "and opens a closed one");
+}
+
+#[test]
+fn wr08_ac6_a_double_click_opens_the_popup_and_never_closes_it() {
+    let app = bar_app();
+    // The popup was closed: the first click opens it and the second is ignored as a toggle.
+    app.popup.hide().expect("hide");
+    bar_event(&app, BarEvent::Toggle(bar_anchor()));
+    bar_event(&app, BarEvent::Open(bar_anchor()));
+    assert!(
+        app.popup.window().is_visible(),
+        "closed, then double-clicked"
+    );
+
+    // The popup was open: the first click closes it and the double-click opens it again.
+    bar_event(&app, BarEvent::Toggle(bar_anchor()));
+    assert!(!app.popup.window().is_visible());
+    bar_event(&app, BarEvent::Open(bar_anchor()));
+    assert!(app.popup.window().is_visible(), "open, then double-clicked");
+
+    // Opening an open popup leaves it open, and the menu's Open item behaves the same.
+    bar_event(&app, BarEvent::Open(bar_anchor()));
+    bar_menu(&app, MenuItem::Open);
+    assert!(
+        app.popup.window().is_visible(),
+        "Open never closes the popup"
+    );
+}
+
+#[test]
+fn wr08_ac6_the_menu_copies_today_in_both_calendars() {
+    let app = bar_app();
+    bar_menu(&app, MenuItem::CopyBs);
+    bar_menu(&app, MenuItem::CopyAd);
+    assert_eq!(
+        *app.clipboard.texts.borrow(),
+        vec!["2081/01/01".to_owned(), "2024-04-13".to_owned()]
+    );
+}
+
+#[test]
+fn wr08_ac6_customize_bar_and_settings_open_settings_at_the_bar() {
+    let app = bar_app();
+    for item in [MenuItem::Customize, MenuItem::Settings] {
+        app.popup.hide().expect("hide");
+        app.popup.set_settings_visible(false);
+        bar_menu(&app, item);
+        assert!(app.popup.window().is_visible(), "{item:?} shows the popup");
+        assert!(app.popup.get_settings_visible(), "{item:?} opens Settings");
+    }
+}
+
+#[test]
+fn wr08_ac6_lock_position_is_a_check_item_that_saves() {
+    let app = bar_app();
+    assert!(!app.state.borrow().settings.bar_locked);
+    bar_menu(&app, MenuItem::Lock);
+    assert!(app.state.borrow().settings.bar_locked);
+    bar_menu(&app, MenuItem::Lock);
+    assert!(!app.state.borrow().settings.bar_locked);
+    assert_eq!(*app.bar.locked.borrow(), vec![true, false]);
+
+    bar_menu(&app, MenuItem::Lock);
+    let_the_save_happen();
+    let (saved, warnings) = crate::platform::settings_store::load(&app.settings_path);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert!(saved.bar_locked, "the lock is saved");
+}
+
+#[test]
+fn wr08_ac6_hide_bar_sets_bar_off_and_the_tray_item_turns_it_back_on() {
+    let app = bar_app();
+    assert!(app.state.borrow().settings.bar);
+    bar_menu(&app, MenuItem::Hide);
+    assert!(!app.state.borrow().settings.bar);
+    assert_eq!(*app.bar.shown.borrow(), vec![false]);
+
+    // WR-01 AC5: the tray menu's Show bar item.
+    crate::handle_tray_event(
+        crate::platform::tray::TrayEvent::ShowBar,
+        &app.state,
+        &app.slot,
+    );
+    assert!(app.state.borrow().settings.bar);
+    assert_eq!(*app.bar.shown.borrow(), vec![false, true]);
+
+    // Show bar toggles: with the bar shown, the same item hides it.
+    crate::handle_tray_event(
+        crate::platform::tray::TrayEvent::ShowBar,
+        &app.state,
+        &app.slot,
+    );
+    assert!(!app.state.borrow().settings.bar);
+
+    let_the_save_happen();
+    let (saved, _) = crate::platform::settings_store::load(&app.settings_path);
+    assert!(!saved.bar, "Hide bar is saved");
+}
+
+#[test]
+fn wr08_ac6_the_settings_switch_shows_and_hides_the_bar() {
+    let app = bar_app();
+    crate::refresh_settings(&app.popup, &app.state);
+    app.popup.set_settings_visible(true);
+    app.popup.invoke_settings_bar(false);
+    assert!(!app.state.borrow().settings.bar);
+    assert!(!app.popup.get_settings_data().bar, "the switch follows");
+    app.popup.invoke_settings_bar(true);
+    assert!(app.state.borrow().settings.bar);
+    assert_eq!(*app.bar.shown.borrow(), vec![false, true]);
+
+    // Hide bar from the bar's own menu moves the Settings switch too.
+    bar_menu(&app, MenuItem::Hide);
+    assert!(!app.popup.get_settings_data().bar);
+}
+
+#[test]
+fn wr08_ac4_the_end_of_a_drag_is_saved_and_survives_a_restart() {
+    let app = bar_app();
+    let saved = Saved {
+        monitor: r"\\.\DISPLAY2".to_owned(),
+        x: 300,
+        y: -12,
+    };
+    bar_event(&app, BarEvent::Moved(saved.clone()));
+    assert_eq!(app.state.borrow().settings.bar_position(), saved);
+    assert!(!app.settings_path.exists(), "not saved before the debounce");
+
+    let_the_save_happen();
+    let (loaded, warnings) = crate::platform::settings_store::load(&app.settings_path);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(
+        loaded.bar_position(),
+        saved,
+        "after a restart the bar is where it was left"
+    );
+}
+
+#[test]
+fn wr08_ac5_reset_position_forgets_the_saved_place() {
+    let app = bar_app();
+    let saved = Saved {
+        monitor: r"\\.\DISPLAY2".to_owned(),
+        x: 300,
+        y: 40,
+    };
+    bar_event(&app, BarEvent::Moved(saved));
+    app.popup.invoke_settings_reset_bar();
+    assert_eq!(app.state.borrow().settings.bar_position(), Saved::default());
+    assert_eq!(
+        app.bar.positions.borrow().last(),
+        Some(&Saved::default()),
+        "the bar goes back to its default position"
+    );
+
+    let_the_save_happen();
+    let (loaded, _) = crate::platform::settings_store::load(&app.settings_path);
+    assert_eq!(loaded.bar_position(), Saved::default());
+}
+
+#[test]
+fn wr08_ac2_the_bar_follows_the_clock_settings_at_once() {
+    let app = bar_app();
+    app.popup.invoke_settings_clock(true);
+    let last = app.bar.lines.borrow().last().cloned().expect("lines");
+    assert!(
+        !last.top.contains("AM") && !last.top.contains("PM"),
+        "24-hour time on the bar: {}",
+        last.top
+    );
+    app.popup.invoke_settings_clock(false);
+    let last = app.bar.lines.borrow().last().cloned().expect("lines");
+    assert!(
+        last.top.contains("AM") || last.top.contains("PM"),
+        "12-hour time on the bar: {}",
+        last.top
     );
 }
