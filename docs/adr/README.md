@@ -19,6 +19,8 @@ Immutable once accepted (ADR-0001). Supersede with a new ADR.
 | [0013](0013-licensing.md) | Licensing of this repository (MIT) | Accepted |
 | [0014](0014-testing-strategy-and-quality-gates.md) | Testing strategy and quality gates | Accepted |
 | [0015](0015-widget-architecture.md) | Widget internal architecture | Accepted |
-| [0016](0016-windows-taskbar-text.md) | Windows taskbar text (amends 0008 and 0015) | Accepted |
+| [0016](0016-windows-taskbar-text.md) | Windows taskbar text (amends 0008 and 0015) | Superseded by 0019 |
 | [0017](0017-desktop-app-name-mitibar.md) | The desktop app is called MitiBar (amends 0008, 0012 and 0015) | Accepted |
 | [0018](0018-software-renderer-and-private-bytes.md) | Software renderer by default, idle memory judged on private bytes (amends 0008 and 0010) | Accepted, conditional on the Devanagari check |
+| [0019](0019-floating-mini-bar.md) | A floating mini bar replaces the taskbar text, plus one global shortcut (supersedes 0016, amends 0008 and 0015) | Accepted |
+| [0020](0020-slint-attribution-on-the-web.md) | Slint attribution on the download pages, not inside the app (amends 0013) | Accepted |
