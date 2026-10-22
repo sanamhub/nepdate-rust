@@ -20,7 +20,10 @@ trap 'rm -rf "$work"' EXIT
 cd "$work"
 cargo new --quiet --bin verify-published
 cd verify-published
-export CARGO_TARGET_DIR="$PWD/target"
+# Its own target directory, whatever the caller sets; cargo.exe on Windows needs a Windows path.
+target="$PWD/target"
+if command -v cygpath > /dev/null; then target="$(cygpath -w "$target")"; fi
+export CARGO_TARGET_DIR="$target"
 
 # The sparse index usually serves a new version within a minute; retry once a minute.
 for ((i = 1; ; i++)); do

@@ -70,8 +70,13 @@ jobs:
         run: |
           set -euo pipefail
           status="$(curl -s -o /dev/null -w '%{http_code}' -A 'nepdate-rust release-lib' https://crates.io/api/v1/crates/nepdate)"
-          echo "exists=$([ "$status" = "200" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           echo "crates.io answered $status for nepdate"
+          case "$status" in
+            200) echo "exists=true" >> "$GITHUB_OUTPUT" ;;
+            404) echo "exists=false" >> "$GITHUB_OUTPUT" ;;
+            # Anything else would skip semver-checks on a guess.
+            *) echo "::error::crates.io answered $status; can't tell whether nepdate exists"; exit 1 ;;
+          esac
       - name: Install cargo-semver-checks
         if: steps.published.outputs.exists == 'true'
         uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2.87.26

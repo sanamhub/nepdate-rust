@@ -236,13 +236,14 @@ fn has_dated_heading(changelog: &str, version: &str) -> bool {
     let prefix = format!("## [{version}] - ");
     changelog.lines().any(|line| {
         line.trim_end().strip_prefix(&prefix).is_some_and(|date| {
-            let b = date.as_bytes();
-            b.len() == 10
-                && b[4] == b'-'
-                && b[7] == b'-'
-                && b.iter()
-                    .enumerate()
-                    .all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit())
+            date.len() == 10
+                && date.bytes().enumerate().all(|(i, c)| {
+                    if i == 4 || i == 7 {
+                        c == b'-'
+                    } else {
+                        c.is_ascii_digit()
+                    }
+                })
         })
     })
 }
@@ -312,6 +313,7 @@ fn section<'a>(changelog: &'a str, version: &str) -> Option<&'a str> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, clippy::indexing_slicing)]
     use super::*;
 
     fn manifest(version: &str, dep: Option<&str>) -> String {
@@ -397,8 +399,16 @@ mod tests {
     #[test]
     fn bad_version_text_fails() {
         for bad in [
-            "0.1", "v0.1.0", "0.1.0-", "0.1.x", "", "01.1.0", "0.1.0-beta..1", "0.1.0-beta.01",
-            "0.1.0+build.1", "0.1.0-beta_1",
+            "0.1",
+            "v0.1.0",
+            "0.1.0-",
+            "0.1.x",
+            "",
+            "01.1.0",
+            "0.1.0-beta..1",
+            "0.1.0-beta.01",
+            "0.1.0+build.1",
+            "0.1.0-beta_1",
         ] {
             assert!(!is_version(bad), "{bad}");
         }
@@ -412,7 +422,12 @@ mod tests {
 
     #[test]
     fn beta_pair_passes_with_an_exact_core_pin() {
-        let pair = pair("0.1.0-beta.1", "0.1.0-beta.1", "=0.1.0-beta.1", BETA_CHANGELOG);
+        let pair = pair(
+            "0.1.0-beta.1",
+            "0.1.0-beta.1",
+            "=0.1.0-beta.1",
+            BETA_CHANGELOG,
+        );
         assert!(check(&pair, "0.1.0-beta.1").is_empty());
     }
 
@@ -442,7 +457,12 @@ mod tests {
 
     #[test]
     fn an_undated_heading_fails() {
-        for heading in ["## [0.1.0]\n", "## [0.1.0] - \n", "## [0.1.0] - soon\n", "## [0.1.0] - 2026-10\n"] {
+        for heading in [
+            "## [0.1.0]\n",
+            "## [0.1.0] - \n",
+            "## [0.1.0] - soon\n",
+            "## [0.1.0] - 2026-10\n",
+        ] {
             assert!(!has_dated_heading(heading, "0.1.0"), "{heading}");
         }
         assert!(has_dated_heading("## [0.1.0] - 2026-10-22\r\n", "0.1.0"));
@@ -452,11 +472,20 @@ mod tests {
     fn beta_notes_pin_the_exact_version() {
         let text = notes(
             "nepdate",
-            &pair("0.1.0-beta.1", "0.1.0-beta.1", "=0.1.0-beta.1", BETA_CHANGELOG),
+            &pair(
+                "0.1.0-beta.1",
+                "0.1.0-beta.1",
+                "=0.1.0-beta.1",
+                BETA_CHANGELOG,
+            ),
             "0.1.0-beta.1",
         )
         .unwrap_or_default();
-        assert!(text.contains("cargo add nepdate@=0.1.0-beta.1\ncargo add nepdate-patro@=0.1.0-beta.1\n"));
+        assert!(
+            text.contains(
+                "cargo add nepdate@=0.1.0-beta.1\ncargo add nepdate-patro@=0.1.0-beta.1\n"
+            )
+        );
     }
 
     /// The real files: both crates must pass the check for the newest dated version in their
@@ -465,7 +494,11 @@ mod tests {
     fn repository_passes_for_its_newest_changelog_version() {
         let packages = packages("nepdate").expect("read the crates");
         let version = newest_dated_version(&packages[0].changelog).expect("a dated section");
-        assert!(check(&packages, version).is_empty(), "{:?}", check(&packages, version));
+        assert!(
+            check(&packages, version).is_empty(),
+            "{:?}",
+            check(&packages, version)
+        );
     }
 
     /// The version of the first dated `## [X] - YYYY-MM-DD` heading, skipping `[Unreleased]`.
