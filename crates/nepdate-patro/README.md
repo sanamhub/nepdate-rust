@@ -1,16 +1,30 @@
-# nepdate-patro
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sanamhub/nepdate-rust/main/docs/assets/nepdate-rust-128.png" width="96" alt="NepDate logo">
+</p>
+
+<h1 align="center">nepdate-patro</h1>
+
+<p align="center">
+  <a href="https://crates.io/crates/nepdate-patro"><img src="https://img.shields.io/crates/v/nepdate-patro?include_prereleases&logo=rust" alt="nepdate-patro on crates.io"></a>
+  <a href="https://docs.rs/nepdate-patro"><img src="https://img.shields.io/docsrs/nepdate-patro?logo=docsdotrs" alt="docs.rs"></a>
+  <a href="https://github.com/sanamhub/nepdate-rust/actions/workflows/ci.yml"><img src="https://github.com/sanamhub/nepdate-rust/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/sanamhub/nepdate-rust/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
+</p>
 
 The patro (पात्रो, the Nepali almanac) for the [`nepdate`](https://crates.io/crates/nepdate)
 crate: tithi, the Nepal public holiday flag and events for each Bikram Sambat day. `no_std`, no
 heap allocation, no `unsafe`. Every lookup is O(1) over per-day tables compiled into the crate,
 and every name is a `&'static str`.
 
+> **Status:** 0.1.0-beta.1, the first public pre-release. The API may still change before 0.1.0.
+> Holiday data is informational, not an official calendar.
+
 ## Quick start
 
 ```toml
 [dependencies]
-nepdate = "0.1"
-nepdate-patro = "0.1"
+nepdate = "=0.1.0-beta.1"
+nepdate-patro = "=0.1.0-beta.1"
 ```
 
 ```rust
@@ -45,7 +59,9 @@ announces late are missing until the next data update.
 ## Versions
 
 This crate's version always equals `nepdate`'s. Both are released together from one tag, and
-`nepdate-patro` X.Y.Z depends on `nepdate` `~X.Y.0`. Use the same version for both.
+`nepdate-patro` X.Y.Z depends on `nepdate` `~X.Y.0`. A pre-release such as 0.1.0-beta.1 depends
+on exactly that `nepdate` pre-release (`=0.1.0-beta.1`), so one beta of this crate never runs
+with another beta of the core. Use the same version for both.
 
 ## Data, provenance and license
 
@@ -60,3 +76,13 @@ the government's official notice before relying on a holiday.
 
 This crate is MIT licensed (`LICENSE`). Semantics of every field:
 [PATRO.md](https://github.com/sanamhub/nepdate/blob/main/spec/PATRO.md).
+
+## More
+
+| Topic | Where |
+|---|---|
+| What changed in each version | [CHANGELOG.md](https://github.com/sanamhub/nepdate-rust/blob/main/crates/nepdate-patro/CHANGELOG.md) |
+| Speed against C# NepDate and other crates | [benchmarks](https://github.com/sanamhub/nepdate-rust/blob/main/docs/benchmarks.md) |
+| Reporting a vulnerability | [SECURITY.md](https://github.com/sanamhub/nepdate-rust/blob/main/SECURITY.md) |
+| A wrong date, holiday or tithi | the hub's [data error form](https://github.com/sanamhub/nepdate/issues/new/choose) |
+| The other languages | [sanamhub/nepdate](https://github.com/sanamhub/nepdate#packages) |

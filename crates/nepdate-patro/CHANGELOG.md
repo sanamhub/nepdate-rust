@@ -6,6 +6,10 @@ All notable changes to `nepdate-patro` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-beta.1] - 2026-10-22
+
+First public pre-release. The API may still change before 0.1.0.
+
 ### Added
 
 - `info`, `coverage` and `public_holidays`, with tithi, the public holiday flag and events for BS

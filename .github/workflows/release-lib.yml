@@ -1,7 +1,8 @@
 # One tag `nepdate-vX.Y.Z` releases `nepdate` then `nepdate-patro` (ADR-0012, ADR-0002).
-# preflight -> ci -> publish -> verify-published. Published by crates.io trusted publishing, so
-# no long-lived registry token exists. The `production` environment gates `publish` behind a
-# maintainer approval. See docs/runbooks/release-library.md.
+# preflight -> ci -> publish -> verify-published. Published by crates.io trusted publishing; the
+# first release uses a short-lived CARGO_REGISTRY_TOKEN instead, because crates.io attaches a
+# trusted publisher only to a crate that exists. The `production` environment gates `publish`
+# behind a maintainer approval. See docs/runbooks/release-library.md.
 
 name: release-lib
 
@@ -62,14 +63,27 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: cargo xtask release-check nepdate "$VERSION"
-      # semver-checks compares against the previous published version, so it starts at 0.1.1.
+      # semver-checks compares against the newest published version, so it has nothing to compare
+      # until nepdate exists on crates.io (the first release, 0.1.0-beta.1).
+      - name: Is nepdate on crates.io yet
+        id: published
+        run: |
+          set -euo pipefail
+          status="$(curl -s -o /dev/null -w '%{http_code}' -A 'nepdate-rust release-lib' https://crates.io/api/v1/crates/nepdate)"
+          echo "crates.io answered $status for nepdate"
+          case "$status" in
+            200) echo "exists=true" >> "$GITHUB_OUTPUT" ;;
+            404) echo "exists=false" >> "$GITHUB_OUTPUT" ;;
+            # Anything else would skip semver-checks on a guess.
+            *) echo "::error::crates.io answered $status; can't tell whether nepdate exists"; exit 1 ;;
+          esac
       - name: Install cargo-semver-checks
-        if: steps.version.outputs.version != '0.1.0'
+        if: steps.published.outputs.exists == 'true'
         uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2.87.26
         with:
           tool: cargo-semver-checks
       - name: Semver checks
-        if: steps.version.outputs.version != '0.1.0'
+        if: steps.published.outputs.exists == 'true'
         run: cargo semver-checks -p nepdate -p nepdate-patro
 
   ci:
@@ -116,15 +130,31 @@ jobs:
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: "1.98"
-      - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
-        with:
-          cargoCommand: cargo
+      # First release only: crates.io cannot attach a trusted publisher to a crate that does not
+      # exist yet, so a short-lived publish-new token in the production environment is used while it
+      # is set. The runbook deletes it once trusted publishing is configured, and this fallback goes.
+      - name: Token for the first release
+        id: token
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [ -n "$CARGO_REGISTRY_TOKEN" ]; then
+            echo "Using CARGO_REGISTRY_TOKEN from the production environment (first release)."
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+      - id: auth
+        if: steps.token.outputs.present != 'true'
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+      # cargo publish waits until the index serves the version, so patro resolves its new core.
       - name: Publish nepdate
         env:
           VERSION: ${{ needs.preflight.outputs.version }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token || secrets.CARGO_REGISTRY_TOKEN }}
         run: |
           set -euo pipefail
-          status="$(curl -s -o /dev/null -w '%{http_code}' "https://crates.io/api/v1/crates/nepdate/${VERSION}")"
+          status="$(curl -s -o /dev/null -w '%{http_code}' -A 'nepdate-rust release-lib' "https://crates.io/api/v1/crates/nepdate/${VERSION}")"
           if [ "$status" = "200" ]; then
             echo "nepdate ${VERSION} already published"
           else
@@ -133,9 +163,10 @@ jobs:
       - name: Publish nepdate-patro
         env:
           VERSION: ${{ needs.preflight.outputs.version }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token || secrets.CARGO_REGISTRY_TOKEN }}
         run: |
           set -euo pipefail
-          status="$(curl -s -o /dev/null -w '%{http_code}' "https://crates.io/api/v1/crates/nepdate-patro/${VERSION}")"
+          status="$(curl -s -o /dev/null -w '%{http_code}' -A 'nepdate-rust release-lib' "https://crates.io/api/v1/crates/nepdate-patro/${VERSION}")"
           if [ "$status" = "200" ]; then
             echo "nepdate-patro ${VERSION} already published"
           else
@@ -153,44 +184,6 @@ jobs:
 
   verify-published:
     needs: [preflight, publish]
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
-        with:
-          toolchain: "1.98"
-      - name: Install from crates.io and run the README quick starts
-        env:
-          VERSION: ${{ needs.preflight.outputs.version }}
-        run: |
-          set -euo pipefail
-          cargo new verify-published --bin
-          cd verify-published
-          # Retry while the index catches up: up to 10 minutes, one attempt per minute.
-          for i in $(seq 1 10); do
-            if cargo add "nepdate@${VERSION}" "nepdate-patro@${VERSION}"; then
-              break
-            fi
-            if [ "$i" -eq 10 ]; then
-              echo "::error::crates.io index still lacks ${VERSION} after 10 minutes"
-              exit 1
-            fi
-            sleep 60
-          done
-          cat > src/main.rs <<'EOF'
-          // The quick-start code from the nepdate and nepdate-patro READMEs.
-          use nepdate::{Lang, NepaliDate};
-
-          fn main() {
-              let date = NepaliDate::new(2081, 4, 15).expect("valid");
-              let ad = date.to_gregorian();
-              assert_eq!((ad.year(), ad.month(), ad.day()), (2024, 7, 30));
-              assert_eq!("2081/04/15".parse::<NepaliDate>().expect("valid"), date);
-
-              let info = nepdate_patro::info(NepaliDate::new(2081, 1, 1).expect("valid"));
-              assert_eq!(info.tithi().map(|t| t.name(Lang::En)), Some("Panchami"));
-              assert!(info.is_public_holiday());
-              println!("verify-published: ok");
-          }
-          EOF
-          cargo run
+    uses: ./.github/workflows/verify-published.yml
+    with:
+      version: ${{ needs.preflight.outputs.version }}

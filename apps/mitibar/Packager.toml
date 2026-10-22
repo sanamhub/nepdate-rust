@@ -6,7 +6,7 @@
 # Paths are relative to this file because cargo-packager changes into the config directory.
 name = "mitibar"
 productName = "MitiBar"
-version = "0.1.0"
+version = "0.1.0-beta.1"
 identifier = "sanamhub.MitiBar"
 description = "A tray calendar for Nepal, showing today's Bikram Sambat date."
 longDescription = "MitiBar keeps today's Bikram Sambat date in the tray, with a month grid, tithi, public holidays, a converter and settings. It makes no network requests."

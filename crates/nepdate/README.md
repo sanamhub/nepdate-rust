@@ -1,4 +1,15 @@
-# nepdate
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sanamhub/nepdate-rust/main/docs/assets/nepdate-rust-128.png" width="96" alt="NepDate logo">
+</p>
+
+<h1 align="center">nepdate</h1>
+
+<p align="center">
+  <a href="https://crates.io/crates/nepdate"><img src="https://img.shields.io/crates/v/nepdate?include_prereleases&logo=rust" alt="nepdate on crates.io"></a>
+  <a href="https://docs.rs/nepdate"><img src="https://img.shields.io/docsrs/nepdate?logo=docsdotrs" alt="docs.rs"></a>
+  <a href="https://github.com/sanamhub/nepdate-rust/actions/workflows/ci.yml"><img src="https://github.com/sanamhub/nepdate-rust/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/sanamhub/nepdate-rust/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
+</p>
 
 Bikram Sambat (BS, the Nepali calendar) dates for Rust: conversion to and from the Gregorian
 calendar (AD), arithmetic, fiscal years, formatting in English or Nepali, and parsing. `no_std`,
@@ -7,11 +18,13 @@ no dependencies by default, no heap allocation, no `unsafe`.
 Tithi, public holidays and events are in the companion crate
 [`nepdate-patro`](https://crates.io/crates/nepdate-patro), so this crate carries no patro data.
 
+> **Status:** 0.1.0-beta.1, the first public pre-release. The API may still change before 0.1.0.
+
 ## Quick start
 
 ```toml
 [dependencies]
-nepdate = "0.1"
+nepdate = "=0.1.0-beta.1"
 ```
 
 ```rust
@@ -103,3 +116,13 @@ MIT License. Its notice ships in this crate as `LICENSE-THIRD-PARTY`. The shared
 specification are maintained in [`sanamhub/nepdate`](https://github.com/sanamhub/nepdate).
 
 This crate is MIT licensed (`LICENSE`). It is not affiliated with the Government of Nepal.
+
+## More
+
+| Topic | Where |
+|---|---|
+| What changed in each version | [CHANGELOG.md](https://github.com/sanamhub/nepdate-rust/blob/main/crates/nepdate/CHANGELOG.md) |
+| Speed against C# NepDate and other crates | [benchmarks](https://github.com/sanamhub/nepdate-rust/blob/main/docs/benchmarks.md) |
+| Reporting a vulnerability | [SECURITY.md](https://github.com/sanamhub/nepdate-rust/blob/main/SECURITY.md) |
+| A wrong date, holiday or tithi | the hub's [data error form](https://github.com/sanamhub/nepdate/issues/new/choose) |
+| The other languages | [sanamhub/nepdate](https://github.com/sanamhub/nepdate#packages) |

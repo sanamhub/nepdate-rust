@@ -6,6 +6,12 @@ All notable changes to MitiBar are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-beta.1] - 2026-10-22
+
+First public pre-release, unsigned on Windows and macOS. Behaviour and settings may still change
+before 0.1.0. The idle memory, CPU and cold-start targets are not confirmed yet: the last
+measurements ran on a loaded machine ([benchmarks](https://github.com/sanamhub/nepdate-rust/blob/main/docs/benchmarks-widget.md)).
+
 ### Added
 
 - Tray icon and menu: Open, Copy today (BS), Copy today (AD), Settings and Quit, translated into
