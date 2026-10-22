@@ -806,6 +806,24 @@ fn window_deactivation_hides_the_popup_while_a_control_has_focus() {
 }
 
 #[test]
+fn a_toggle_hides_an_open_popup_without_panicking() {
+    // The taskbar text never takes focus, so a click on it while the popup is open reaches
+    // `hide_popup` instead of the focus-loss path. The beta panicked here with "RefCell already
+    // borrowed" on every such click.
+    let (popup, state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+    let label = day_label(&popup, "5");
+    click(&popup, &label);
+    assert!(state.borrow().detail.is_some(), "the detail is open");
+
+    crate::hide_popup(&state);
+    assert!(!popup.window().is_visible(), "the toggle hides the popup");
+    assert!(
+        state.borrow().detail.is_none(),
+        "the hide closes the detail"
+    );
+}
+
+#[test]
 fn window_active_changed_hides_the_popup_when_the_root_has_focus() {
     let (popup, _state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
     assert_eq!(focused(&popup), "", "the root holds focus");
