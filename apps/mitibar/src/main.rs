@@ -212,7 +212,10 @@ fn popup_visible(state: &Rc<RefCell<AppState>>) -> bool {
 
 /// Hides the popup if it exists, recording the hide for the reopen guard.
 fn hide_popup(state: &Rc<RefCell<AppState>>) {
-    if let Some(popup) = state.borrow().popup.upgrade() {
+    // Upgrade in its own statement: an `if let` keeps the borrow alive for the whole block,
+    // and `record_hidden` needs `borrow_mut`.
+    let popup = state.borrow().popup.upgrade();
+    if let Some(popup) = popup {
         record_hidden(state);
         let _ = popup.hide();
     }
@@ -1034,16 +1037,19 @@ fn wire_settings(
             let _ = slint::select_bundled_translation(language);
             if let Some(popup) = popup.upgrade() {
                 update_popup(&state);
-                if let Some(tray) = state.borrow().tray.clone() {
-                    update_tray(&state, &tray);
+                let (tray, taskbar) = {
+                    let s = state.borrow();
+                    (s.tray.clone(), s.taskbar.clone())
+                };
+                if let Some(tray) = &tray {
+                    update_tray(&state, tray);
                 }
-                if let Some(taskbar) = state.borrow().taskbar.clone() {
-                    if let Some(tray) = state.borrow().tray.clone() {
+                if let Some(taskbar) = taskbar {
+                    if let Some(tray) = &tray {
                         taskbar.set_menu_labels(&tray.menu_labels());
                     }
-                    let s = state.borrow();
-                    let now = jiff::Zoned::now();
-                    taskbar.set_lines(&taskbar_lines(&now, &s.settings));
+                    let lines = taskbar_lines(&jiff::Zoned::now(), &state.borrow().settings);
+                    taskbar.set_lines(&lines);
                 }
                 refresh_settings(&popup, &state);
             }
@@ -1112,7 +1118,8 @@ fn wire_settings(
         let save_timer = save_timer.clone();
         move |value| {
             state.borrow_mut().settings.taskbar_text = value;
-            if let Some(taskbar) = state.borrow().taskbar.clone() {
+            let taskbar = state.borrow().taskbar.clone();
+            if let Some(taskbar) = taskbar {
                 taskbar.set_enabled(value);
             }
             schedule_save(&save_timer, &state);
@@ -1200,7 +1207,8 @@ fn open_detail(state: &Rc<RefCell<AppState>>, index: i32) {
 /// Clears the detail without changing the month (WR-04 AC3).
 fn clear_detail(state: &Rc<RefCell<AppState>>) {
     state.borrow_mut().detail = None;
-    if let Some(popup) = state.borrow().popup.upgrade() {
+    let popup = state.borrow().popup.upgrade();
+    if let Some(popup) = popup {
         ui_bridge::set_detail(&popup, None);
     }
 }
