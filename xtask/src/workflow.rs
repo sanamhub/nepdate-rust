@@ -227,8 +227,13 @@ fn check_jobs(root: &Mapping) -> Result<()> {
     check_macos_signing(build)?;
     check_windows_arm64(build)?;
 
-    if !run_text(job(jobs, "sbom")?)?.contains("cargo cyclonedx") {
+    let sbom_text = run_text(job(jobs, "sbom")?)?;
+    if !sbom_text.contains("cargo cyclonedx") {
         bail!("sbom job does not run cargo cyclonedx");
+    }
+    // cargo-cyclonedx adds only ".json" to an override, and verify expects MitiBar-<v>.cdx.json.
+    if !sbom_text.contains(r#"--override-filename "MitiBar-${VERSION}.cdx""#) {
+        bail!("sbom job must name the SBOM MitiBar-${{VERSION}}.cdx (the tool appends .json)");
     }
     if !run_text(job(jobs, "checksums")?)?.contains("sha256sum") {
         bail!("checksums job does not run sha256sum");
