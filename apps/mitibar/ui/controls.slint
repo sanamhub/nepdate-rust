@@ -98,7 +98,10 @@ export component Pill inherits Rectangle {
 
         HorizontalLayout {
             alignment: center;
-            spacing: 6px;
+            // The icon slot and the caption are both in the layout even when empty. The 6 px gap
+            // belongs only between an icon and text: next to an empty slot it pushed text 6 px past
+            // the pill's preferred width, and an icon-only pill's icon 3 px left of centre.
+            spacing: root.has-icon && root.text != "" ? 6px : 0px;
             padding-left: root.text == "" ? 0px : 10px;
             padding-right: root.text == "" ? 0px : 10px;
             // The icon is centred in the pill's height; a layout would otherwise top-align it.
