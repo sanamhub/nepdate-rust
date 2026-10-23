@@ -21,26 +21,63 @@ pub enum GotoOutcome {
     Error(String),
 }
 
+/// The calendar a trailing marker names: `2026-10-22 AD` is an AD date whatever its year.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Calendar {
+    Bs,
+    Ad,
+}
+
+/// The markers, longest first where one ends another. ASCII ones match in any case.
+const MARKERS: [(&str, Calendar); 6] = [
+    ("A.D.", Calendar::Ad),
+    ("AD", Calendar::Ad),
+    ("ई.सं.", Calendar::Ad),
+    ("B.S.", Calendar::Bs),
+    ("BS", Calendar::Bs),
+    ("वि.सं.", Calendar::Bs),
+];
+
+/// Splits a trailing calendar marker off `input`.
+fn split_marker(input: &str) -> (&str, Option<Calendar>) {
+    for (marker, calendar) in MARKERS {
+        let Some(at) = input.len().checked_sub(marker.len()) else {
+            continue;
+        };
+        if input.is_char_boundary(at) && input[at..].eq_ignore_ascii_case(marker) {
+            return (input[..at].trim_end(), Some(calendar));
+        }
+    }
+    (input, None)
+}
+
 /// Reads `input` as a BS date, else as an AD date (WR-14 AC3).
 ///
 /// BS goes first, with the library's lenient parser (numbers or month names, Devanagari digits).
 /// An AD date is `YYYY-MM-DD` or `YYYY/MM/DD`, and only a year from 1844 to 2143 is read as AD.
-/// A text that is a valid BS date is a BS date even when its year also falls in the AD range, so
-/// `2026-10-22` opens BS 2026 Kartik 22, and `1850-05-05` opens AD 1850-05-05 because 1850 is not
-/// a BS year. A text that is not a valid BS date but is a valid AD date, such as `2026-12-31` when
-/// BS 2026 Chaitra has fewer than 31 days, is read as AD.
+/// Every year from 1901 to 2143 is both a BS and an AD year, so without a marker a text that is a
+/// valid BS date is a BS date: `2026-10-22` opens BS 2026 Magh 22. A trailing `AD` (or `A.D.`,
+/// `ई.सं.`) reads the text as AD only, so `2026-10-22 AD` opens the day it falls on, and a
+/// trailing `BS` (or `B.S.`, `वि.सं.`) reads it as BS only. Without a marker, a text that is not
+/// a valid BS date but is a valid AD date, such as `1850-05-05`, is read as AD.
 #[must_use]
 pub fn parse(input: &str, lang: Lang) -> GotoOutcome {
     let input = input.trim();
     if input.is_empty() {
         return GotoOutcome::Empty;
     }
-    let bs = NepaliDate::parse_lenient(input);
-    if let Ok(date) = bs {
-        return GotoOutcome::Date(date);
+    let (text, calendar) = split_marker(input);
+    let mut out_of_range = false;
+    if calendar != Some(Calendar::Ad) {
+        match NepaliDate::parse_lenient(text) {
+            Ok(date) => return GotoOutcome::Date(date),
+            Err(Error::OutOfRange) => out_of_range = true,
+            Err(_) => {}
+        }
     }
-    let mut out_of_range = bs == Err(Error::OutOfRange);
-    if let Ok((year, month, day)) = parse_ad(input) {
+    if calendar != Some(Calendar::Bs)
+        && let Ok((year, month, day)) = parse_ad(text)
+    {
         if (FIRST_AD_YEAR..=LAST_AD_YEAR).contains(&year) {
             match NepaliDate::from_gregorian(year, month, day) {
                 Ok(date) => return GotoOutcome::Date(date),
@@ -119,7 +156,8 @@ mod tests {
 
     #[test]
     fn wr14_ac3_the_ambiguous_year_rule_reads_a_valid_bs_date_as_bs() {
-        // 2026 is a BS year and an AD year. A valid BS date wins, so this is not 2026-10-22 AD.
+        // 2026 is a BS year and an AD year. Without a marker a valid BS date wins, so this is not
+        // 2026-10-22 AD.
         assert_eq!(
             parse("2026-10-22", Lang::En),
             GotoOutcome::Date(date(2026, 10, 22))
@@ -128,6 +166,57 @@ mod tests {
             parse("2081/01/01", Lang::En),
             GotoOutcome::Date(date(2081, 1, 1))
         );
+    }
+
+    #[test]
+    fn wr14_ac3_a_trailing_ad_marker_reads_the_date_as_ad() {
+        let ad = NepaliDate::from_gregorian(2026, 10, 22).expect("AD 2026-10-22");
+        for text in [
+            "2026-10-22 AD",
+            "2026-10-22 ad",
+            "2026/10/22 A.D.",
+            "2026-10-22AD",
+        ] {
+            assert_eq!(parse(text, Lang::En), GotoOutcome::Date(ad), "{text}");
+        }
+        assert_eq!(
+            parse("२०२६-१०-२२ ई.सं.", Lang::Ne),
+            GotoOutcome::Date(ad),
+            "the Nepali marker and Devanagari digits"
+        );
+        assert_eq!(
+            parse("2150-01-01 AD", Lang::En),
+            GotoOutcome::Error("Supported range: 1901–2199 BS (1844–2143 AD)".to_owned()),
+            "an AD year past 2143 is out of range even though 2150 is a BS year"
+        );
+        assert_eq!(
+            parse("2026-02-30 AD", Lang::En),
+            GotoOutcome::Error("Invalid date".to_owned()),
+            "no fallback to BS"
+        );
+    }
+
+    #[test]
+    fn wr14_ac3_a_trailing_bs_marker_reads_the_date_as_bs() {
+        assert_eq!(
+            parse("2083-07-05 BS", Lang::En),
+            GotoOutcome::Date(date(2083, 7, 5))
+        );
+        assert_eq!(
+            parse("२०८३-०७-०५ वि.सं.", Lang::Ne),
+            GotoOutcome::Date(date(2083, 7, 5))
+        );
+        assert_eq!(
+            parse("1850-05-05 B.S.", Lang::En),
+            GotoOutcome::Error("Supported range: 1901–2199 BS (1844–2143 AD)".to_owned()),
+            "no fallback to AD"
+        );
+    }
+
+    #[test]
+    fn wr14_ac3_a_marker_alone_is_not_enough_to_judge() {
+        assert_eq!(parse("AD", Lang::En), GotoOutcome::Empty);
+        assert_eq!(parse("2083 BS", Lang::En), GotoOutcome::Empty);
     }
 
     #[test]

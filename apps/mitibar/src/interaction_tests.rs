@@ -267,6 +267,23 @@ fn previous_next_and_today_follow_the_range_edges() {
 }
 
 #[test]
+fn a_step_that_reaches_the_edge_moves_the_focus_to_the_grid() {
+    // A control disabled while it has focus keeps its ring, so the focus must leave it.
+    let (popup, state, _) = app(date(2081, 1, 1));
+    show_month(&state, 1901, Month::Jestha);
+    tab_to(&popup, "previous");
+    press(&popup, slint::platform::Key::Return);
+    assert!(popup.get_month_title().starts_with("Baishakh 1901"));
+    assert_eq!(focused(&popup), "grid");
+
+    show_month(&state, 2199, Month::Falgun);
+    tab_to(&popup, "next");
+    press(&popup, slint::platform::Key::Return);
+    assert!(popup.get_month_title().starts_with("Chaitra 2199"));
+    assert_eq!(focused(&popup), "grid");
+}
+
+#[test]
 fn one_wheel_notch_changes_one_month() {
     let (popup, _state, _) = app(date(2081, 2, 1));
     assert!(popup.get_month_title().starts_with("Jestha 2081"));
@@ -1099,6 +1116,40 @@ fn wr14_ac3_ctrl_g_opens_one_field_in_the_header_with_focus() {
         element(&popup, "Go to date").accessible_role(),
         Some(AccessibleRole::TextInput)
     );
+}
+
+#[test]
+fn wr14_ac3_clicking_the_header_date_opens_the_field() {
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    click(&popup, "Go to date (Ctrl+G)");
+    assert!(
+        popup.get_goto_visible(),
+        "the date is the mouse way to the field"
+    );
+    // No key event runs the change trackers here, so the first tick starts the focus timer and
+    // the second runs it.
+    elapse(5);
+    elapse(5);
+    assert_eq!(focused(&popup), "goto");
+}
+
+#[test]
+fn wr14_ac3_the_header_date_names_its_key_after_the_pointer_rests() {
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    hover(&popup, &element(&popup, "Go to date (Ctrl+G)"));
+    elapse(400);
+    assert_eq!(popup.get_pill_tip().as_str(), "", "not before 500 ms");
+    elapse(200);
+    assert_eq!(popup.get_pill_tip().as_str(), "Go to date (Ctrl+G)");
+    leave(&popup);
+    assert_eq!(popup.get_pill_tip().as_str(), "", "leaving hides it");
+}
+
+#[test]
+fn wr14_ac3_an_ad_marker_opens_the_bs_date_the_ad_date_falls_on() {
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    go_to(&popup, "2024-04-13 AD");
+    assert_eq!(popup.get_detail().bs_long.as_str(), "Baishakh 1, 2081");
 }
 
 #[test]

@@ -41,7 +41,7 @@ Devanagari for Nepali. Both OFL-1.1 (ADR-0010).
 | `body` | 13 px | AD day in a cell, secondary text |
 | `base` | 14 px | clock, buttons, input text |
 | `title` | 16 px | day detail heading, year and decade cell labels |
-| `display` | 22 px | header BS day and long date |
+| `display` | 20 px | header BS long date |
 
 Spacing on a 4 px grid: 4, 8, 12, 16, 24. Popup padding 12, grid cell padding 4, gap between
 sections 16.
@@ -101,7 +101,7 @@ shape with the same radius.
 
 ```
 ╭───────────────────────────────────────────────╮
-│ Kartik 5, 2083          (⇄ Convert) (⚙) (⌖)   │  display 22 px; pills right
+│ Kartik 5, 2083          (⇄ Convert) (⚙) (⌖)   │  display 20 px; pills right
 │ Thursday · Oct 22, 2026                        │  ink-muted
 │ 6:31 PM Kathmandu · 8:46 PM Singapore          │  base 14 px
 │───────────────────────────────────────────────│
@@ -114,9 +114,10 @@ shape with the same radius.
 ╰───────────────────────────────────────────────╯
 ```
 
-- Header: left-aligned text, the three pill actions on the right of the first line. The date there
-  is 20 px, not the 22 px `display` step, so "Baishakh 31, 2081" fits beside the pills; the Convert
-  label is 13 px for the same reason. Convert has an icon and a label; Settings and Pin are
+- Header: left-aligned text, the three pill actions on the right of the first line. The date is
+  `display`, 20 px, the largest size that fits "Baishakh 31, 2081" beside the pills; the Convert
+  label is 13 px for the same reason. A click on the date opens Go to date (WR-14 AC3); on hover
+  it gets the borderless pill of the month title. Convert has an icon and a label; Settings and Pin are
   icon-only pills with tooltips and accessible names. A pinned Pin pill is filled with `ink`, its
   icon in `surface`.
 - Pills: 28 px high, `surface-raised` fill, 1 px `hairline` border, `base` text. They are the only

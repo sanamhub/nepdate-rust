@@ -165,8 +165,8 @@ msgstr "संस्करण {0}"
 msgid "Data {0}"
 msgstr "डेटा {0}"
 
-msgid "BS or AD date"
-msgstr "वि.सं. वा ई.सं. मिति"
+msgid "2083-07-05, or 2026-10-22 AD"
+msgstr "२०८३-०७-०५, वा २०२६-१०-२२ ई.सं."
 
 msgid "Change view"
 msgstr "दृश्य बदल्नुहोस्"
@@ -179,6 +179,9 @@ msgstr "घटनाहरू: {0}"
 
 msgid "Go to date"
 msgstr "मितिमा जानुहोस्"
+
+msgid "Go to date (Ctrl+G)"
+msgstr "मितिमा जानुहोस् (Ctrl+G)"
 
 msgid "Next decade"
 msgstr "अर्को दशक"

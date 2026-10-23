@@ -262,7 +262,19 @@ export component MonthGrid inherits Rectangle {
                 label: root.zoom-mode == 0 ? @tr("Previous month")
                     : root.zoom-mode == 1 ? @tr("Previous year") : @tr("Previous decade");
                 enabled: root.interactive && root.can-prev;
-                activated => { root.step(-1); }
+                activated => {
+                    // A control disabled while it has focus keeps its ring for good, so the
+                    // grid takes the focus before the step, as for the title, and it comes back
+                    // here unless the step reached the end of the range.
+                    let had-focus = prev-button.has-focus;
+                    if (had-focus) {
+                        grid-scope.focus();
+                    }
+                    root.step(-1);
+                    if (had-focus && root.can-prev) {
+                        prev-button.focus();
+                    }
+                }
                 LineIcon {
                     commands: "M 10 3 L 5 8 L 10 13";
                     color: prev-button.foreground;
@@ -294,7 +306,19 @@ export component MonthGrid inherits Rectangle {
                 label: root.zoom-mode == 0 ? @tr("Next month")
                     : root.zoom-mode == 1 ? @tr("Next year") : @tr("Next decade");
                 enabled: root.interactive && root.can-next;
-                activated => { root.step(1); }
+                activated => {
+                    // A control disabled while it has focus keeps its ring for good, so the
+                    // grid takes the focus before the step, as for the title, and it comes back
+                    // here unless the step reached the end of the range.
+                    let had-focus = next-button.has-focus;
+                    if (had-focus) {
+                        grid-scope.focus();
+                    }
+                    root.step(1);
+                    if (had-focus && root.can-next) {
+                        next-button.focus();
+                    }
+                }
                 LineIcon {
                     commands: "M 6 3 L 11 8 L 6 13";
                     color: next-button.foreground;

@@ -314,11 +314,14 @@ change.
   date, AD long date, weekday, tithi, holiday name and the number of events, each line only when
   it has data. It hides when the pointer leaves the day or a key is pressed. The day's
   accessible name already carries the same text (WR-10 AC2).
-- AC3: **Go to date.** Ctrl+G, or the Go to date entry in the month title's menu, opens one
-  field in the header. It accepts a BS date (lenient parsing, as WR-07 AC1) or an AD date
-  (`YYYY-MM-DD` or `YYYY/MM/DD`; with four-digit years, a year 1844 to 2143 that is not a valid
-  BS year is read as AD). Enter opens that month with the day's detail. Errors follow WR-07
-  AC2 and AC3. Escape closes the field.
+- AC3: **Go to date.** Ctrl+G, or a click on the header's BS date, opens one field in the
+  header in place of the weekday and clock lines. The date shows a pill on hover and its tooltip
+  names the key. The field accepts a BS date (lenient parsing, as WR-07 AC1) or an AD date
+  (`YYYY-MM-DD` or `YYYY/MM/DD`). Every year from 1901 to 2143 is both, so a valid BS date is
+  read as BS. A trailing `AD`, `A.D.` or `ई.सं.` reads the text as AD only, and `BS`, `B.S.` or
+  `वि.सं.` as BS only; without one, a text that isn't a valid BS date but is a valid AD date from
+  1844 to 2143 is read as AD. The placeholder shows one example of each. Enter opens that month
+  with the day's detail. Errors follow WR-07 AC2 and AC3. Escape closes the field.
 - AC4: **Upcoming holidays.** The next-holiday line (WR-03 AC8) is a button. It expands a list of
   the next five public holidays within the patro coverage, each with its name, BS date and `in N
   days`. Clicking one opens its month and detail. Escape or a second click collapses it.

@@ -79,7 +79,12 @@ export component Pill inherits Rectangle {
         accessible-role: button;
         accessible-label: root.label;
         accessible-enabled: root.enabled;
-        accessible-action-default => { root.activated(); }
+        // Assistive technology can invoke a disabled control; it does nothing then.
+        accessible-action-default => {
+            if (root.enabled) {
+                root.activated();
+            }
+        }
         key-pressed(event) => {
             if (event.text == Key.Return || event.text == " ") {
                 root.activated();
