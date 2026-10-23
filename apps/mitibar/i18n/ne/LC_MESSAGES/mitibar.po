@@ -108,9 +108,6 @@ msgstr "सुरु वि.सं. मिति"
 msgid "To BS date"
 msgstr "अन्त्य वि.सं. मिति"
 
-msgid "Close settings"
-msgstr "सेटिङ बन्द गर्नुहोस्"
-
 msgid "Language"
 msgstr "भाषा"
 
@@ -132,15 +129,6 @@ msgstr "२४ घण्टाको घडी"
 msgid "Show seconds"
 msgstr "सेकेन्ड देखाउनुहोस्"
 
-msgid "Extra time zone"
-msgstr "अतिरिक्त समय क्षेत्र"
-
-msgid "Filter zones"
-msgstr "समय क्षेत्र छान्नुहोस्"
-
-msgid "No extra clock"
-msgstr "अतिरिक्त घडी नचाहिने"
-
 msgid "Launch at login"
 msgstr "लगइनमा सुरु गर्नुहोस्"
 
@@ -159,17 +147,8 @@ msgstr "पट्टी लुकाउनुहोस्"
 msgid "Reset position"
 msgstr "स्थिति रिसेट गर्नुहोस्"
 
-msgid "Version {0}"
-msgstr "संस्करण {0}"
-
-msgid "Data {0}"
-msgstr "डेटा {0}"
-
 msgid "2083-07-05, or 2026-10-22 AD"
 msgstr "२०८३-०७-०५, वा २०२६-१०-२२ ई.सं."
-
-msgid "Change view"
-msgstr "दृश्य बदल्नुहोस्"
 
 msgid "Convert (C)"
 msgstr "रूपान्तरण (C)"
@@ -215,3 +194,132 @@ msgstr "आज"
 
 msgid "tomorrow"
 msgstr "भोलि"
+
+msgid "General"
+msgstr "सामान्य"
+
+msgid "Clock"
+msgstr "घडी"
+
+msgid "Bar"
+msgstr "पट्टी"
+
+msgid "Shortcut"
+msgstr "सर्टकट"
+
+msgid "About"
+msgstr "बारेमा"
+
+msgid "Extra clock"
+msgstr "अतिरिक्त घडी"
+
+msgid "Extra clock time"
+msgstr "अतिरिक्त घडीको समय"
+
+msgid "Type a city or region"
+msgstr "सहर वा क्षेत्र टाइप गर्नुहोस्"
+
+msgid "None"
+msgstr "कुनै छैन"
+
+msgid "Top line"
+msgstr "माथिल्लो पङ्क्ति"
+
+msgid "Bottom line"
+msgstr "तल्लो पङ्क्ति"
+
+msgid "Add field"
+msgstr "विवरण थप्नुहोस्"
+
+msgid "Add field to the top line"
+msgstr "माथिल्लो पङ्क्तिमा विवरण थप्नुहोस्"
+
+msgid "Add field to the bottom line"
+msgstr "तल्लो पङ्क्तिमा विवरण थप्नुहोस्"
+
+msgid "Reset to default"
+msgstr "पूर्वनिर्धारितमा रिसेट गर्नुहोस्"
+
+msgid "Weekday"
+msgstr "बार"
+
+msgid "Weekday, long"
+msgstr "बार, पूरा"
+
+msgid "Time"
+msgstr "समय"
+
+msgid "BS date"
+msgstr "वि.सं. मिति"
+
+msgid "BS date, short"
+msgstr "वि.सं. मिति, छोटो"
+
+msgid "AD date"
+msgstr "ई.सं. मिति"
+
+msgid "AD date, short"
+msgstr "ई.सं. मिति, छोटो"
+
+msgid "Holiday"
+msgstr "बिदा"
+
+msgid "Move {0} left"
+msgstr "{0} बायाँ सार्नुहोस्"
+
+msgid "Move {0} right"
+msgstr "{0} दायाँ सार्नुहोस्"
+
+msgid "Remove {0}"
+msgstr "{0} हटाउनुहोस्"
+
+msgid "Saved"
+msgstr "सुरक्षित गरियो"
+
+msgid "Couldn't save settings"
+msgstr "सेटिङ सुरक्षित गर्न सकिएन"
+
+msgid "Open MitiBar"
+msgstr "MitiBar खोल्नुहोस्"
+
+msgid "Press the keys"
+msgstr "कुञ्जीहरू थिच्नुहोस्"
+
+msgid "Clear"
+msgstr "हटाउनुहोस्"
+
+msgid "Reset"
+msgstr "रिसेट"
+
+msgid "Clear shortcut"
+msgstr "सर्टकट हटाउनुहोस्"
+
+msgid "Reset shortcut"
+msgstr "सर्टकट रिसेट गर्नुहोस्"
+
+msgid "Ctrl+Alt is AltGr on many keyboards"
+msgstr "धेरै किबोर्डमा Ctrl+Alt भनेको AltGr हो"
+
+msgid "Use {0}, or two of Ctrl, Alt and Shift"
+msgstr "{0}, वा Ctrl, Alt र Shift मध्ये दुई प्रयोग गर्नुहोस्"
+
+msgid "This shortcut is used by another app"
+msgstr "यो सर्टकट अर्को एपले प्रयोग गरिरहेको छ"
+
+msgid "Global shortcuts aren't available on Wayland"
+msgstr "Wayland मा ग्लोबल सर्टकट उपलब्ध छैन"
+
+msgid "That key can't be recorded; use a letter or F1 to F12"
+msgstr "त्यो कुञ्जी रेकर्ड गर्न सकिँदैन; अक्षर वा F1 देखि F12 प्रयोग गर्नुहोस्"
+
+msgid "{0} Settings"
+msgstr "{0} सेटिङ"
+
+msgid "{0} {1} · MIT license"
+msgstr "{0} {1} · MIT इजाजतपत्र"
+
+msgid "Third-party notices: Slint, Noto Sans and Noto Sans Devanagari (SIL Open Font License 1.1), NepDate (MIT)"
+msgstr "तेस्रो-पक्षका सूचनाहरू: Slint, Noto Sans र Noto Sans Devanagari (SIL Open Font License 1.1), NepDate (MIT)"
+
+msgid "{0}, change view"
+msgstr "{0}, दृश्य बदल्नुहोस्"

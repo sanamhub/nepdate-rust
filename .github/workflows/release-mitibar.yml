@@ -370,6 +370,10 @@ jobs:
         run: |
           set -euo pipefail
           cargo xtask changelog mitibar "$VERSION" > notes.md
+          {
+            echo
+            echo '<a href="https://slint.dev"><img src="https://raw.githubusercontent.com/slint-ui/slint/v1.18.1/logo/MadeWithSlint-logo-whitebg.png" alt="Made with Slint" width="160"></a>'
+          } >> notes.md
           if [[ "$WINDOWS_SIGNING_ENABLED" != "true" || "$MACOS_SIGNING_ENABLED" != "true" ]]; then
             {
               echo

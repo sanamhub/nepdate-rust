@@ -22,13 +22,21 @@ pub enum TrayEvent {
     Quit,
 }
 
-/// The tray surface the app updates once per tick.
+/// The tray surface the app updates: once per tick, and when a setting changes (WR-06 AC5).
 pub trait Tray {
     fn set_title(&self, text: &str);
     fn set_icon_day(&self, day: &str);
     fn set_tooltip(&self, tooltip: &str);
     /// Picks the icon ink for a dark (`true`) or light taskbar.
     fn set_dark_taskbar(&self, dark: bool);
+    /// Picks the digits of the icon: Devanagari for Nepali, ASCII otherwise.
+    fn set_language(&self, lang: Lang);
+    /// Shows the Show bar check item, on a platform that has a bar (WR-01 AC5).
+    fn set_bar_supported(&self, supported: bool);
+    /// Checks or unchecks the Show bar item to match the `bar` setting.
+    fn set_bar_shown(&self, shown: bool);
+    /// The translated labels, for the bar's right-click menu (WR-08 AC6).
+    fn menu_labels(&self) -> MenuLabels;
 }
 
 /// Implementation A: a Slint `SystemTrayIcon`. The two day-number image arrays live in
@@ -73,31 +81,6 @@ impl SlintTray {
         }
         Ok(SlintTray { component })
     }
-
-    /// The translated labels, for the bar's right-click menu (WR-08 AC6). The popup may not exist
-    /// yet; the tray component always does.
-    pub fn menu_labels(&self) -> MenuLabels {
-        MenuLabels {
-            open: self.component.get_menu_open().to_string(),
-            copy_bs: self.component.get_menu_copy_bs().to_string(),
-            copy_ad: self.component.get_menu_copy_ad().to_string(),
-            customize: self.component.get_menu_customize_bar().to_string(),
-            lock: self.component.get_menu_lock_position().to_string(),
-            hide: self.component.get_menu_hide_bar().to_string(),
-            settings: self.component.get_menu_settings().to_string(),
-            quit: self.component.get_menu_quit().to_string(),
-        }
-    }
-
-    /// Shows the Show bar check item, on a platform that has a bar (WR-01 AC5).
-    pub fn set_bar_supported(&self, supported: bool) {
-        self.component.set_bar_supported(supported);
-    }
-
-    /// Checks or unchecks the Show bar item to match the `bar` setting.
-    pub fn set_bar_shown(&self, shown: bool) {
-        self.component.set_bar_shown(shown);
-    }
 }
 
 impl Tray for SlintTray {
@@ -120,5 +103,31 @@ impl Tray for SlintTray {
 
     fn set_dark_taskbar(&self, dark: bool) {
         self.component.set_dark_taskbar(dark);
+    }
+
+    fn set_language(&self, lang: Lang) {
+        self.component.set_is_ne(lang == Lang::Ne);
+    }
+
+    fn set_bar_supported(&self, supported: bool) {
+        self.component.set_bar_supported(supported);
+    }
+
+    fn set_bar_shown(&self, shown: bool) {
+        self.component.set_bar_shown(shown);
+    }
+
+    /// The popup may not exist yet; the tray component always does.
+    fn menu_labels(&self) -> MenuLabels {
+        MenuLabels {
+            open: self.component.get_menu_open().to_string(),
+            copy_bs: self.component.get_menu_copy_bs().to_string(),
+            copy_ad: self.component.get_menu_copy_ad().to_string(),
+            customize: self.component.get_menu_customize_bar().to_string(),
+            lock: self.component.get_menu_lock_position().to_string(),
+            hide: self.component.get_menu_hide_bar().to_string(),
+            settings: self.component.get_menu_settings().to_string(),
+            quit: self.component.get_menu_quit().to_string(),
+        }
     }
 }

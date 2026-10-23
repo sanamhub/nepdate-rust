@@ -1,281 +1,860 @@
-// The settings panel (WR-06): an inline card inside the popup, opened from the tray's
-// Settings item. Every WR-06 key has a control; `ui_bridge` fills the model and `main` applies
-// each change immediately and saves it after 300 ms.
+// The Settings window (WR-06, widget-design §8): its own window, created when it is opened and
+// dropped when it is closed. One left-aligned column in five sections: General, Clock, Bar,
+// Shortcut and About. Every control applies at once; `main` saves 300 ms after the last change.
+// `ui_bridge` fills `data`, and the callbacks carry each change back to Rust.
 
+import { AppInfo } from "app-info.slint";
 import { FocusFrame } from "focus-frame.slint";
+import { LineIcon, Pill, Segmented, Toggle } from "controls.slint";
 import { Theme } from "theme.slint";
-import { AboutSlint, Button, ComboBox, LineEdit, ListView, ScrollView, Switch } from "std-widgets.slint";
+import { LineEdit, ListView, ScrollView } from "std-widgets.slint";
 
 export struct SettingsData {
     language-index: int,
     theme-index: int,
     clock-24h: bool,
     show-seconds: bool,
+    /// The extra clock's IANA id, or empty for none.
     zone: string,
     launch-at-login: bool,
-    /// The `bar` setting: whether the floating bar is shown (WR-08).
     bar: bool,
-    /// Whether this platform has the bar at all; the bar controls are hidden elsewhere.
+    bar-locked: bool,
+    /// Whether this platform has the bar at all; the Bar section is left out elsewhere.
     bar-available: bool,
-    zones: [string],
+    /// The two lines of the bar as field ids, and the ids "Add field" offers.
+    top: [string],
+    bottom: [string],
+    unused: [string],
+    /// The last chip's remove button is disabled.
+    only-one-field: bool,
+    /// The shortcut as text, or empty for none.
+    shortcut: string,
+    /// False where the OS has no way to grab a global key (Wayland).
+    shortcut-available: bool,
     version: string,
-    coverage: string,
 }
 
-export component SettingsPanel inherits Rectangle {
-    in-out property <SettingsData> data;
-    in-out property <string> zone-filter: "";
+/// The names of the bar's fields (WR-08 AC2), in the language of the window.
+export global FieldNames {
+    public pure function name(id: string) -> string {
+        return id == "weekday" ? @tr("Weekday")
+            : id == "weekday_long" ? @tr("Weekday, long")
+            : id == "time" ? @tr("Time")
+            : id == "zone_time" ? @tr("Extra clock time")
+            : id == "bs_date" ? @tr("BS date")
+            : id == "bs_short" ? @tr("BS date, short")
+            : id == "ad_date" ? @tr("AD date")
+            : id == "ad_short" ? @tr("AD date, short")
+            : id == "tithi" ? @tr("Tithi")
+            : @tr("Holiday");
+    }
+}
 
-    callback language-picked(int);
-    callback theme-picked(int);
-    callback clock-changed(bool);
-    callback seconds-changed(bool);
-    callback zone-picked(string);
-    callback launch-changed(bool);
-    callback bar-changed(bool);
-    callback reset-bar();
-    callback filter-zones(string);
-    callback closed();
-    callback control-focused(string);
+/// A small icon button inside a chip: a 20 px target around a 16 px line icon.
+component MiniButton inherits Rectangle {
+    in property <string> commands;
+    in property <string> label;
+    in property <bool> enabled: true;
+    callback activated();
 
-    /// The focused control's stable name.
-    out property <string> focused-control: root.active-control;
-    /// Set by the control that gains focus inside the settings panel.
-    in-out property <string> active-control: "";
-    changed active-control => { root.control-focused(root.active-control); }
+    width: 20px;
+    height: 20px;
+    border-radius: 10px;
+    background: touch.has-hover && root.enabled ? Theme.hairline : transparent;
+    opacity: root.enabled ? 1.0 : 0.4;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-enabled: root.enabled;
+    accessible-action-default => {
+        if (root.enabled) {
+            root.activated();
+        }
+    }
+    LineIcon {
+        x: 2px;
+        y: 2px;
+        commands: root.commands;
+        color: Theme.ink;
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.activated(); }
+    }
+}
 
-    width: 330px;
-    height: 430px;
+/// One field of a bar line (WR-08 AC3): its name and a remove button. While it has focus it also
+/// shows its two arrow buttons; Alt+Left and Alt+Right do the same, Alt+Up and Alt+Down take it
+/// to the other line, and Delete removes it.
+component Chip inherits Rectangle {
+    in property <string> id;
+    in property <bool> can-remove;
+    in property <bool> can-left;
+    in property <bool> can-right;
+    /// Rust asked for this chip to take focus; it does one tick later and says so.
+    in property <bool> focus-wanted;
+    out property <bool> has-focus: scope.has-focus;
+    property <string> name: FieldNames.name(root.id);
+
+    callback remove();
+    callback move-left();
+    callback move-right();
+    callback move-up();
+    callback move-down();
+    callback focused();
+    callback focus-served();
+    forward-focus: scope;
+
+    height: 28px;
+    preferred-width: row.preferred-width;
+    border-radius: 14px;
+    background: Theme.surface-raised;
+    border-width: 1px;
+    border-color: Theme.hairline;
+
+    scope := FocusScope {
+        width: 100%;
+        height: 100%;
+        accessible-role: list-item;
+        accessible-label: root.name;
+        focus-gained(_) => { root.focused(); }
+        key-pressed(event) => {
+            if (event.modifiers.alt) {
+                if (event.text == Key.LeftArrow) { root.move-left(); return accept; }
+                if (event.text == Key.RightArrow) { root.move-right(); return accept; }
+                if (event.text == Key.UpArrow) { root.move-up(); return accept; }
+                if (event.text == Key.DownArrow) { root.move-down(); return accept; }
+            }
+            if (event.text == Key.Delete || event.text == Key.Backspace) {
+                if (root.can-remove) {
+                    root.remove();
+                }
+                return accept;
+            }
+            reject
+        }
+        TouchArea { clicked => { scope.focus(); } }
+        row := HorizontalLayout {
+            padding-left: 10px;
+            padding-right: 4px;
+            spacing: 2px;
+            alignment: center;
+            if scope.has-focus: VerticalLayout {
+                alignment: center;
+                MiniButton {
+                    commands: "M 10 3 L 5 8 L 10 13";
+                    label: @tr("Move {0} left", root.name);
+                    enabled: root.can-left;
+                    activated => { root.move-left(); }
+                }
+            }
+            Text {
+                text: root.name;
+                color: Theme.ink;
+                font-size: 13px;
+                vertical-alignment: center;
+                accessible-role: none;
+            }
+            if scope.has-focus: VerticalLayout {
+                alignment: center;
+                MiniButton {
+                    commands: "M 6 3 L 11 8 L 6 13";
+                    label: @tr("Move {0} right", root.name);
+                    enabled: root.can-right;
+                    activated => { root.move-right(); }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                MiniButton {
+                    commands: "M 4 4 L 12 12 M 12 4 L 4 12";
+                    label: @tr("Remove {0}", root.name);
+                    enabled: root.can-remove;
+                    activated => { root.remove(); }
+                }
+            }
+        }
+        Timer {
+            interval: 1ms;
+            running: root.focus-wanted;
+            triggered => {
+                scope.focus();
+                root.focus-served();
+            }
+        }
+        FocusFrame {
+            width: 100%;
+            height: 100%;
+            focused: scope.has-focus;
+            thickness: 2px;
+            radius: 14px;
+        }
+    }
+}
+
+/// The extra clock's drop-down list (WR-06 AC4): one row per zone, the highlighted one filled.
+component ZoneList inherits Rectangle {
+    in property <[string]> rows;
+    in property <int> highlight;
+    callback picked(string);
+
+    height: 168px;
     background: Theme.surface-raised;
     border-radius: 6px;
     border-width: 1px;
     border-color: Theme.hairline;
 
-    // Swallow clicks on the card so they do not reach the scrim behind it.
-    TouchArea {}
+    function reveal() {
+        if (-list.content-y > root.highlight * 28px) {
+            list.content-y = -root.highlight * 28px;
+        } else if (-list.content-y + list.visible-height < (root.highlight + 1) * 28px) {
+            list.content-y = list.visible-height - (root.highlight + 1) * 28px;
+        }
+    }
+    changed highlight => { root.reveal(); }
 
-    VerticalLayout {
-        padding: 12px;
-        spacing: 8px;
-
-        HorizontalLayout {
-            spacing: 8px;
+    list := ListView {
+        x: 1px;
+        y: 1px;
+        width: parent.width - 2px;
+        height: parent.height - 2px;
+        for zone[i] in root.rows: Rectangle {
+            height: 28px;
+            border-radius: 6px;
+            background: i == root.highlight || touch.has-hover ? Theme.hairline : transparent;
+            accessible-role: list-item;
+            accessible-label: zone == "" ? @tr("None") : zone;
+            accessible-action-default => { root.picked(zone); }
             Text {
-                text: @tr("Settings");
+                x: 8px;
+                text: zone == "" ? @tr("None") : zone;
                 color: Theme.ink;
-                font-size: 16px;
+                font-size: 13px;
                 vertical-alignment: center;
-                horizontal-stretch: 1;
+                accessible-role: none;
             }
-            FocusFrame {
-                width: close-button.width;
-                height: close-button.height;
-                focused: close-button.has-focus;
-                close-button := Button {
-                    text: @tr("Close");
-                    accessible-label: @tr("Close settings");
-                    clicked => { root.closed(); }
-                    changed has-focus => {
-                        if (close-button.has-focus) { root.active-control = "settings close"; }
-                    }
-                }
+            touch := TouchArea {
+                clicked => { root.picked(zone); }
             }
         }
+    }
+}
 
-        ScrollView {
-            vertical-stretch: 1;
-            horizontal-scrollbar-policy: always-off;
-            content-width: self.visible-width;
-            content-height: content.preferred-height;
+/// A section heading (widget-design §8): `title` size, sentence case, with room above it.
+component Heading inherits VerticalLayout {
+    in property <string> text;
+    padding-top: 12px;
+    Text {
+        text: root.text;
+        color: Theme.ink;
+        font-size: 16px;
+        height: 24px;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
+}
 
-            content := VerticalLayout {
-                width: parent.width;
+/// A row with its label on the left and the control, passed as children, on the right.
+component Row inherits HorizontalLayout {
+    in property <string> text;
+    spacing: 12px;
+    Text {
+        text: root.text;
+        color: Theme.ink;
+        font-size: 14px;
+        vertical-alignment: center;
+        horizontal-stretch: 1;
+        overflow: elide;
+        accessible-role: none;
+    }
+    VerticalLayout {
+        alignment: center;
+        @children
+    }
+}
+
+export component SettingsWindow inherits Window {
+    title: @tr("{0} Settings", AppInfo.app-name);
+    // A fixed size: the content scrolls when it needs more room (widget-design §8).
+    preferred-width: 420px;
+    preferred-height: 560px;
+    min-width: 420px;
+    max-width: 420px;
+    min-height: 560px;
+    max-height: 560px;
+    background: Theme.surface;
+    default-font-family: "Noto Sans";
+
+    in property <SettingsData> data;
+    /// The extra clock's list: zone ids matching the typed text, with an empty id (shown as None)
+    /// first when the text is empty or matches "None".
+    in property <[string]> zone-rows: [];
+    /// 0 is no note, 1 is `Saved`, 2 is the failure note (WR-06 AC5).
+    in property <int> save-status: 0;
+    /// What the Win, Cmd or Super key is called here, for the shortcut note.
+    in property <string> meta-key: "Win";
+    /// The shortcut field's note (WR-13): 0 none, 1 Ctrl+Alt, 2 too few modifiers, 3 in use by
+    /// another app, 4 no global shortcuts here, 5 a key the field can't record.
+    in property <int> shortcut-note: 0;
+    /// After a chip moves or goes, Rust names the one to focus; a timer applies it.
+    in-out property <int> focus-line: 0;
+    in-out property <int> focus-index: -1;
+    in-out property <bool> focus-pending: false;
+    /// Which line's "Add field" list is open: -1 none, 0 top, 1 bottom.
+    in-out property <int> add-open: -1;
+    /// The extra clock's drop-down, its typed text and the highlighted row.
+    in-out property <bool> zone-open: false;
+    in-out property <string> zone-query: root.data.zone == "" ? @tr("None") : root.data.zone;
+    in-out property <int> zone-highlight: 0;
+    /// The window's title, read by the interaction tests.
+    out property <string> shown-title: root.title;
+    /// Where the scroll view is, and how far it can go: the interaction tests read and set them.
+    in-out property <length> scroll-y <=> scroll.content-y;
+    out property <length> scroll-max: max(0px, content.preferred-height - scroll.visible-height);
+    /// The stable name of the focused control, read by the interaction tests.
+    in-out property <string> focused-control: "";
+
+    callback language-picked(int);
+    callback theme-picked(int);
+    callback launch-changed(bool);
+    callback clock-changed(bool);
+    callback seconds-changed(bool);
+    callback zone-opened();
+    callback zone-edited(string);
+    callback zone-picked(string);
+    callback bar-changed(bool);
+    callback lock-changed(bool);
+    callback chip-removed(int, int);
+    callback chip-moved(int, int, int);
+    callback chip-moved-line(int, int, bool);
+    callback field-added(int, string);
+    callback lines-reset();
+    callback reset-position();
+    /// A key press in the shortcut field: the key's text and Win, Ctrl, Alt and Shift. Returns
+    /// whether the field took it; Tab and Escape are left to the window.
+    callback shortcut-key(string, bool, bool, bool, bool) -> bool;
+    callback shortcut-cleared();
+    callback shortcut-reset();
+    callback closed();
+
+    /// Scrolls the Bar section to the top ("Customize bar", WR-08 AC6).
+    public function show-bar-section() {
+        scroll.content-y = -min(clock-section.y + clock-section.height + content.spacing, root.scroll-max);
+    }
+
+    /// Keeps the focused control inside the scroll view, with a little margin.
+    function reveal(top: length, height: length) {
+        if (top - scroll.absolute-position.y < 8px) {
+            scroll.content-y += 8px - (top - scroll.absolute-position.y);
+        } else if (top - scroll.absolute-position.y + height > scroll.visible-height - 8px) {
+            scroll.content-y -= top - scroll.absolute-position.y + height
+                - (scroll.visible-height - 8px);
+        }
+    }
+
+    function focus-on(name: string, top: length, height: length) {
+        root.focused-control = name;
+        root.reveal(top, height);
+    }
+
+    function close-zone-list() {
+        root.zone-open = false;
+        root.zone-query = root.data.zone == "" ? @tr("None") : root.data.zone;
+    }
+
+    function pick-zone(zone: string) {
+        root.zone-picked(zone);
+        root.close-zone-list();
+    }
+
+    // Escape closes the open drop-down or list, then the window. The scope is not a Tab stop.
+    forward-focus: fs;
+    fs := FocusScope {
+        focus-on-tab-navigation: false;
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                if (root.add-open >= 0) {
+                    root.add-open = -1;
+                } else {
+                    root.closed();
+                }
+                return accept;
+            }
+            reject
+        }
+
+        VerticalLayout {
+            padding: 16px;
+            spacing: 8px;
+
+            // The header: the title on the left, the save note on the right.
+            HorizontalLayout {
+                height: 28px;
                 spacing: 8px;
-
-                Text { text: @tr("Language"); color: Theme.ink-muted; font-size: 12px; }
-                FocusFrame {
+                Text {
+                    text: @tr("Settings");
+                    color: Theme.ink;
+                    font-size: 20px;
+                    vertical-alignment: center;
                     horizontal-stretch: 1;
-                    height: language-picker.height;
-                    focused: language-picker.has-focus;
-                    language-picker := ComboBox {
-                        width: 100%;
-                        model: ["English", "नेपाली"];
-                        current-index <=> root.data.language-index;
-                        accessible-label: @tr("Language");
-                        selected(_value) => { root.language-picked(root.data.language-index); }
-                        changed has-focus => {
-                            if (language-picker.has-focus) {
-                                root.active-control = "settings language";
-                            }
-                        }
+                    accessible-role: none;
+                }
+                if root.save-status == 1: HorizontalLayout {
+                    spacing: 4px;
+                    alignment: end;
+                    LineIcon {
+                        y: (parent.height - self.height) / 2;
+                        commands: "M 3 8 L 7 12 L 13 4";
+                        color: Theme.ink-muted;
+                    }
+                    Text {
+                        text: @tr("Saved");
+                        color: Theme.ink-muted;
+                        font-size: 13px;
+                        vertical-alignment: center;
                     }
                 }
+                if root.save-status == 2: Text {
+                    text: @tr("Couldn't save settings");
+                    color: Theme.ink;
+                    font-size: 13px;
+                    vertical-alignment: center;
+                    horizontal-alignment: right;
+                }
+            }
+            Rectangle { height: 1px; background: Theme.hairline; }
 
-                Text { text: @tr("Theme"); color: Theme.ink-muted; font-size: 12px; }
-                FocusFrame {
-                    horizontal-stretch: 1;
-                    height: theme-picker.height;
-                    focused: theme-picker.has-focus;
-                    theme-picker := ComboBox {
-                        width: 100%;
-                        model: [@tr("System"), @tr("Light"), @tr("Dark")];
-                        current-index <=> root.data.theme-index;
-                        accessible-label: @tr("Theme");
-                        selected(_value) => { root.theme-picked(root.data.theme-index); }
-                        changed has-focus => {
-                            if (theme-picker.has-focus) {
-                                root.active-control = "settings theme";
-                            }
-                        }
-                    }
-                }
+            scroll := ScrollView {
+                vertical-stretch: 1;
+                horizontal-scrollbar-policy: always-off;
+                content-width: self.visible-width;
+                content-height: content.preferred-height;
 
-                FocusFrame {
-                    width: clock-switch.width;
-                    height: clock-switch.height;
-                    focused: clock-switch.has-focus;
-                    clock-switch := Switch {
-                        text: @tr("24-hour clock");
-                        checked <=> root.data.clock-24h;
-                        toggled => { root.clock-changed(root.data.clock-24h); }
-                        changed has-focus => {
-                            if (clock-switch.has-focus) {
-                                root.active-control = "settings 24-hour";
-                            }
-                        }
-                    }
-                }
-                FocusFrame {
-                    width: seconds-switch.width;
-                    height: seconds-switch.height;
-                    focused: seconds-switch.has-focus;
-                    seconds-switch := Switch {
-                        text: @tr("Show seconds");
-                        checked <=> root.data.show-seconds;
-                        toggled => { root.seconds-changed(root.data.show-seconds); }
-                        changed has-focus => {
-                            if (seconds-switch.has-focus) {
-                                root.active-control = "settings seconds";
-                            }
-                        }
-                    }
-                }
+                content := VerticalLayout {
+                    width: parent.width;
+                    // The scroll bar sits over the right edge; keep the controls clear of it.
+                    padding-right: 14px;
+                    spacing: 8px;
 
-                Text { text: @tr("Extra time zone"); color: Theme.ink-muted; font-size: 12px; }
-                FocusFrame {
-                    horizontal-stretch: 1;
-                    height: zone-filter.height;
-                    focused: zone-filter.has-focus;
-                    zone-filter := LineEdit {
-                        width: 100%;
-                        text <=> root.zone-filter;
-                        placeholder-text: @tr("Filter zones");
-                        accessible-label: @tr("Filter zones");
-                        edited(text) => { root.filter-zones(text); }
-                        changed has-focus => {
-                            if (zone-filter.has-focus) {
-                                root.active-control = "settings filter";
-                            }
+                    // General
+                    Heading { text: @tr("General"); }
+                    Row {
+                        text: @tr("Language");
+                        language-control := Segmented {
+                            label: @tr("Language");
+                            options: ["English", "नेपाली"];
+                            selected: root.data.language-index;
+                            picked(index) => { root.language-picked(index); }
+                            focused => { root.focus-on("language", self.absolute-position.y, self.height); }
                         }
                     }
-                }
-                ListView {
-                    height: 96px;
-                    for zone in root.data.zones: Rectangle {
-                        height: 24px;
-                        width: parent.width;
-                        background: zone == root.data.zone ? Theme.hairline : transparent;
-                        Text {
-                            text: zone;
-                            color: Theme.ink;
-                            font-size: 12px;
-                            vertical-alignment: center;
-                        }
-                        TouchArea {
-                            clicked => { root.zone-picked(zone); }
+                    Row {
+                        text: @tr("Theme");
+                        theme-control := Segmented {
+                            label: @tr("Theme");
+                            options: [@tr("System"), @tr("Light"), @tr("Dark")];
+                            segment-width: 74px;
+                            selected: root.data.theme-index;
+                            picked(index) => { root.theme-picked(index); }
+                            focused => { root.focus-on("theme", self.absolute-position.y, self.height); }
                         }
                     }
-                }
-                FocusFrame {
-                    width: no-extra-button.width;
-                    height: no-extra-button.height;
-                    focused: no-extra-button.has-focus;
-                    no-extra-button := Button {
-                        text: @tr("No extra clock");
-                        clicked => { root.zone-picked(""); }
-                        changed has-focus => {
-                            if (no-extra-button.has-focus) {
-                                root.active-control = "settings no extra clock";
-                            }
-                        }
-                    }
-                }
-
-                FocusFrame {
-                    width: launch-switch.width;
-                    height: launch-switch.height;
-                    focused: launch-switch.has-focus;
-                    launch-switch := Switch {
+                    Row {
                         text: @tr("Launch at login");
-                        checked <=> root.data.launch-at-login;
-                        toggled => { root.launch-changed(root.data.launch-at-login); }
-                        changed has-focus => {
-                            if (launch-switch.has-focus) {
-                                root.active-control = "settings launch";
-                            }
+                        launch-control := Toggle {
+                            label: @tr("Launch at login");
+                            checked: root.data.launch-at-login;
+                            toggled => { root.launch-changed(!root.data.launch-at-login); }
+                            focused => { root.focus-on("launch", self.absolute-position.y, self.height); }
                         }
                     }
-                }
-                if root.data.bar-available : FocusFrame {
-                    width: bar-switch.width;
-                    height: bar-switch.height;
-                    focused: bar-switch.has-focus;
-                    bar-switch := Switch {
-                        text: @tr("Show bar");
-                        checked <=> root.data.bar;
-                        toggled => { root.bar-changed(root.data.bar); }
-                        changed has-focus => {
-                            if (bar-switch.has-focus) {
-                                root.active-control = "settings bar";
-                            }
-                        }
-                    }
-                }
-                if root.data.bar-available : FocusFrame {
-                    width: reset-bar-button.width;
-                    height: reset-bar-button.height;
-                    focused: reset-bar-button.has-focus;
-                    reset-bar-button := Button {
-                        text: @tr("Reset position");
-                        clicked => { root.reset-bar(); }
-                        changed has-focus => {
-                            if (reset-bar-button.has-focus) {
-                                root.active-control = "settings reset position";
-                            }
-                        }
-                    }
-                }
 
-                Rectangle { height: 1px; background: Theme.hairline; }
+                    // Clock
+                    clock-section := VerticalLayout {
+                        spacing: 8px;
+                        Heading { text: @tr("Clock"); }
+                        Row {
+                            text: @tr("24-hour clock");
+                            clock-control := Toggle {
+                                label: @tr("24-hour clock");
+                                checked: root.data.clock-24h;
+                                toggled => { root.clock-changed(!root.data.clock-24h); }
+                                focused => { root.focus-on("24-hour", self.absolute-position.y, self.height); }
+                            }
+                        }
+                        Row {
+                            text: @tr("Show seconds");
+                            seconds-control := Toggle {
+                                label: @tr("Show seconds");
+                                checked: root.data.show-seconds;
+                                toggled => { root.seconds-changed(!root.data.show-seconds); }
+                                focused => { root.focus-on("seconds", self.absolute-position.y, self.height); }
+                            }
+                        }
+                        Row {
+                            text: @tr("Extra clock");
+                            // One field: it shows the chosen zone, and typing filters the list
+                            // under it (WR-06 AC4). Up, Down and Enter pick, Escape closes.
+                            zone-scope := FocusScope {
+                                width: 220px;
+                                height: 28px;
+                                focus-on-tab-navigation: false;
+                                capture-key-pressed(event) => {
+                                    if (!root.zone-open) {
+                                        if (event.text == Key.DownArrow && zone-input.has-focus) {
+                                            root.zone-opened();
+                                            root.zone-open = true;
+                                            return accept;
+                                        }
+                                        return reject;
+                                    }
+                                    if (event.text == Key.DownArrow) {
+                                        root.zone-highlight = min(root.zone-highlight + 1, root.zone-rows.length - 1);
+                                        return accept;
+                                    }
+                                    if (event.text == Key.UpArrow) {
+                                        root.zone-highlight = max(root.zone-highlight - 1, 0);
+                                        return accept;
+                                    }
+                                    if (event.text == Key.Return && root.zone-rows.length > 0) {
+                                        root.pick-zone(root.zone-rows[root.zone-highlight]);
+                                        return accept;
+                                    }
+                                    if (event.text == Key.Escape) {
+                                        root.close-zone-list();
+                                        return accept;
+                                    }
+                                    reject
+                                }
+                                FocusFrame {
+                                    width: 100%;
+                                    height: 100%;
+                                    focused: zone-input.has-focus;
+                                    radius: 4px;
+                                    zone-input := LineEdit {
+                                        width: 100%;
+                                        height: 100%;
+                                        accessible-label: @tr("Extra clock");
+                                        placeholder-text: @tr("Type a city or region");
+                                        text <=> root.zone-query;
+                                        edited(text) => {
+                                            root.zone-open = true;
+                                            root.zone-edited(text);
+                                        }
+                                        changed has-focus => {
+                                            if (zone-input.has-focus) {
+                                                root.focus-on("zone", zone-scope.absolute-position.y, zone-scope.height);
+                                                root.zone-opened();
+                                                root.zone-open = true;
+                                                zone-input.select-all();
+                                            } else if (root.zone-open) {
+                                                root.close-zone-list();
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if root.zone-open: ZoneList {
+                            rows: root.zone-rows;
+                            highlight: root.zone-highlight;
+                            picked(zone) => { root.pick-zone(zone); }
+                        }
+                    }
 
-                Text {
-                    text: @tr("Version {0}", root.data.version);
-                    color: Theme.ink-muted;
-                    font-size: 12px;
+                    // Bar (Windows only)
+                    if root.data.bar-available: VerticalLayout {
+                        spacing: 8px;
+                        Heading { text: @tr("Bar"); }
+                        Row {
+                            text: @tr("Show bar");
+                            bar-control := Toggle {
+                                label: @tr("Show bar");
+                                checked: root.data.bar;
+                                toggled => { root.bar-changed(!root.data.bar); }
+                                focused => { root.focus-on("bar", self.absolute-position.y, self.height); }
+                            }
+                        }
+                        Row {
+                            text: @tr("Lock position");
+                            lock-control := Toggle {
+                                label: @tr("Lock position");
+                                checked: root.data.bar-locked;
+                                toggled => { root.lock-changed(!root.data.bar-locked); }
+                                focused => { root.focus-on("lock", self.absolute-position.y, self.height); }
+                            }
+                        }
+
+                        HorizontalLayout {
+                            spacing: 8px;
+                            Text {
+                                text: @tr("Top line");
+                                color: Theme.ink-muted;
+                                font-size: 13px;
+                                vertical-alignment: center;
+                                horizontal-stretch: 1;
+                                accessible-role: none;
+                            }
+                            add-top := Pill {
+                                horizontal-stretch: 0;
+                                text: @tr("Add field");
+                                label: @tr("Add field to the top line");
+                                has-icon: true;
+                                enabled: root.data.unused.length > 0;
+                                activated => { root.add-open = root.add-open == 0 ? -1 : 0; }
+                                focused => { root.focus-on("add top", self.absolute-position.y, self.height); }
+                                LineIcon {
+                                    commands: "M 8 3 L 8 13 M 3 8 L 13 8";
+                                    color: add-top.foreground;
+                                }
+                            }
+                            Timer {
+                                interval: 1ms;
+                                running: root.focus-pending && root.focus-line == 0 && root.focus-index < 0;
+                                triggered => {
+                                    add-top.focus();
+                                    root.focus-pending = false;
+                                }
+                            }
+                        }
+                        if root.add-open == 0: VerticalLayout {
+                            for id[k] in root.data.unused: Pill {
+                                bordered: false;
+                                text: FieldNames.name(id);
+                                label: FieldNames.name(id);
+                                activated => {
+                                    root.add-open = -1;
+                                    root.field-added(0, id);
+                                }
+                                focused => { root.focus-on("add item " + (k + 1), self.absolute-position.y, self.height); }
+                            }
+                        }
+                        top-chips := Flickable {
+                            height: 28px;
+                            content-width: top-row.preferred-width;
+                            interactive: false;
+                            top-row := HorizontalLayout {
+                                spacing: 6px;
+                                for id[i] in root.data.top: Chip {
+                                    id: id;
+                                    can-remove: !root.data.only-one-field;
+                                    can-left: i > 0;
+                                    can-right: i < root.data.top.length - 1;
+                                    focus-wanted: root.focus-pending && root.focus-line == 0 && root.focus-index == i;
+                                    focus-served => { root.focus-pending = false; }
+                                    remove => { root.chip-removed(0, i); }
+                                    move-left => { root.chip-moved(0, i, -1); }
+                                    move-right => { root.chip-moved(0, i, 1); }
+                                    move-up => { root.chip-moved-line(0, i, true); }
+                                    move-down => { root.chip-moved-line(0, i, false); }
+                                    focused => {
+                                        root.focus-on("chip top " + (i + 1), self.absolute-position.y, self.height);
+                                        if (self.x + top-chips.content-x < 0px) {
+                                            top-chips.content-x = -self.x;
+                                        } else if (self.x + self.width + top-chips.content-x > top-chips.width) {
+                                            top-chips.content-x = top-chips.width - self.x - self.width;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        HorizontalLayout {
+                            spacing: 8px;
+                            Text {
+                                text: @tr("Bottom line");
+                                color: Theme.ink-muted;
+                                font-size: 13px;
+                                vertical-alignment: center;
+                                horizontal-stretch: 1;
+                                accessible-role: none;
+                            }
+                            add-bottom := Pill {
+                                horizontal-stretch: 0;
+                                text: @tr("Add field");
+                                label: @tr("Add field to the bottom line");
+                                has-icon: true;
+                                enabled: root.data.unused.length > 0;
+                                activated => { root.add-open = root.add-open == 1 ? -1 : 1; }
+                                focused => { root.focus-on("add bottom", self.absolute-position.y, self.height); }
+                                LineIcon {
+                                    commands: "M 8 3 L 8 13 M 3 8 L 13 8";
+                                    color: add-bottom.foreground;
+                                }
+                            }
+                            Timer {
+                                interval: 1ms;
+                                running: root.focus-pending && root.focus-line == 1 && root.focus-index < 0;
+                                triggered => {
+                                    add-bottom.focus();
+                                    root.focus-pending = false;
+                                }
+                            }
+                        }
+                        if root.add-open == 1: VerticalLayout {
+                            for id[k] in root.data.unused: Pill {
+                                bordered: false;
+                                text: FieldNames.name(id);
+                                label: FieldNames.name(id);
+                                activated => {
+                                    root.add-open = -1;
+                                    root.field-added(1, id);
+                                }
+                                focused => { root.focus-on("add item " + (k + 1), self.absolute-position.y, self.height); }
+                            }
+                        }
+                        bottom-chips := Flickable {
+                            height: 28px;
+                            content-width: bottom-row.preferred-width;
+                            interactive: false;
+                            bottom-row := HorizontalLayout {
+                                spacing: 6px;
+                                for id[i] in root.data.bottom: Chip {
+                                    id: id;
+                                    can-remove: !root.data.only-one-field;
+                                    can-left: i > 0;
+                                    can-right: i < root.data.bottom.length - 1;
+                                    focus-wanted: root.focus-pending && root.focus-line == 1 && root.focus-index == i;
+                                    focus-served => { root.focus-pending = false; }
+                                    remove => { root.chip-removed(1, i); }
+                                    move-left => { root.chip-moved(1, i, -1); }
+                                    move-right => { root.chip-moved(1, i, 1); }
+                                    move-up => { root.chip-moved-line(1, i, true); }
+                                    move-down => { root.chip-moved-line(1, i, false); }
+                                    focused => {
+                                        root.focus-on("chip bottom " + (i + 1), self.absolute-position.y, self.height);
+                                        if (self.x + bottom-chips.content-x < 0px) {
+                                            bottom-chips.content-x = -self.x;
+                                        } else if (self.x + self.width + bottom-chips.content-x > bottom-chips.width) {
+                                            bottom-chips.content-x = bottom-chips.width - self.x - self.width;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        HorizontalLayout {
+                            spacing: 8px;
+                            alignment: start;
+                            reset-lines := Pill {
+                                text: @tr("Reset to default");
+                                label: @tr("Reset to default");
+                                activated => { root.lines-reset(); }
+                                focused => { root.focus-on("reset lines", self.absolute-position.y, self.height); }
+                            }
+                            reset-position := Pill {
+                                text: @tr("Reset position");
+                                label: @tr("Reset position");
+                                activated => { root.reset-position(); }
+                                focused => { root.focus-on("reset position", self.absolute-position.y, self.height); }
+                            }
+                        }
+                    }
+
+                    // Shortcut
+                    Heading { text: @tr("Shortcut"); }
+                    Text {
+                        text: @tr("Open MitiBar");
+                        color: Theme.ink-muted;
+                        font-size: 13px;
+                        height: 18px;
+                        accessible-role: none;
+                    }
+                    HorizontalLayout {
+                        spacing: 6px;
+                        shortcut-field := FocusScope {
+                            horizontal-stretch: 1;
+                            min-width: 0px;
+                            height: 28px;
+                            enabled: root.data.shortcut-available;
+                            focus-on-tab-navigation: root.data.shortcut-available;
+                            accessible-role: text-input;
+                            accessible-label: @tr("Shortcut");
+                            accessible-value: root.data.shortcut;
+                            accessible-enabled: root.data.shortcut-available;
+                            focus-gained(_) => {
+                                root.focus-on("shortcut", self.absolute-position.y, self.height);
+                            }
+                            key-pressed(event) => {
+                                if (root.shortcut-key(event.text, event.modifiers.meta,
+                                    event.modifiers.control, event.modifiers.alt, event.modifiers.shift)) {
+                                    return accept;
+                                }
+                                reject
+                            }
+                            Rectangle {
+                                border-radius: 14px;
+                                background: Theme.surface-raised;
+                                border-width: 1px;
+                                border-color: Theme.hairline;
+                                opacity: root.data.shortcut-available ? 1.0 : 0.4;
+                                Text {
+                                    text: shortcut-field.has-focus ? @tr("Press the keys")
+                                        : root.data.shortcut == "" ? @tr("None") : root.data.shortcut;
+                                    color: shortcut-field.has-focus ? Theme.ink-muted : Theme.ink;
+                                    font-size: 13px;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    accessible-role: none;
+                                }
+                            }
+                            TouchArea {
+                                enabled: root.data.shortcut-available;
+                                clicked => { shortcut-field.focus(); }
+                            }
+                            FocusFrame {
+                                width: 100%;
+                                height: 100%;
+                                focused: shortcut-field.has-focus;
+                                thickness: 2px;
+                                radius: 14px;
+                            }
+                        }
+                        shortcut-clear := Pill {
+                            horizontal-stretch: 0;
+                            text: @tr("Clear");
+                            label: @tr("Clear shortcut");
+                            enabled: root.data.shortcut-available;
+                            activated => { root.shortcut-cleared(); }
+                            focused => { root.focus-on("shortcut clear", self.absolute-position.y, self.height); }
+                        }
+                        shortcut-reset-pill := Pill {
+                            horizontal-stretch: 0;
+                            text: @tr("Reset");
+                            label: @tr("Reset shortcut");
+                            enabled: root.data.shortcut-available;
+                            activated => { root.shortcut-reset(); }
+                            focused => { root.focus-on("shortcut reset", self.absolute-position.y, self.height); }
+                        }
+                    }
+                    if root.shortcut-note != 0: Text {
+                        text: root.shortcut-note == 1 ? @tr("Ctrl+Alt is AltGr on many keyboards")
+                            : root.shortcut-note == 2 ? @tr("Use {0}, or two of Ctrl, Alt and Shift", root.meta-key)
+                            : root.shortcut-note == 3 ? @tr("This shortcut is used by another app")
+                            : root.shortcut-note == 4 ? @tr("Global shortcuts aren't available on Wayland")
+                            : @tr("That key can't be recorded; use a letter or F1 to F12");
+                        color: Theme.ink;
+                        font-size: 13px;
+                        wrap: word-wrap;
+                    }
+
+                    // About
+                    Heading { text: @tr("About"); }
+                    Text {
+                        text: @tr("{0} {1} · MIT license", AppInfo.app-name, root.data.version);
+                        color: Theme.ink-muted;
+                        font-size: 13px;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: @tr("Third-party notices: Slint, Noto Sans and Noto Sans Devanagari (SIL Open Font License 1.1), NepDate (MIT)");
+                        color: Theme.ink-muted;
+                        font-size: 13px;
+                        wrap: word-wrap;
+                    }
+                    // A wrapped text asks for one line, so the end of the column keeps room for the
+                    // lines the notices add.
+                    Rectangle { height: 40px; }
                 }
-                Text {
-                    text: @tr("Data {0}", root.data.coverage);
-                    color: Theme.ink-muted;
-                    font-size: 12px;
-                    wrap: word-wrap;
-                }
-                Text {
-                    text: "NepDate (MIT) · Noto Sans and Noto Sans Devanagari (OFL-1.1)";
-                    color: Theme.ink-muted;
-                    font-size: 11px;
-                    wrap: word-wrap;
-                }
-                AboutSlint {}
             }
         }
     }

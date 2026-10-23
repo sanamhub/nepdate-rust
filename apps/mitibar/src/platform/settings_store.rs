@@ -104,6 +104,34 @@ pub fn save(path: &Path, settings: &Settings) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Where the app writes its settings (WR-06 AC3). The app saves through this port, so a test can
+/// hand it a store that fails on demand.
+pub trait Store {
+    /// Writes `settings`.
+    ///
+    /// # Errors
+    ///
+    /// The reason the write failed, for the log and the Settings window's note (WR-06 AC5).
+    fn save(&self, settings: &Settings) -> anyhow::Result<()>;
+}
+
+/// The settings file: an atomic write to one path.
+pub struct FileStore {
+    path: PathBuf,
+}
+
+impl FileStore {
+    pub fn new(path: PathBuf) -> Self {
+        Self { path }
+    }
+}
+
+impl Store for FileStore {
+    fn save(&self, settings: &Settings) -> anyhow::Result<()> {
+        save(&self.path, settings)
+    }
+}
+
 /// `settings.toml.broken-<unix-ts>` next to the original file.
 fn broken_path(path: &Path) -> PathBuf {
     let stamp = SystemTime::now()

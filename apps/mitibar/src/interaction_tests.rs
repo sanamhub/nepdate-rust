@@ -15,12 +15,13 @@ use crate::app::settings::Settings;
 use crate::app::zoom::Zoom;
 use crate::platform::bar::{Anchor, Bar, BarEvent, MenuItem, MenuLabels};
 use crate::platform::clipboard::Clipboard;
-use crate::{AppState, PopupWindow, update_popup, wire_popup, wire_settings};
+use crate::platform::settings_store::FileStore;
+use crate::{AppState, PopupWindow, settings_window, update_popup, wire_popup};
 
 /// Records every clipboard write, so a test can assert the exact string.
 #[derive(Default)]
-struct FakeClipboard {
-    texts: RefCell<Vec<String>>,
+pub(crate) struct FakeClipboard {
+    pub(crate) texts: RefCell<Vec<String>>,
 }
 
 impl Clipboard for FakeClipboard {
@@ -30,12 +31,12 @@ impl Clipboard for FakeClipboard {
     }
 }
 
-fn date(year: u16, month: u8, day: u8) -> NepaliDate {
+pub(crate) fn date(year: u16, month: u8, day: u8) -> NepaliDate {
     NepaliDate::new(year, month, day).expect("valid BS date")
 }
 
 /// A popup wired exactly like `main`, on a pinned date.
-fn app(today: NepaliDate) -> (PopupWindow, Rc<RefCell<AppState>>, Rc<FakeClipboard>) {
+pub(crate) fn app(today: NepaliDate) -> (PopupWindow, Rc<RefCell<AppState>>, Rc<FakeClipboard>) {
     crate::test_support::init_platform();
     let clipboard = Rc::new(FakeClipboard::default());
     let state = Rc::new(RefCell::new(AppState::new(
@@ -52,6 +53,16 @@ fn app(today: NepaliDate) -> (PopupWindow, Rc<RefCell<AppState>>, Rc<FakeClipboa
     popup.show().expect("show popup");
     popup.invoke_focus();
     (popup, state, clipboard)
+}
+
+/// The open Settings window.
+pub(crate) fn settings_of(state: &Rc<RefCell<AppState>>) -> crate::SettingsWindow {
+    state
+        .borrow()
+        .settings_window
+        .as_ref()
+        .map(ComponentHandle::clone_strong)
+        .expect("the Settings window is open")
 }
 
 /// The single element with this accessible label.
@@ -93,6 +104,27 @@ fn day_label(popup: &PopupWindow, day: &str) -> String {
 
 fn click(popup: &PopupWindow, label: &str) {
     element(popup, label).invoke_accessible_default_action();
+}
+
+/// The title pill's accessible name: the visible title, then `change view`; in the decade view,
+/// where the title does nothing, just the title.
+fn title_label(popup: &PopupWindow) -> String {
+    let title = nav_title(popup);
+    if popup.get_zoom_mode() == 2 {
+        title
+    } else {
+        format!("{title}, change view")
+    }
+}
+
+/// The title pill.
+fn title_element(popup: &PopupWindow) -> ElementHandle {
+    element(popup, &title_label(popup))
+}
+
+/// Activates the title pill, as a click or a screen reader would.
+fn click_title(popup: &PopupWindow) {
+    title_element(popup).invoke_accessible_default_action();
 }
 
 /// One key press and release. Slint handles Tab on the press.
@@ -379,12 +411,13 @@ fn every_control_has_a_label_and_a_role() {
     let (popup, state, _) = app(date(2081, 1, 1));
     // Today's pill shows only away from today's month, so look at the month after.
     show_month(&state, 2081, Month::Jestha);
+    let title = title_label(&popup);
     for label in [
         "Convert",
         "Settings",
         "Pin, not pinned",
         "Previous month",
-        "Change view",
+        title.as_str(),
         "Next month",
         "Today",
         "Upcoming holidays",
@@ -449,28 +482,6 @@ fn converter_converts_typed_input_both_ways() {
     assert_eq!(popup.get_converter_data().short.as_str(), "31 days");
 }
 
-#[test]
-fn a_settings_switch_applies_at_once_and_saves_after_300_ms() {
-    let (popup, state, _) = app(date(2081, 1, 1));
-    let dir = tempfile::tempdir().expect("tempdir");
-    let path = dir.path().join("settings.toml");
-    state.borrow_mut().settings_path = Some(path.clone());
-    let save_timer = Rc::new(slint::Timer::default());
-    wire_settings(&popup, &state, &save_timer);
-    crate::refresh_settings(&popup, &state);
-    popup.set_settings_visible(true);
-    assert!(!state.borrow().settings.clock_24h);
-
-    click(&popup, "24-hour clock");
-    assert!(state.borrow().settings.clock_24h, "applied at once");
-    assert!(!path.exists(), "not saved before the debounce");
-
-    elapse(350);
-    let (saved, warnings) = crate::platform::settings_store::load(&path);
-    assert!(warnings.is_empty(), "{warnings:?}");
-    assert!(saved.clock_24h, "saved after 300 ms");
-}
-
 // WR-03 AC6: the three zoom levels.
 
 #[test]
@@ -479,7 +490,7 @@ fn wr03_ac6_the_title_zooms_to_the_year_view_and_the_decade_view() {
     assert_eq!(popup.get_zoom_mode(), 0);
     assert_eq!(nav_title(&popup), "Kartik 2083 · Oct/Nov 2026");
 
-    click(&popup, "Change view");
+    click_title(&popup);
     assert_eq!(popup.get_zoom_mode(), 1, "the year view");
     assert_eq!(nav_title(&popup), "2083");
     let labels = zoom_labels(&popup);
@@ -492,7 +503,7 @@ fn wr03_ac6_the_title_zooms_to_the_year_view_and_the_decade_view() {
     assert!(today_cell.is_viewed);
     assert!(!cells.row_data(5).expect("Ashoj").is_today);
 
-    click(&popup, "Change view");
+    click_title(&popup);
     assert_eq!(popup.get_zoom_mode(), 2, "the decade view");
     assert_eq!(nav_title(&popup), "2080–2089");
     let labels = zoom_labels(&popup);
@@ -501,7 +512,7 @@ fn wr03_ac6_the_title_zooms_to_the_year_view_and_the_decade_view() {
     assert_eq!(labels[11], "2090", "one year after the decade");
     assert!(popup.get_zoom_cells().row_data(4).expect("2083").is_today);
     assert_eq!(
-        element(&popup, "Change view").accessible_enabled(),
+        title_element(&popup).accessible_enabled(),
         Some(false),
         "the decade title does nothing"
     );
@@ -511,8 +522,8 @@ fn wr03_ac6_the_title_zooms_to_the_year_view_and_the_decade_view() {
 #[test]
 fn wr03_ac6_a_decade_year_opens_its_year_view_and_a_month_opens_the_month_view() {
     let (popup, state, _) = app(date(2083, 7, 5));
-    click(&popup, "Change view");
-    click(&popup, "Change view");
+    click_title(&popup);
+    click_title(&popup);
 
     click(&popup, "2085");
     assert_eq!(popup.get_zoom_mode(), 1);
@@ -532,7 +543,7 @@ fn wr03_ac6_a_decade_year_opens_its_year_view_and_a_month_opens_the_month_view()
 #[test]
 fn wr03_ac6_previous_and_next_follow_the_level() {
     let (popup, state, _) = app(date(2083, 7, 5));
-    click(&popup, "Change view");
+    click_title(&popup);
     assert!(exists(&popup, "Previous year"), "named for the year view");
     assert!(!exists(&popup, "Previous month"));
     click(&popup, "Next year");
@@ -541,7 +552,7 @@ fn wr03_ac6_previous_and_next_follow_the_level() {
     click(&popup, "Previous year");
     assert_eq!(nav_title(&popup), "2082");
 
-    click(&popup, "Change view");
+    click_title(&popup);
     assert!(exists(&popup, "Next decade"), "named for the decade view");
     click(&popup, "Next decade");
     assert_eq!(nav_title(&popup), "2090–2099");
@@ -558,11 +569,11 @@ fn wr03_ac6_previous_and_next_follow_the_level() {
 #[test]
 fn wr03_ac6_the_wheel_pages_by_the_level() {
     let (popup, _state, _) = app(date(2083, 7, 5));
-    click(&popup, "Change view");
+    click_title(&popup);
     let cell = element(&popup, "Kartik 2083");
     cell.scroll(0.0, 1.0);
     assert_eq!(nav_title(&popup), "2084", "one notch is one year");
-    click(&popup, "Change view");
+    click_title(&popup);
     let cell = element(&popup, "2084");
     cell.scroll(0.0, 1.0);
     assert_eq!(nav_title(&popup), "2090–2099", "one notch is ten years");
@@ -576,7 +587,7 @@ fn wr03_ac6_the_edges_disable_the_control_at_every_level() {
         element(&popup, "Previous month").accessible_enabled(),
         Some(false)
     );
-    click(&popup, "Change view");
+    click_title(&popup);
     assert_eq!(
         element(&popup, "Previous year").accessible_enabled(),
         Some(false)
@@ -587,7 +598,7 @@ fn wr03_ac6_the_edges_disable_the_control_at_every_level() {
     );
     click(&popup, "Previous year");
     assert_eq!(nav_title(&popup), "1901", "a disabled control does nothing");
-    click(&popup, "Change view");
+    click_title(&popup);
     assert_eq!(nav_title(&popup), "1900–1909");
     assert_eq!(
         element(&popup, "Previous decade").accessible_enabled(),
@@ -614,12 +625,12 @@ fn wr03_ac6_the_edges_disable_the_control_at_every_level() {
         element(&popup, "Next month").accessible_enabled(),
         Some(false)
     );
-    click(&popup, "Change view");
+    click_title(&popup);
     assert_eq!(
         element(&popup, "Next year").accessible_enabled(),
         Some(false)
     );
-    click(&popup, "Change view");
+    click_title(&popup);
     assert_eq!(nav_title(&popup), "2190–2199");
     assert_eq!(
         element(&popup, "Next decade").accessible_enabled(),
@@ -640,7 +651,7 @@ fn wr03_ac6_today_returns_to_todays_month_from_every_level() {
     for clicks in 0..3 {
         show_month(&state, 2150, Month::Chaitra);
         for _ in 0..clicks {
-            click(&popup, "Change view");
+            click_title(&popup);
         }
         assert_eq!(popup.get_zoom_mode(), clicks);
         assert!(popup.get_today_shown(), "away from today at level {clicks}");
@@ -651,7 +662,7 @@ fn wr03_ac6_today_returns_to_todays_month_from_every_level() {
     }
 
     // In today's year view the pill still shows: the view is not today's month.
-    click(&popup, "Change view");
+    click_title(&popup);
     assert!(popup.get_today_shown());
 }
 
@@ -659,8 +670,8 @@ fn wr03_ac6_today_returns_to_todays_month_from_every_level() {
 fn wr02_ac2_a_reopen_shows_the_month_view_of_the_last_viewed_month() {
     let (popup, state, _) = app(date(2083, 7, 5));
     click(&popup, "Next month");
-    click(&popup, "Change view");
-    click(&popup, "Change view");
+    click_title(&popup);
+    click_title(&popup);
     assert_eq!(popup.get_zoom_mode(), 2);
 
     state.borrow_mut().hidden_on = crate::today_local();
@@ -742,7 +753,7 @@ fn wr10_ac2_enter_and_space_open_the_focused_days_detail() {
 #[test]
 fn wr10_ac2_arrows_and_enter_move_between_months_and_years_in_the_zoom_views() {
     let (popup, _state, _) = app(date(2083, 7, 5));
-    click(&popup, "Change view");
+    click_title(&popup);
     tab_to(&popup, "grid");
     assert_eq!(popup.get_cursor_index(), 6, "the cursor starts on Kartik");
     press(&popup, slint::platform::Key::RightArrow);
@@ -755,8 +766,8 @@ fn wr10_ac2_arrows_and_enter_move_between_months_and_years_in_the_zoom_views() {
     assert_eq!(popup.get_zoom_mode(), 0, "Enter picks the month");
     assert!(popup.get_month_title().starts_with("Baishakh 2084"));
 
-    click(&popup, "Change view");
-    click(&popup, "Change view");
+    click_title(&popup);
+    click_title(&popup);
     tab_to(&popup, "grid");
     press(&popup, slint::platform::Key::RightArrow);
     press(&popup, slint::platform::Key::Space);
@@ -773,10 +784,10 @@ fn wr10_ac2_page_up_and_page_down_page_by_the_level() {
     press(&popup, slint::platform::Key::PageUp);
     assert!(popup.get_month_title().starts_with("Ashoj 2083"));
 
-    click(&popup, "Change view");
+    click_title(&popup);
     press(&popup, slint::platform::Key::PageDown);
     assert_eq!(nav_title(&popup), "2084", "a year in the year view");
-    click(&popup, "Change view");
+    click_title(&popup);
     press(&popup, slint::platform::Key::PageDown);
     assert_eq!(
         nav_title(&popup),
@@ -793,7 +804,7 @@ fn wr10_ac2_home_and_t_go_to_today() {
     for key in ["Home", "t", "T"] {
         let (popup, state, _) = app(date(2083, 7, 5));
         show_month(&state, 2090, Month::Jestha);
-        click(&popup, "Change view");
+        click_title(&popup);
         assert_eq!(popup.get_zoom_mode(), 1);
         match key {
             "Home" => press(&popup, slint::platform::Key::Home),
@@ -817,13 +828,23 @@ fn wr10_ac2_c_opens_the_converter() {
 }
 
 #[test]
-fn wr10_ac2_ctrl_comma_opens_settings() {
-    let (popup, _state, _) = app(date(2083, 7, 5));
+fn wr10_ac2_ctrl_comma_opens_the_settings_window() {
+    let (popup, state, _) = app(date(2083, 7, 5));
+    assert!(!settings_window::is_open(&state));
     press_ctrl(&popup, ",");
-    assert!(popup.get_settings_visible());
+    assert!(
+        settings_window::is_open(&state),
+        "Ctrl+Comma opens Settings"
+    );
+    let window = settings_of(&state);
+    assert!(window.window().is_visible());
     assert_eq!(
-        popup.get_settings_data().version.as_str(),
+        window.get_data().version.as_str(),
         env!("CARGO_PKG_VERSION")
+    );
+    assert!(
+        popup.window().is_visible(),
+        "the popup stays open beside it"
     );
 }
 
@@ -855,8 +876,8 @@ fn wr10_ac2_single_letter_keys_do_nothing_in_a_text_field_or_under_an_overlay() 
 #[test]
 fn wr10_ac2_escape_closes_the_open_panel_then_steps_out_of_a_zoom_view_then_closes_the_popup() {
     let (popup, _state, _) = app(date(2083, 7, 5));
-    click(&popup, "Change view");
-    click(&popup, "Change view");
+    click_title(&popup);
+    click_title(&popup);
     assert_eq!(popup.get_zoom_mode(), 2);
 
     // A panel open over a zoom view closes first: the upcoming list, then the zoom steps.
@@ -877,14 +898,9 @@ fn wr10_ac2_escape_closes_the_open_panel_then_steps_out_of_a_zoom_view_then_clos
 
 #[test]
 fn wr10_ac2_every_panel_closes_on_escape_before_the_popup() {
-    // Settings, the converter, the day detail and the Go to date field each take one Escape.
+    // The converter, the day detail and the Go to date field each take one Escape. Settings is a
+    // window of its own, so the popup's Escape never touches it.
     let (popup, _state, _) = app(date(2083, 7, 5));
-    popup.set_settings_visible(true);
-    popup.invoke_focus();
-    press(&popup, slint::platform::Key::Escape);
-    assert!(!popup.get_settings_visible());
-    assert!(popup.window().is_visible());
-
     click(&popup, "Convert");
     popup.invoke_focus();
     press(&popup, slint::platform::Key::Escape);
@@ -1379,7 +1395,7 @@ fn the_today_pill_is_a_stop_only_away_from_todays_month() {
     assert_eq!(forward, order, "Today sits between Next and the grid");
 
     // The year and decade views keep the pill and the grid as one stop each.
-    click(&popup, "Change view");
+    click_title(&popup);
     popup.invoke_focus();
     let mut year = Vec::new();
     for _ in 0..order.len() {
@@ -1454,19 +1470,14 @@ fn disabled_and_hidden_controls_are_not_focus_stops() {
     assert_eq!(focused(&popup), "next", "the title is skipped");
 
     // A closed overlay is not in the tree at all, and neither is the closed field and list.
-    for label in [
-        "Close converter",
-        "Close settings",
-        "Go to date",
-        "Close day detail",
-    ] {
+    for label in ["Close converter", "Go to date", "Close day detail"] {
         assert!(!exists(&popup, label), "{label} is absent while closed");
     }
 }
 
 #[test]
 fn overlays_take_and_return_focus() {
-    let (popup, state, _) = app(date(2081, 1, 1));
+    let (popup, _state, _) = app(date(2081, 1, 1));
 
     // The base is inert while the converter is open, so the first Tab enters the overlay.
     click(&popup, "Convert");
@@ -1501,38 +1512,7 @@ fn overlays_take_and_return_focus() {
     assert_eq!(focused(&popup), "convert", "the base resumes at Convert");
     press(&popup, slint::platform::Key::Tab);
     assert_eq!(focused(&popup), "settings", "the base order continues");
-
-    // Settings is opened from the header, the tray menu or Ctrl+Comma; the test sets the flag and
-    // refreshes the model.
-    popup.set_settings_visible(true);
-    crate::refresh_settings(&popup, &state);
     popup.invoke_focus();
-    // The bar's two controls are in the cycle only where there is a bar (Windows).
-    let mut order = vec![
-        "settings close",
-        "settings language",
-        "settings theme",
-        "settings 24-hour",
-        "settings seconds",
-        "settings filter",
-        "settings no extra clock",
-        "settings launch",
-    ];
-    if cfg!(windows) {
-        order.extend(["settings bar", "settings reset position"]);
-    }
-    // Tab walks the order and wraps to the first stop; Shift+Tab walks it back from there.
-    for expected in order.iter().copied().chain(["settings close"]) {
-        press(&popup, slint::platform::Key::Tab);
-        assert_eq!(focused(&popup), expected, "settings Tab order");
-    }
-    for expected in order.iter().rev() {
-        press_shift_tab(&popup);
-        assert_eq!(focused(&popup), *expected, "settings Shift+Tab order");
-    }
-    press(&popup, slint::platform::Key::Escape);
-    assert!(!popup.get_settings_visible());
-    assert_eq!(focused(&popup), "convert", "the base resumes at Convert");
 
     // The day detail holds focus on its two copy buttons.
     popup.invoke_focus();
@@ -1568,16 +1548,6 @@ fn overlays_take_and_return_focus() {
 }
 
 #[test]
-fn the_settings_pill_opens_settings_and_its_panel_closes_back_to_convert() {
-    let (popup, _state, _) = app(date(2081, 1, 1));
-    click(&popup, "Settings");
-    assert!(popup.get_settings_visible());
-    press(&popup, slint::platform::Key::Escape);
-    assert!(!popup.get_settings_visible());
-    assert_eq!(focused(&popup), "convert");
-}
-
-#[test]
 fn return_and_space_step_once_per_press() {
     let (popup, _state, _) = app(date(2081, 1, 1));
 
@@ -1607,7 +1577,7 @@ fn return_and_space_step_once_per_press() {
     );
 
     // Year: the same keys on Next.
-    click(&popup, "Change view");
+    click_title(&popup);
     popup.invoke_focus();
     tab_to(&popup, "next");
     press(&popup, slint::platform::Key::Return);
@@ -1774,11 +1744,12 @@ fn wr09_ac1_second_launch_opens_the_first_instance_popup() {
 
 /// Records every call the app makes on the bar.
 #[derive(Default)]
-struct FakeBar {
-    lines: RefCell<Vec<BarLines>>,
-    shown: RefCell<Vec<bool>>,
-    locked: RefCell<Vec<bool>>,
-    positions: RefCell<Vec<Saved>>,
+pub(crate) struct FakeBar {
+    pub(crate) lines: RefCell<Vec<BarLines>>,
+    pub(crate) shown: RefCell<Vec<bool>>,
+    pub(crate) locked: RefCell<Vec<bool>>,
+    pub(crate) positions: RefCell<Vec<Saved>>,
+    pub(crate) labels: RefCell<Vec<MenuLabels>>,
 }
 
 impl Bar for FakeBar {
@@ -1798,10 +1769,16 @@ impl Bar for FakeBar {
         self.positions.borrow_mut().push(saved.clone());
     }
 
-    fn set_menu_labels(&self, _labels: &MenuLabels) {}
+    fn set_menu_labels(&self, labels: &MenuLabels) {
+        self.labels.borrow_mut().push(labels.clone());
+    }
+
+    fn anchor(&self) -> Option<Anchor> {
+        Some(bar_anchor())
+    }
 }
 
-/// An app with a fake bar, its settings saved to a temporary file, and the settings panel wired.
+/// An app with a fake bar, its settings saved to a temporary file, and the Settings window available.
 struct BarApp {
     popup: PopupWindow,
     state: Rc<RefCell<AppState>>,
@@ -1810,7 +1787,6 @@ struct BarApp {
     clipboard: Rc<FakeClipboard>,
     settings_path: std::path::PathBuf,
     _dir: tempfile::TempDir,
-    _save_timer: Rc<slint::Timer>,
 }
 
 fn bar_app() -> BarApp {
@@ -1819,9 +1795,10 @@ fn bar_app() -> BarApp {
     state.borrow_mut().bar = Some(bar.clone());
     let dir = tempfile::tempdir().expect("tempdir");
     let settings_path = dir.path().join("settings.toml");
-    state.borrow_mut().settings_path = Some(settings_path.clone());
-    let save_timer = Rc::new(slint::Timer::default());
-    wire_settings(&popup, &state, &save_timer);
+    state.borrow_mut().store = Some(Rc::new(FileStore::new(settings_path.clone())));
+    // No test turns the real login item on or off.
+    state.borrow_mut().login_item = Rc::new(|_| {});
+    state.borrow_mut().has_bar = true;
     let slot = Rc::new(RefCell::new(Some(popup.clone_strong())));
     BarApp {
         popup,
@@ -1831,12 +1808,11 @@ fn bar_app() -> BarApp {
         clipboard,
         settings_path,
         _dir: dir,
-        _save_timer: save_timer,
     }
 }
 
 /// A bar at the bottom of a 1080p screen, centred in a 48 px taskbar.
-fn bar_anchor() -> Anchor {
+pub(crate) fn bar_anchor() -> Anchor {
     Anchor {
         bar: Rect::new(500, 1037, 720, 1075),
         work: Rect::new(0, 0, 1920, 1032),
@@ -1939,14 +1915,34 @@ fn wr08_ac6_the_menu_copies_today_in_both_calendars() {
 }
 
 #[test]
-fn wr08_ac6_customize_bar_and_settings_open_settings_at_the_bar() {
+fn wr08_ac6_customize_bar_and_settings_open_the_settings_window() {
     let app = bar_app();
+    app.popup.hide().expect("hide");
     for item in [MenuItem::Customize, MenuItem::Settings] {
-        app.popup.hide().expect("hide");
-        app.popup.set_settings_visible(false);
+        settings_window::close(&app.state);
+        elapse(10);
+        assert!(!settings_window::is_open(&app.state));
         bar_menu(&app, item);
-        assert!(app.popup.window().is_visible(), "{item:?} shows the popup");
-        assert!(app.popup.get_settings_visible(), "{item:?} opens Settings");
+        assert!(
+            settings_window::is_open(&app.state),
+            "{item:?} opens Settings"
+        );
+        assert!(
+            !app.popup.window().is_visible(),
+            "{item:?} does not open the popup"
+        );
+        let window = settings_of(&app.state);
+        if item == MenuItem::Customize {
+            assert!(
+                window.get_scroll_y() < 0.0,
+                "Customize bar scrolls to the Bar section"
+            );
+        } else {
+            assert!(
+                window.get_scroll_y().abs() < f32::EPSILON,
+                "Settings starts at the top"
+            );
+        }
     }
 }
 
@@ -2000,18 +1996,18 @@ fn wr08_ac6_hide_bar_sets_bar_off_and_the_tray_item_turns_it_back_on() {
 #[test]
 fn wr08_ac6_the_settings_switch_shows_and_hides_the_bar() {
     let app = bar_app();
-    crate::refresh_settings(&app.popup, &app.state);
-    app.popup.set_settings_visible(true);
-    app.popup.invoke_settings_bar(false);
+    settings_window::open(&app.state, settings_window::Request::default());
+    let window = settings_of(&app.state);
+    window.invoke_bar_changed(false);
     assert!(!app.state.borrow().settings.bar);
-    assert!(!app.popup.get_settings_data().bar, "the switch follows");
-    app.popup.invoke_settings_bar(true);
+    assert!(!window.get_data().bar, "the switch follows");
+    window.invoke_bar_changed(true);
     assert!(app.state.borrow().settings.bar);
     assert_eq!(*app.bar.shown.borrow(), vec![false, true]);
 
     // Hide bar from the bar's own menu moves the Settings switch too.
     bar_menu(&app, MenuItem::Hide);
-    assert!(!app.popup.get_settings_data().bar);
+    assert!(!window.get_data().bar);
 }
 
 #[test]
@@ -2045,7 +2041,9 @@ fn wr08_ac5_reset_position_forgets_the_saved_place() {
         y: 40,
     };
     bar_event(&app, BarEvent::Moved(saved));
-    app.popup.invoke_settings_reset_bar();
+    settings_window::open(&app.state, settings_window::Request::default());
+    let window = settings_of(&app.state);
+    window.invoke_reset_position();
     assert_eq!(app.state.borrow().settings.bar_position(), Saved::default());
     assert_eq!(
         app.bar.positions.borrow().last(),
@@ -2061,18 +2059,33 @@ fn wr08_ac5_reset_position_forgets_the_saved_place() {
 #[test]
 fn wr08_ac2_the_bar_follows_the_clock_settings_at_once() {
     let app = bar_app();
-    app.popup.invoke_settings_clock(true);
+    settings_window::open(&app.state, settings_window::Request::default());
+    let window = settings_of(&app.state);
+    window.invoke_clock_changed(true);
     let last = app.bar.lines.borrow().last().cloned().expect("lines");
     assert!(
         !last.top.contains("AM") && !last.top.contains("PM"),
         "24-hour time on the bar: {}",
         last.top
     );
-    app.popup.invoke_settings_clock(false);
+    window.invoke_clock_changed(false);
     let last = app.bar.lines.borrow().last().cloned().expect("lines");
     assert!(
         last.top.contains("AM") || last.top.contains("PM"),
         "12-hour time on the bar: {}",
         last.top
+    );
+}
+
+#[test]
+fn the_longest_header_date_is_not_elided_by_the_pills() {
+    // "Baishakh 31, 2081" is the longest English date. The header's date box once asked for no
+    // width, so the Convert pill took the room and the date showed as "Baishakh ...".
+    let (popup, _state, _) = app(date(2081, 1, 31));
+    let button = element(&popup, "Go to date (Ctrl+G)");
+    assert!(
+        button.size().width >= 150.0,
+        "the date has room for its text: {} px",
+        button.size().width
     );
 }

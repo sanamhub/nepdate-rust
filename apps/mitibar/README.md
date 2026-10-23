@@ -13,6 +13,8 @@ MitiBar keeps today's Bikram Sambat date in the tray. It opens a month grid, day
 converter and settings, and on Windows 11 it can draw the date and time inside the taskbar. It
 makes no network requests.
 
+<a href="https://slint.dev"><img src="https://raw.githubusercontent.com/slint-ui/slint/v1.18.1/logo/MadeWithSlint-logo-whitebg.png" alt="Made with Slint" width="160"></a>
+
 ## Download
 
 Get it from the [releases](https://github.com/sanamhub/nepdate-rust/releases): an NSIS installer

@@ -286,7 +286,9 @@ export component MonthGrid inherits Rectangle {
                 // 14 px, not the 16 px title step: the longest month title, the arrows and the
                 // Today pill must share one 336 px row.
                 font-size: 14px;
-                label: @tr("Change view");
+                // The name carries the visible title, so a screen reader says which month or year
+                // is about to change. The decade title does nothing, so it is just the title.
+                label: root.zoom-mode == 2 ? root.title : @tr("{0}, change view", root.title);
                 fade-when-disabled: false;
                 enabled: root.interactive && root.zoom-mode != 2;
                 activated => {

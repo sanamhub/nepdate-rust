@@ -19,6 +19,9 @@ mod app;
 mod interaction_tests;
 mod platform;
 #[cfg(test)]
+mod settings_tests;
+mod settings_window;
+#[cfg(test)]
 pub(crate) mod test_support;
 mod theme;
 mod ui_bridge;
@@ -39,7 +42,10 @@ use crate::app::zoom::{Arrow, Zoom, ZoomState};
 use crate::app::{APP_NAME, clock, holidays, month_view};
 use crate::platform::bar::{Anchor, Bar, BarEvent, MenuItem};
 use crate::platform::clipboard::{Clipboard, SystemClipboard};
+use crate::platform::hotkey::{Hotkeys, SystemHotkeys};
+use crate::platform::settings_store::{FileStore, Store};
 use crate::platform::tray::{SlintTray, Tray, TrayEvent};
+use crate::settings_window::{Request, SaveStatus, Section, ShortcutNote};
 
 slint::include_modules!();
 
@@ -62,16 +68,35 @@ struct AppState {
     /// Every IANA zone, for the settings filter.
     zones: Vec<String>,
     /// The live tray and bar, so a settings change can reach them.
-    tray: Option<Rc<SlintTray>>,
+    tray: Option<Rc<dyn Tray>>,
     bar: Option<Rc<dyn Bar>>,
-    /// Where the settings panel saves: the per-user file in the app, a temporary file in
-    /// a test, `None` in a snapshot run or without a config directory.
-    settings_path: Option<PathBuf>,
+    /// Where the settings are saved: the per-user file in the app, a fake in a test, `None` in a
+    /// snapshot run or without a config directory.
+    store: Option<Rc<dyn Store>>,
     /// The popup once it exists. It is created on the first open, not at startup, so the
     /// window and its renderer are not created while the popup has never been shown.
     popup: Weak<PopupWindow>,
-    /// The one settings debounce timer, created once and shared by the popup.
+    /// The Settings window while it is open (WR-06 AC1): created on open, dropped on close. The
+    /// window's callbacks hold the state, so the cycle lasts only while it is open.
+    settings_window: Option<SettingsWindow>,
+    /// Which of the app's two windows has the OS focus. Moving focus between them is not a focus
+    /// loss (WR-02 AC2).
+    popup_active: bool,
+    settings_active: bool,
+    /// The one settings debounce timer, created once.
     save_timer: Rc<slint::Timer>,
+    /// Clears the `Saved` note 2 s after a write (WR-06 AC5).
+    note_timer: Rc<slint::Timer>,
+    save_status: SaveStatus,
+    /// The global shortcut port and the note about its last registration (WR-13).
+    hotkeys: Option<Rc<dyn Hotkeys>>,
+    shortcut_note: ShortcutNote,
+    /// Whether the app has a bar (Windows): the Settings window shows its Bar section only then.
+    has_bar: bool,
+    /// Turns the login item on or off (WR-09 AC2). Tests inject a recorder.
+    login_item: Rc<dyn Fn(bool)>,
+    /// Bumped to cancel the armed tick when the interval changes (seconds on or off).
+    timer_generation: u32,
     /// The `--theme` flag, applied when the popup is created. A lazy popup must still honour it.
     theme_override: Option<ThemeChoice>,
 }
@@ -100,9 +125,19 @@ impl AppState {
             zones: Vec::new(),
             tray: None,
             bar: None,
-            settings_path: None,
+            store: None,
             popup: Weak::default(),
+            settings_window: None,
+            popup_active: false,
+            settings_active: false,
             save_timer: Rc::new(slint::Timer::default()),
+            note_timer: Rc::new(slint::Timer::default()),
+            save_status: SaveStatus::default(),
+            hotkeys: None,
+            shortcut_note: ShortcutNote::default(),
+            has_bar: cfg!(windows),
+            login_item: Rc::new(platform::autostart::apply),
+            timer_generation: 0,
             theme_override: None,
         }
     }
@@ -126,6 +161,54 @@ pub(crate) fn install_open_request(slot: &PopupSlot, state: &Rc<RefCell<AppState
         open_popup(&slot, &state, ui_bridge::PopupAnchor::TrayCorner);
     });
     OPEN_REQUEST.with(|slot| *slot.borrow_mut() = Some(handler));
+}
+
+thread_local! {
+    /// The UI-thread action a press of the global shortcut runs (WR-13). The OS delivers the press
+    /// on whatever thread it likes, and the listener only wakes the loop with this closure's name.
+    static SHORTCUT_REQUEST: RefCell<Option<Rc<dyn Fn()>>> = const { RefCell::new(None) };
+}
+
+/// Installs the shortcut handler on the UI thread.
+pub(crate) fn install_shortcut_request(slot: &PopupSlot, state: &Rc<RefCell<AppState>>) {
+    let slot = slot.clone();
+    let state = state.clone();
+    let handler: Rc<dyn Fn()> = Rc::new(move || toggle_from_shortcut(&slot, &state));
+    SHORTCUT_REQUEST.with(|request| *request.borrow_mut() = Some(handler));
+}
+
+/// Runs the installed shortcut handler on the UI thread.
+pub(crate) fn run_shortcut_request() {
+    note_wake();
+    // Clone the handler out before calling it, as `run_open_request` does.
+    let handler = SHORTCUT_REQUEST.with(|request| request.borrow().clone());
+    if let Some(handler) = handler {
+        handler();
+    }
+}
+
+/// The shortcut toggles the popup: it opens by the bar while the bar is shown, otherwise at the
+/// tray corner (WR-02 AC1, WR-13 AC1).
+fn toggle_from_shortcut(slot: &PopupSlot, state: &Rc<RefCell<AppState>>) {
+    if popup_visible(state) {
+        hide_popup(state);
+        return;
+    }
+    let (bar, shown) = {
+        let s = state.borrow();
+        (s.bar.clone(), s.settings.bar)
+    };
+    let anchor = shortcut_anchor(shown, bar.and_then(|bar| bar.anchor()));
+    open_popup(slot, state, anchor);
+}
+
+/// Where the shortcut opens the popup (WR-02 AC1): by the bar while the bar is shown and has a
+/// place, otherwise at the tray corner.
+fn shortcut_anchor(bar_shown: bool, bar: Option<Anchor>) -> ui_bridge::PopupAnchor {
+    match bar {
+        Some(anchor) if bar_shown => ui_bridge::PopupAnchor::Bar(anchor),
+        _ => ui_bridge::PopupAnchor::TrayCorner,
+    }
 }
 
 /// Runs the installed second-launch handler on the UI thread.
@@ -186,8 +269,6 @@ fn ensure_popup(slot: &PopupSlot, state: &Rc<RefCell<AppState>>) -> Option<Popup
     let weak = popup.as_weak();
     state.borrow_mut().popup = weak.clone();
     wire_popup(&popup, state, &weak);
-    let save_timer = state.borrow().save_timer.clone();
-    wire_settings(&popup, state, &save_timer);
     *slot.borrow_mut() = Some(popup.clone_strong());
     Some(popup)
 }
@@ -244,9 +325,12 @@ struct Cli {
     /// Opens the converter overlay in a snapshot.
     #[cfg(feature = "snapshot")]
     converter: bool,
-    /// Opens the settings panel in a snapshot.
+    /// Renders the Settings window instead of the popup in a snapshot.
     #[cfg(feature = "snapshot")]
     settings_panel: bool,
+    /// Scrolls the Settings snapshot to its Bar section.
+    #[cfg(feature = "snapshot")]
+    settings_bar: bool,
     /// Shows the year or decade view in a snapshot.
     #[cfg(feature = "snapshot")]
     zoom: Option<Zoom>,
@@ -328,6 +412,19 @@ impl Cli {
                 "--converter" => cli.converter = true,
                 #[cfg(feature = "snapshot")]
                 "--settings" => cli.settings_panel = true,
+                #[cfg(feature = "snapshot")]
+                "--settings-section" => {
+                    let value = args
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("--settings-section needs top or bar"))?;
+                    cli.settings_bar = match value.as_str() {
+                        "top" => false,
+                        "bar" => true,
+                        other => {
+                            anyhow::bail!("--settings-section must be top or bar, got {other}")
+                        }
+                    };
+                }
                 #[cfg(feature = "snapshot")]
                 "--zoom" => {
                     let value = args
@@ -424,11 +521,20 @@ impl Cli {
         }
         #[cfg(feature = "snapshot")]
         {
-            if cli.snapshot.is_some() && !cli.font_test && !cli.popup {
-                anyhow::bail!("--snapshot needs --font-test or --popup");
+            if cli.snapshot.is_some() && !cli.font_test && !cli.popup && !cli.settings_panel {
+                anyhow::bail!("--snapshot needs --font-test, --popup or --settings");
             }
             if cli.popup && cli.snapshot.is_none() {
                 anyhow::bail!("--popup needs --snapshot");
+            }
+            if cli.settings_panel && cli.snapshot.is_none() {
+                anyhow::bail!("--settings needs --snapshot");
+            }
+            if cli.settings_panel && cli.popup {
+                anyhow::bail!("--settings and --popup are exclusive");
+            }
+            if cli.settings_bar && !cli.settings_panel {
+                anyhow::bail!("--settings-section needs --settings --snapshot");
             }
             // Both flags are snapshot tools only: the normal app must never pin its date.
             if cli.today.is_some() && !cli.popup {
@@ -439,9 +545,6 @@ impl Cli {
             }
             if cli.converter && !cli.popup {
                 anyhow::bail!("--converter needs --popup --snapshot");
-            }
-            if cli.settings_panel && !cli.popup {
-                anyhow::bail!("--settings needs --popup --snapshot");
             }
             if cli.zoom.is_some() && !cli.popup {
                 anyhow::bail!("--zoom needs --popup --snapshot");
@@ -485,7 +588,7 @@ impl Cli {
             return true;
         }
         #[cfg(feature = "snapshot")]
-        if self.popup || self.wake_probe.is_some() {
+        if self.popup || self.settings_panel || self.wake_probe.is_some() {
             return true;
         }
         #[cfg(all(windows, feature = "snapshot"))]
@@ -493,6 +596,23 @@ impl Cli {
             return true;
         }
         false
+    }
+}
+
+impl Cli {
+    /// Whether this run registers the global shortcut: the snapshot and probe tools never do, so a
+    /// test render can't take the shortcut from a running `MitiBar`.
+    #[cfg_attr(not(feature = "snapshot"), allow(clippy::unused_self))]
+    fn registers_shortcut(&self) -> bool {
+        #[cfg(feature = "snapshot")]
+        if self.popup || self.settings_panel || self.wake_probe.is_some() {
+            return false;
+        }
+        #[cfg(all(windows, feature = "snapshot"))]
+        if self.bar_snapshot.is_some() {
+            return false;
+        }
+        true
     }
 }
 
@@ -505,7 +625,7 @@ fn load_settings(cli: &Cli) -> (Settings, Vec<String>) {
         return platform::settings_store::load(path);
     }
     #[cfg(feature = "snapshot")]
-    if cli.popup {
+    if cli.popup || cli.settings_panel {
         return (Settings::default(), Vec::new());
     }
     #[cfg(all(windows, feature = "snapshot"))]
@@ -614,9 +734,10 @@ fn main() -> anyhow::Result<()> {
     state.borrow_mut().zones = ui_bridge::all_time_zones();
     state.borrow_mut().theme_override = cli.theme;
     if let Some(path) = &cli.settings_file {
-        state.borrow_mut().settings_path = Some(path.clone());
+        state.borrow_mut().store = Some(Rc::new(FileStore::new(path.clone())));
     } else if !cli.is_snapshot_tool() {
-        state.borrow_mut().settings_path = platform::settings_store::default_path();
+        state.borrow_mut().store = platform::settings_store::default_path()
+            .map(|path| Rc::new(FileStore::new(path)) as Rc<dyn Store>);
     }
     // The popup is created on the first open, not here. The slot holds the one strong
     // handle; `AppState` keeps only a weak one, so the component's callbacks cannot form a cycle.
@@ -642,8 +763,14 @@ fn main() -> anyhow::Result<()> {
         return snapshot_popup(&cli, &state, &popup, lang);
     }
 
+    // The Settings snapshot renders the window as `open` builds it, without placing it.
+    #[cfg(feature = "snapshot")]
+    if cli.settings_panel {
+        return snapshot_settings(&cli, &state, lang);
+    }
+
     // Tray: WR-01 events delivered back here.
-    let tray = Rc::new(SlintTray::new(lang, {
+    let tray: Rc<dyn Tray> = Rc::new(SlintTray::new(lang, {
         let state = state.clone();
         let slot = slot.clone();
         move |event| handle_tray_event(event, &state, &slot)
@@ -683,10 +810,23 @@ fn main() -> anyhow::Result<()> {
         tray.set_bar_shown(s.settings.bar);
     }
 
-    // The settings panel needs the live tray and bar for language and bar changes. The debounce
-    // timer lives in `AppState`, so a lazily created popup shares it.
+    // The Settings window needs the live tray and bar for language and bar changes. The debounce
+    // timer lives in `AppState`, so the window shares it.
     state.borrow_mut().tray = Some(tray.clone());
     state.borrow_mut().bar = Some(bar.clone());
+
+    // WR-13: the global shortcut. The snapshot tools never register one.
+    if cli.registers_shortcut() {
+        let hotkeys: Rc<dyn Hotkeys> = Rc::new(SystemHotkeys::new(|| {
+            // The OS delivers the press on its own thread; wake the UI thread to handle it.
+            if let Err(err) = slint::invoke_from_event_loop(run_shortcut_request) {
+                log::warn!("global shortcut: could not wake the UI thread: {err}");
+            }
+        }));
+        state.borrow_mut().hotkeys = Some(hotkeys);
+        install_shortcut_request(&slot, &state);
+        settings_window::apply_shortcut(&state);
+    }
 
     // First paint of the tray, then the once-per-minute (or per-second) timer.
     update_tray(&state, &tray);
@@ -700,7 +840,7 @@ fn main() -> anyhow::Result<()> {
         platform::single_instance::start(listener, wake_ui);
     }
 
-    arm_timer(state.clone(), tray, bar);
+    arm_timer(state.clone());
 
     // Count UI wakes in a headless window, write the count and quit. Snapshot tool only.
     #[cfg(feature = "snapshot")]
@@ -722,7 +862,7 @@ fn main() -> anyhow::Result<()> {
     // A change made in the last 300 ms before Quit is still waiting for the debounce timer.
     let save_timer = state.borrow().save_timer.clone();
     if save_timer.running() {
-        save_settings(&state);
+        settings_window::save_now(&state);
     }
     Ok(())
 }
@@ -777,19 +917,45 @@ fn snapshot_popup(
         ui_bridge::set_converter(popup, &outcome);
         popup.set_converter_visible(true);
     }
-    if cli.settings_panel {
-        if let Some(theme) = cli.theme {
-            match theme {
-                ThemeChoice::Light => "light",
-                ThemeChoice::Dark => "dark",
-                ThemeChoice::System => "system",
-            }
-            .clone_into(&mut state.borrow_mut().settings.theme);
-        }
-        refresh_settings(popup, state);
-        popup.set_settings_visible(true);
-    }
     snapshot_after(popup, &path, waits)
+}
+
+/// Renders the Settings window (`--settings`). With `--settings-section bar` it is scrolled to the
+/// Bar section first, once the first layout has run.
+#[cfg(feature = "snapshot")]
+fn snapshot_settings(cli: &Cli, state: &Rc<RefCell<AppState>>, lang: Lang) -> anyhow::Result<()> {
+    let path = cli
+        .snapshot
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("--settings needs --snapshot"))?;
+    if let Some(theme) = cli.theme {
+        match theme {
+            ThemeChoice::Light => "light",
+            ThemeChoice::Dark => "dark",
+            ThemeChoice::System => "system",
+        }
+        .clone_into(&mut state.borrow_mut().settings.theme);
+    }
+    let window = settings_window::create_for_snapshot(state)
+        .ok_or_else(|| anyhow::anyhow!("could not create the Settings window"))?;
+    // A translation can only be chosen once a component exists.
+    if lang == Lang::Ne {
+        slint::select_bundled_translation("ne")?;
+    }
+    settings_window::refresh(state);
+    let mut ticks = 1;
+    if cli.settings_bar {
+        let weak = window.as_weak();
+        slint::Timer::single_shot(std::time::Duration::from_millis(60), move || {
+            if let Some(window) = weak.upgrade() {
+                window.invoke_show_bar_section();
+            }
+        });
+        // The scroll lands at 60 ms; the image waits 800 ms, as the tooltip snapshot does, so the
+        // layout has settled.
+        ticks = TOOLTIP_SNAPSHOT_TICKS;
+    }
+    snapshot_after(&window, &path, ticks)
 }
 
 /// The snapshot timer ticks every 50 ms; 16 ticks is 800 ms, past the 500 ms tooltip delay.
@@ -816,7 +982,7 @@ fn handle_tray_event(event: TrayEvent, state: &Rc<RefCell<AppState>>, slot: &Pop
             let shown = !state.borrow().settings.bar;
             set_bar_shown(state, shown);
         }
-        TrayEvent::Settings => open_settings(state, slot, ui_bridge::PopupAnchor::TrayCorner),
+        TrayEvent::Settings => settings_window::open(state, Request::default()),
         TrayEvent::Quit => {
             let _ = slint::quit_event_loop();
         }
@@ -845,30 +1011,42 @@ fn handle_bar_event(event: BarEvent, state: &Rc<RefCell<AppState>>, slot: &Popup
         BarEvent::Open(anchor) => open_popup_if_hidden(slot, state, anchor),
         BarEvent::Moved(saved) => {
             state.borrow_mut().settings.set_bar_position(&saved);
-            save_later(state);
+            settings_window::save_later(state);
         }
         BarEvent::Menu { item, anchor } => match item {
             MenuItem::Open => open_popup_if_hidden(slot, state, anchor),
             MenuItem::CopyBs => copy_bs(state),
             MenuItem::CopyAd => copy_ad(state),
-            // The Bar section of Settings is W8-3; until then Settings holds the bar's switches.
-            MenuItem::Customize | MenuItem::Settings => {
-                open_settings(state, slot, ui_bridge::PopupAnchor::Bar(anchor));
-            }
+            MenuItem::Customize => settings_window::open(
+                state,
+                Request {
+                    section: Section::Bar,
+                    hint: settings_hint(anchor),
+                },
+            ),
+            MenuItem::Settings => settings_window::open(
+                state,
+                Request {
+                    section: Section::Top,
+                    hint: settings_hint(anchor),
+                },
+            ),
             MenuItem::Lock => {
                 let locked = !state.borrow().settings.bar_locked;
-                state.borrow_mut().settings.bar_locked = locked;
-                let bar = state.borrow().bar.clone();
-                if let Some(bar) = bar {
-                    bar.set_locked(locked);
-                }
-                save_later(state);
+                set_bar_locked(state, locked);
             }
             MenuItem::Hide => set_bar_shown(state, false),
             MenuItem::Quit => {
                 let _ = slint::quit_event_loop();
             }
         },
+    }
+}
+
+/// Where the Settings window centres when it is asked for from the bar and the popup is closed.
+fn settings_hint(anchor: Anchor) -> ui_bridge::SettingsHint {
+    ui_bridge::SettingsHint {
+        bar_monitor: Some((anchor.work, anchor.dpi)),
     }
 }
 
@@ -884,9 +1062,9 @@ fn open_popup_if_hidden(slot: &PopupSlot, state: &Rc<RefCell<AppState>>, anchor:
 /// the Settings switch follow, and the setting is saved (WR-01 AC5, WR-08 AC6).
 fn set_bar_shown(state: &Rc<RefCell<AppState>>, shown: bool) {
     state.borrow_mut().settings.bar = shown;
-    let (bar, tray, popup) = {
+    let (bar, tray) = {
         let s = state.borrow();
-        (s.bar.clone(), s.tray.clone(), s.popup.upgrade())
+        (s.bar.clone(), s.tray.clone())
     };
     if let Some(bar) = bar {
         bar.set_shown(shown);
@@ -894,10 +1072,20 @@ fn set_bar_shown(state: &Rc<RefCell<AppState>>, shown: bool) {
     if let Some(tray) = tray {
         tray.set_bar_shown(shown);
     }
-    if let Some(popup) = popup {
-        refresh_settings(&popup, state);
+    settings_window::refresh(state);
+    settings_window::save_later(state);
+}
+
+/// Locks or unlocks the bar's position (the `bar_locked` setting): the bar, the Settings switch and
+/// the menu's check item follow, and the setting is saved (WR-08 AC4, AC6).
+fn set_bar_locked(state: &Rc<RefCell<AppState>>, locked: bool) {
+    state.borrow_mut().settings.bar_locked = locked;
+    let bar = state.borrow().bar.clone();
+    if let Some(bar) = bar {
+        bar.set_locked(locked);
     }
-    save_later(state);
+    settings_window::refresh(state);
+    settings_window::save_later(state);
 }
 
 /// Puts the bar back at its default position and forgets the saved one (WR-08 AC5).
@@ -910,7 +1098,7 @@ fn reset_bar_position(state: &Rc<RefCell<AppState>>) {
     if let Some(bar) = bar {
         bar.set_position(&Saved::default());
     }
-    save_later(state);
+    settings_window::save_later(state);
 }
 
 /// Repaints the bar's lines from the clock and settings. A no-op when nothing changed.
@@ -1045,7 +1233,6 @@ fn wire_popup(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, popup_weak: &W
         move || {
             if let Some(popup) = popup_weak.upgrade() {
                 popup.set_converter_visible(false);
-                popup.set_settings_visible(false);
                 popup.set_goto_visible(false);
                 popup.set_goto_text("".into());
                 popup.set_goto_error("".into());
@@ -1058,6 +1245,16 @@ fn wire_popup(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, popup_weak: &W
             state.hidden_on = today_local();
             state.detail = None;
         }
+    });
+
+    // Focus moving to the Settings window is not a focus loss (WR-02 AC2); the module decides.
+    popup.on_deactivated({
+        let state = state.clone();
+        move || settings_window::popup_deactivated(&state)
+    });
+    popup.on_activated({
+        let state = state.clone();
+        move || settings_window::popup_activated(&state)
     });
 
     // A day opens the inline detail; Escape or the scrim clears it. The copy buttons use
@@ -1175,14 +1372,10 @@ fn wire_calendar(
             open_detail_for(&state, holiday.date);
         }
     });
+    // The Settings pill and Ctrl+Comma open the Settings window beside the popup (WR-06 AC1).
     popup.on_settings_requested({
         let state = state.clone();
-        let popup_weak = popup_weak.clone();
-        move || {
-            if let Some(popup) = popup_weak.upgrade() {
-                show_settings_panel(&popup, &state);
-            }
-        }
+        move || settings_window::open(&state, Request::default())
     });
 }
 
@@ -1319,182 +1512,6 @@ fn wire_converter(
     });
 }
 
-/// The settings panel. Each change is applied at once and saved 300 ms later. One
-/// callback per key keeps the mapping visible.
-#[allow(clippy::too_many_lines)]
-fn wire_settings(
-    popup: &PopupWindow,
-    state: &Rc<RefCell<AppState>>,
-    save_timer: &Rc<slint::Timer>,
-) {
-    popup.on_settings_language({
-        let state = state.clone();
-        let save_timer = save_timer.clone();
-        let popup = popup.as_weak();
-        move |index| {
-            let language = if index == 1 { "ne" } else { "en" };
-            language.clone_into(&mut state.borrow_mut().settings.language);
-            let _ = slint::select_bundled_translation(language);
-            if let Some(popup) = popup.upgrade() {
-                update_popup(&state);
-                let (tray, bar) = {
-                    let s = state.borrow();
-                    (s.tray.clone(), s.bar.clone())
-                };
-                if let Some(tray) = &tray {
-                    update_tray(&state, tray);
-                }
-                if let (Some(bar), Some(tray)) = (&bar, &tray) {
-                    bar.set_menu_labels(&tray.menu_labels());
-                }
-                update_bar(&state);
-                refresh_settings(&popup, &state);
-            }
-            schedule_save(&save_timer, &state);
-        }
-    });
-    popup.on_settings_theme({
-        let state = state.clone();
-        let save_timer = save_timer.clone();
-        let popup_weak = popup.as_weak();
-        move |index| {
-            let theme = match index {
-                1 => "light",
-                2 => "dark",
-                _ => "system",
-            };
-            theme.clone_into(&mut state.borrow_mut().settings.theme);
-            if let Some(popup) = popup_weak.upgrade() {
-                theme::apply(&popup, ui_bridge::theme_choice(theme));
-            }
-            schedule_save(&save_timer, &state);
-        }
-    });
-    popup.on_settings_clock({
-        let state = state.clone();
-        let save_timer = save_timer.clone();
-        move |value| {
-            state.borrow_mut().settings.clock_24h = value;
-            update_popup(&state);
-            update_bar(&state);
-            schedule_save(&save_timer, &state);
-        }
-    });
-    popup.on_settings_seconds({
-        let state = state.clone();
-        let save_timer = save_timer.clone();
-        move |value| {
-            state.borrow_mut().settings.show_seconds = value;
-            update_popup(&state);
-            update_bar(&state);
-            schedule_save(&save_timer, &state);
-        }
-    });
-    popup.on_settings_zone({
-        let state = state.clone();
-        let save_timer = save_timer.clone();
-        let popup = popup.as_weak();
-        move |zone| {
-            state.borrow_mut().settings.extra_time_zone = zone.to_string();
-            update_popup(&state);
-            update_bar(&state);
-            if let Some(popup) = popup.upgrade() {
-                refresh_settings(&popup, &state);
-            }
-            schedule_save(&save_timer, &state);
-        }
-    });
-    popup.on_settings_launch({
-        let state = state.clone();
-        let save_timer = save_timer.clone();
-        move |value| {
-            state.borrow_mut().settings.launch_at_login = value;
-            platform::autostart::apply(value);
-            schedule_save(&save_timer, &state);
-        }
-    });
-    popup.on_settings_bar({
-        let state = state.clone();
-        move |value| set_bar_shown(&state, value)
-    });
-    popup.on_settings_reset_bar({
-        let state = state.clone();
-        move || reset_bar_position(&state)
-    });
-    popup.on_settings_filter_changed({
-        let state = state.clone();
-        let popup = popup.as_weak();
-        move |filter| {
-            if let Some(popup) = popup.upgrade() {
-                let s = state.borrow();
-                let zones = ui_bridge::filter_time_zones(&s.zones, filter.as_str());
-                ui_bridge::set_settings(&popup, &s.settings, &zones);
-            }
-        }
-    });
-    popup.on_settings_closed(|| {});
-}
-
-/// Repaints the settings panel from `AppState`, keeping the current zone filter.
-fn refresh_settings(popup: &PopupWindow, state: &Rc<RefCell<AppState>>) {
-    let filter = popup.get_settings_filter().to_string();
-    let s = state.borrow();
-    let zones = ui_bridge::filter_time_zones(&s.zones, &filter);
-    ui_bridge::set_settings(popup, &s.settings, &zones);
-}
-
-/// Saves `settings.toml` 300 ms after the last change.
-fn schedule_save(timer: &Rc<slint::Timer>, state: &Rc<RefCell<AppState>>) {
-    let state = state.clone();
-    timer.start(
-        slint::TimerMode::SingleShot,
-        std::time::Duration::from_millis(300),
-        move || save_settings(&state),
-    );
-}
-
-/// `schedule_save` for a change that did not come from the settings panel, so it has no timer in
-/// hand: the one shared timer lives in `AppState`.
-fn save_later(state: &Rc<RefCell<AppState>>) {
-    let timer = state.borrow().save_timer.clone();
-    schedule_save(&timer, state);
-}
-
-/// Writes the current settings to `AppState::settings_path`, if there is one.
-fn save_settings(state: &Rc<RefCell<AppState>>) {
-    let (settings, path) = {
-        let s = state.borrow();
-        (s.settings.clone(), s.settings_path.clone())
-    };
-    let Some(path) = path else {
-        return;
-    };
-    if let Err(err) = platform::settings_store::save(&path, &settings) {
-        log::warn!("settings: could not save: {err}");
-    }
-}
-
-/// Opens the settings panel, showing the popup at `anchor` first if it was hidden.
-fn open_settings(state: &Rc<RefCell<AppState>>, slot: &PopupSlot, anchor: ui_bridge::PopupAnchor) {
-    let Some(popup) = ensure_popup(slot, state) else {
-        return;
-    };
-    if !popup.window().is_visible() {
-        prepare_show(state);
-        update_popup(state);
-        let _ = ui_bridge::show_popup_at(&popup, anchor);
-    }
-    show_settings_panel(&popup, state);
-}
-
-/// Shows the settings panel with a fresh zone filter.
-fn show_settings_panel(popup: &PopupWindow, state: &Rc<RefCell<AppState>>) {
-    popup.set_settings_filter("".into());
-    refresh_settings(popup, state);
-    popup.set_settings_visible(true);
-    popup.invoke_focus();
-}
-
 /// Opens the detail for a grid cell, if it is a real day.
 fn open_detail(state: &Rc<RefCell<AppState>>, index: i32) {
     let (year, month) = state.borrow().zoom.viewed();
@@ -1535,8 +1552,16 @@ fn copy_detail(state: &Rc<RefCell<AppState>>, bs: bool) {
     let _ = state.clipboard.set_text(text);
 }
 
+/// `update_tray` for the tray in the state, if there is one: a setting changed.
+fn update_tray_now(state: &Rc<RefCell<AppState>>) {
+    let tray = state.borrow().tray.clone();
+    if let Some(tray) = tray {
+        update_tray(state, &tray);
+    }
+}
+
 /// Refreshes the tray title (macOS), day icon (Windows/Linux) and tooltip.
-fn update_tray(state: &Rc<RefCell<AppState>>, tray: &Rc<SlintTray>) {
+fn update_tray(state: &Rc<RefCell<AppState>>, tray: &Rc<dyn Tray>) {
     let s = state.borrow();
     let now = jiff::Zoned::now();
     let lang = s.settings.lang();
@@ -1568,28 +1593,41 @@ fn update_tray(state: &Rc<RefCell<AppState>>, tray: &Rc<SlintTray>) {
     ));
 }
 
-/// One tick of the timer: tray, popup, bar, then re-arms (WR-05 AC5/AC6). This is the only timer
-/// that runs at idle; the bar adds none (WR-08 AC9).
-fn update_tick(state: &Rc<RefCell<AppState>>, tray: &Rc<SlintTray>, bar: &Rc<dyn Bar>) {
+/// One tick of the timer: tray, popup, bar (WR-05 AC5/AC6). This is the only timer that runs at
+/// idle; the bar adds none (WR-08 AC9).
+fn update_tick(state: &Rc<RefCell<AppState>>) {
     note_wake();
-    update_tray(state, tray);
+    update_tray_now(state);
     update_popup(state);
     // The lines are built before the bar redraws, so no state borrow is held across its Win32
     // calls.
-    let lines = bar_lines(&jiff::Zoned::now(), &state.borrow().settings);
-    bar.set_lines(&lines);
+    update_bar(state);
 }
 
 /// Schedules the next single-shot tick. The closure re-arms itself, so the process sleeps about
-/// 60 s between wakes when seconds are hidden (WR-05 AC5).
-fn arm_timer(state: Rc<RefCell<AppState>>, tray: Rc<SlintTray>, bar: Rc<dyn Bar>) {
+/// 60 s between wakes when seconds are hidden (WR-05 AC5). A tick armed before `rearm_timer` ran
+/// sees a newer generation and ends the chain.
+fn arm_timer(state: Rc<RefCell<AppState>>) {
     let now = jiff::Zoned::now();
-    let show_seconds = state.borrow().settings.show_seconds;
+    let (show_seconds, generation) = {
+        let s = state.borrow();
+        (s.settings.show_seconds, s.timer_generation)
+    };
     let delay = clock::next_wakeup(&now, show_seconds);
     slint::Timer::single_shot(delay, move || {
-        update_tick(&state, &tray, &bar);
-        arm_timer(state, tray, bar);
+        if state.borrow().timer_generation != generation {
+            return;
+        }
+        update_tick(&state);
+        arm_timer(state);
     });
+}
+
+/// Arms a fresh tick for the current interval and retires the one that was armed: turning seconds
+/// on or off changes how soon the next tick is due.
+fn rearm_timer(state: &Rc<RefCell<AppState>>) {
+    state.borrow_mut().timer_generation += 1;
+    arm_timer(state.clone());
 }
 
 /// Renders a window and writes it as a PNG (test tool, reused for the popup). Uses Slint's
@@ -1747,6 +1785,29 @@ fn write_snapshot<C: ComponentHandle>(ui: &C, path: &std::path::Path) -> anyhow:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wr02_ac1_the_shortcut_opens_by_the_bar_only_while_the_bar_is_shown_and_has_a_place() {
+        let anchor = Anchor {
+            bar: crate::app::bar_place::Rect::new(500, 1037, 720, 1075),
+            work: crate::app::bar_place::Rect::new(0, 0, 1920, 1032),
+            dpi: 96,
+        };
+        assert_eq!(
+            shortcut_anchor(true, Some(anchor)),
+            ui_bridge::PopupAnchor::Bar(anchor)
+        );
+        assert_eq!(
+            shortcut_anchor(false, Some(anchor)),
+            ui_bridge::PopupAnchor::TrayCorner,
+            "a hidden bar is not a place"
+        );
+        assert_eq!(
+            shortcut_anchor(true, None),
+            ui_bridge::PopupAnchor::TrayCorner,
+            "nor is a bar that has not been drawn"
+        );
+    }
 
     #[test]
     fn settings_file_flag_is_parsed_and_isolates_the_run() {

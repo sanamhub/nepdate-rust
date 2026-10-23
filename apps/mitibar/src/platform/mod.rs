@@ -5,6 +5,7 @@ pub mod autostart;
 pub mod bar;
 pub mod clipboard;
 pub mod frame;
+pub mod hotkey;
 pub mod logging;
 pub mod screen;
 pub mod settings_store;
