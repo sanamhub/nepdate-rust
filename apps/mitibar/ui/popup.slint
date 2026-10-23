@@ -65,7 +65,7 @@ export component PopupWindow inherits Window {
     in-out property <SettingsData> settings-data;
     in-out property <string> settings-filter: "";
 
-    // Fired by the tray menu, the taskbar menu and the grid.
+    // Fired by the tray menu, the bar's menu and the grid.
     callback day-clicked(int);
     callback prev-month();
     callback next-month();
@@ -90,7 +90,8 @@ export component PopupWindow inherits Window {
     callback settings-seconds(bool);
     callback settings-zone(string);
     callback settings-launch(bool);
-    callback settings-taskbar(bool);
+    callback settings-bar(bool);
+    callback settings-reset-bar();
     callback settings-filter-changed(string);
 
     /// False while an overlay is open, so the base controls leave the Tab cycle.
@@ -388,7 +389,8 @@ export component PopupWindow inherits Window {
                 seconds-changed(value) => { root.settings-seconds(value); }
                 zone-picked(zone) => { root.settings-zone(zone); }
                 launch-changed(value) => { root.settings-launch(value); }
-                taskbar-changed(value) => { root.settings-taskbar(value); }
+                bar-changed(value) => { root.settings-bar(value); }
+                reset-bar => { root.settings-reset-bar(); }
                 filter-zones(text) => { root.settings-filter-changed(text); }
                 control-focused(name) => { root.settings-focused = name; }
                 closed => {

@@ -74,8 +74,10 @@ desktop, so it carries its own quiet surface instead of relying on the taskbar's
 - Type: 12 px at 100 % scale, line 1 regular, line 2 semibold, line gap 2 px. Noto Sans for
   Latin, Noto Sans Devanagari for Nepali (12 px is the §4 minimum, so it's never reduced).
 - Text is left-aligned. Separators are ` · ` in `ink-muted`; everything else is `ink`.
-- Shape: radius is half the pill's height. Padding 10 px left and right, 2 px top and bottom,
-  so two lines stay under 44 px and fit a 48 px taskbar. One line gives a 26 px pill.
+- Shape: a rounded rectangle with a 6 px radius (scaled with DPI), which sits with the Windows 11
+  shell better than a capsule; the owner picked it after seeing both on 2026-10-23. Padding 10 px
+  left and right, 2 px top and bottom, so two lines stay under 44 px and fit a 48 px taskbar. One
+  line gives a 26 px bar.
 - Surface: `surface` at 90 % opacity with a 1 px `hairline` border, for the **system**
   (taskbar) theme. Hover raises it to `surface-raised`. No shadow; dragging doesn't change the
   look, only the position.
@@ -89,7 +91,8 @@ One radius per role, so hierarchy shows in the shape:
 |---|---|
 | Popup and Settings windows | 8 px (Windows 11's own window radius; 10 px on macOS and Linux) |
 | Day cells, month and year cells, cards, list rows | 6 px |
-| Buttons, segmented controls, switches, chips, the bar | full (half the height) |
+| The mini bar | 6 px |
+| Buttons, segmented controls, switches, chips | full (half the height) |
 
 Hover is a `surface-raised` fill. Focus is the 2 px `ink` ring from W7, drawn outside the
 shape with the same radius.

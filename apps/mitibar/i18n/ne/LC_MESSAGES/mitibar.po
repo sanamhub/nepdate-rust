@@ -150,8 +150,20 @@ msgstr "अतिरिक्त घडी नचाहिने"
 msgid "Launch at login"
 msgstr "लगइनमा सुरु गर्नुहोस्"
 
-msgid "Taskbar text (Windows 11)"
-msgstr "टास्कबार पाठ (Windows 11)"
+msgid "Show bar"
+msgstr "पट्टी देखाउनुहोस्"
+
+msgid "Customize bar"
+msgstr "पट्टी अनुकूलन गर्नुहोस्"
+
+msgid "Lock position"
+msgstr "स्थिति लक गर्नुहोस्"
+
+msgid "Hide bar"
+msgstr "पट्टी लुकाउनुहोस्"
+
+msgid "Reset position"
+msgstr "स्थिति रिसेट गर्नुहोस्"
 
 msgid "Version {0}"
 msgstr "संस्करण {0}"

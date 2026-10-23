@@ -100,14 +100,14 @@ jobs:
       - name: Render dark snapshot (macOS, Windows)
         if: matrix.os != 'ubuntu-latest'
         run: cargo run -p mitibar --features snapshot -- --font-test --snapshot snapshot-dark.png --theme dark
-      - name: Render taskbar snapshots (Windows)
+      - name: Render bar snapshots (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
           foreach ($theme in @('light','dark')) {
             foreach ($lang in @('en','ne')) {
               foreach ($scale in @('1','1.5','2')) {
-                cargo run -p mitibar --features snapshot -- --taskbar-snapshot "taskbar-$theme-$lang-$scale.png" --taskbar-theme $theme --lang $lang --scale $scale
+                cargo run -p mitibar --features snapshot -- --bar-snapshot "bar-$theme-$lang-$scale.png" --bar-theme $theme --lang $lang --scale $scale
               }
             }
           }
@@ -117,7 +117,7 @@ jobs:
           path: |
             snapshot-light.png
             snapshot-dark.png
-            taskbar-*.png
+            bar-*.png
           if-no-files-found: error
 
   # Fails when shared/ differs from the hub at the commit in shared/VERSION (ADR-0003).

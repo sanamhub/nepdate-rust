@@ -8,7 +8,7 @@
 use nepdate::Lang;
 
 use crate::TrayComponent;
-use crate::platform::taskbar::MenuLabels;
+use crate::platform::bar::MenuLabels;
 
 /// Events the tray delivers to the app.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -16,6 +16,8 @@ pub enum TrayEvent {
     Open,
     CopyBs,
     CopyAd,
+    /// The Show bar check item (Windows only, WR-01 AC5): toggles the bar.
+    ShowBar,
     Settings,
     Quit,
 }
@@ -42,7 +44,7 @@ impl SlintTray {
     pub fn new(lang: Lang, on_event: impl FnMut(TrayEvent) + 'static) -> anyhow::Result<Self> {
         let component = TrayComponent::new()?;
         component.set_is_ne(lang == Lang::Ne);
-        // The five callbacks share `on_event`, so it lives behind Rc<RefCell> and each borrow is
+        // The six callbacks share `on_event`, so it lives behind Rc<RefCell> and each borrow is
         // dropped before the next event.
         let events = std::rc::Rc::new(std::cell::RefCell::new(on_event));
         {
@@ -59,6 +61,10 @@ impl SlintTray {
         }
         {
             let events = events.clone();
+            component.on_show_bar(move || (events.borrow_mut())(TrayEvent::ShowBar));
+        }
+        {
+            let events = events.clone();
             component.on_settings(move || (events.borrow_mut())(TrayEvent::Settings));
         }
         {
@@ -68,16 +74,29 @@ impl SlintTray {
         Ok(SlintTray { component })
     }
 
-    /// The translated WR-01 AC5 labels, for the taskbar text's right-click menu. The
-    /// popup may not exist yet; the tray component always does.
+    /// The translated labels, for the bar's right-click menu (WR-08 AC6). The popup may not exist
+    /// yet; the tray component always does.
     pub fn menu_labels(&self) -> MenuLabels {
         MenuLabels {
             open: self.component.get_menu_open().to_string(),
             copy_bs: self.component.get_menu_copy_bs().to_string(),
             copy_ad: self.component.get_menu_copy_ad().to_string(),
+            customize: self.component.get_menu_customize_bar().to_string(),
+            lock: self.component.get_menu_lock_position().to_string(),
+            hide: self.component.get_menu_hide_bar().to_string(),
             settings: self.component.get_menu_settings().to_string(),
             quit: self.component.get_menu_quit().to_string(),
         }
+    }
+
+    /// Shows the Show bar check item, on a platform that has a bar (WR-01 AC5).
+    pub fn set_bar_supported(&self, supported: bool) {
+        self.component.set_bar_supported(supported);
+    }
+
+    /// Checks or unchecks the Show bar item to match the `bar` setting.
+    pub fn set_bar_shown(&self, shown: bool) {
+        self.component.set_bar_shown(shown);
     }
 }
 

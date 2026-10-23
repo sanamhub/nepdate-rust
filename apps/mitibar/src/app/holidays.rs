@@ -38,12 +38,30 @@ pub fn next_holiday(from: NepaliDate, lang: Lang) -> Option<NextHoliday> {
     None
 }
 
+/// The name of `date`'s public holiday: its first event, as `next_holiday` names a holiday. `None`
+/// when the day is not a public holiday, or the holiday has no events.
+#[must_use]
+pub fn holiday_name(date: NepaliDate, lang: Lang) -> Option<&'static str> {
+    let info = patro::info(date);
+    if !info.is_public_holiday() {
+        return None;
+    }
+    info.events().next().map(|event| event.name(lang))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn date(year: u16, month: u8, day: u8) -> NepaliDate {
         NepaliDate::new(year, month, day).expect("valid BS date")
+    }
+
+    #[test]
+    fn holiday_name_is_none_on_an_ordinary_day() {
+        assert_eq!(holiday_name(date(2081, 1, 1), Lang::En), Some("New Year"));
+        assert_eq!(holiday_name(date(2081, 1, 2), Lang::En), None);
+        assert_eq!(holiday_name(date(2090, 1, 1), Lang::En), None);
     }
 
     #[test]

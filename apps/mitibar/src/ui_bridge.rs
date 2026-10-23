@@ -1,15 +1,17 @@
 //! Maps `app` view models to Slint generated types and callbacks (ADR-0015). The only place that
-//! converts between the two, including popup placement and the taskbar text anchor.
+//! converts between the two, including popup placement and the bar anchor.
 
 use nepdate::{DateOrder, Lang, Month, NepaliDate, Separator};
 use slint::ComponentHandle;
 
+use crate::app::bar_place::{self, Size, to_physical};
 use crate::app::clock::Header;
 use crate::app::converter::ConvertOutcome;
 use crate::app::format;
 use crate::app::holidays::NextHoliday;
 use crate::app::month_view::{Cell, DayDetail, MonthView};
 use crate::app::settings::Settings;
+use crate::platform::bar::Anchor;
 use crate::{
     AppInfo, CellData, ConverterData, DayDetailData, PopupClockLine, PopupWindow, SettingsData,
 };
@@ -19,17 +21,8 @@ use crate::{
 pub enum PopupAnchor {
     /// The fixed corner of the primary monitor per OS (WR-02 AC1).
     TrayCorner,
-    /// Above a rectangle, left-aligned, clamped to the monitor work area.
-    Above(Rect),
-}
-
-/// A rectangle in physical pixels; `app::taskbar::Rect` matches this shape.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Rect {
-    pub left: i32,
-    pub top: i32,
-    pub right: i32,
-    pub bottom: i32,
+    /// Above or below the bar, left-aligned with it, fully on-screen (WR-02 AC1, ADR-0019 point 8).
+    Bar(Anchor),
 }
 
 /// Positions and shows the popup at `anchor`, then gives the inner `FocusScope` focus so Escape
@@ -37,7 +30,7 @@ pub struct Rect {
 pub fn show_popup_at(popup: &PopupWindow, anchor: PopupAnchor) -> anyhow::Result<()> {
     match anchor {
         PopupAnchor::TrayCorner => position_tray_corner(popup),
-        PopupAnchor::Above(anchor) => position_above(popup, anchor),
+        PopupAnchor::Bar(anchor) => position_at_bar(popup, anchor),
     }
     popup.show()?;
     // Window deactivation reaches only the focused item. A FocusScope handler would miss a
@@ -276,7 +269,8 @@ pub fn set_settings(popup: &PopupWindow, settings: &Settings, zones: &[String]) 
         show_seconds: settings.show_seconds,
         zone: settings.extra_time_zone.as_str().into(),
         launch_at_login: settings.launch_at_login,
-        taskbar_text: settings.taskbar_text,
+        bar: settings.bar,
+        bar_available: cfg!(windows),
         zones: slint::ModelRc::new(slint::VecModel::from(zone_model)),
         version: env!("CARGO_PKG_VERSION").into(),
         coverage: format!("{} to {}", coverage.start(), coverage.end()).into(),
@@ -292,56 +286,21 @@ pub fn theme_choice(theme: &str) -> crate::ThemeChoice {
     }
 }
 
-impl From<crate::app::taskbar::Rect> for Rect {
-    fn from(rect: crate::app::taskbar::Rect) -> Self {
-        Rect {
-            left: rect.left,
-            top: rect.top,
-            right: rect.right,
-            bottom: rect.bottom,
-        }
-    }
-}
-
-/// Positions the popup above `anchor`, left-aligned and clamped to the primary monitor (WR-12
-/// AC3). The anchor is physical pixels; the popup position is logical, so both are scaled by the
-/// window's scale factor before the pure `above_position` maths runs. winit 0.30 exposes the full
-/// monitor rect but not the work area; WR-12 only shows on a bottom taskbar, where the popup opens
-/// above the text and the full monitor rect clamps it correctly.
-// Screen coordinates are far below f32's exact integer range (2^24), so the f64-to-i32 and
-// i32-to-f32 casts are lossless.
-#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
-fn position_above(popup: &PopupWindow, anchor: Rect) {
-    use slint::winit_030::WinitWindowAccessor;
-
-    let Some(monitor) = popup
-        .window()
-        .with_winit_window(slint::winit_030::winit::window::Window::primary_monitor)
-        .flatten()
-    else {
-        return; // No monitor (headless); keep the OS default placement.
+/// Positions the popup for a click on the bar: above it when there is room, below it otherwise,
+/// left-aligned and inside the work area of the bar's monitor (WR-02 AC1). The anchor is in
+/// physical pixels, and so is the position set here; the popup's size is its logical size at the
+/// scale of the monitor the bar is on.
+// The popup size is a few hundred px, so the f64-to-i32 cast is lossless.
+#[allow(clippy::cast_possible_truncation)]
+fn position_at_bar(popup: &PopupWindow, anchor: Anchor) {
+    let size = Size {
+        width: to_physical(POPUP_W as i32, anchor.dpi),
+        height: to_physical(POPUP_H as i32, anchor.dpi),
     };
-    let scale = f64::from(popup.window().scale_factor());
-    let position = monitor.position();
-    let size = monitor.size();
-    let work = Rect {
-        left: (f64::from(position.x) / scale) as i32,
-        top: (f64::from(position.y) / scale) as i32,
-        right: (f64::from(position.x) / scale + f64::from(size.width) / scale) as i32,
-        bottom: (f64::from(position.y) / scale + f64::from(size.height) / scale) as i32,
-    };
-    let anchor = Rect {
-        left: (f64::from(anchor.left) / scale) as i32,
-        top: (f64::from(anchor.top) / scale) as i32,
-        right: (f64::from(anchor.right) / scale) as i32,
-        bottom: (f64::from(anchor.bottom) / scale) as i32,
-    };
-    let (x, y) = above_position(anchor, (POPUP_W as i32, POPUP_H as i32), work);
-    popup
-        .window()
-        .set_position(slint::WindowPosition::Logical(slint::LogicalPosition::new(
-            x as f32, y as f32,
-        )));
+    let at = bar_place::popup_position(anchor.bar, size, anchor.work);
+    popup.window().set_position(slint::WindowPosition::Physical(
+        slint::PhysicalPosition::new(at.x, at.y),
+    ));
 }
 
 /// Positions the popup at the OS-specific corner of the primary monitor (WR-02 AC1).
@@ -396,44 +355,9 @@ fn tray_corner_position(monitor_w: f64, monitor_h: f64) -> (f64, f64) {
     (monitor_w - POPUP_W - 12.0, 0.0)
 }
 
-/// The popup's top-left above `anchor`, left-aligned and clamped to `work_area`. Pure so
-/// the clamping is unit-tested. `max`/`min` never panic even when the popup is wider
-/// than the work area.
-fn above_position(anchor: Rect, popup_size: (i32, i32), work_area: Rect) -> (i32, i32) {
-    let (w, h) = popup_size;
-    let x = anchor.left.max(work_area.left).min(work_area.right - w);
-    let y = (anchor.top - h)
-        .max(work_area.top)
-        .min(work_area.bottom - h);
-    (x, y)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn rect(left: i32, top: i32, right: i32, bottom: i32) -> Rect {
-        Rect {
-            left,
-            top,
-            right,
-            bottom,
-        }
-    }
-
-    #[test]
-    fn above_clamps_to_work_area() {
-        // Anchor fully inside the work area: popup sits directly above it, left-aligned.
-        let area = rect(0, 0, 1920, 1080);
-        let anchor = rect(1000, 900, 1100, 950);
-        assert_eq!(above_position(anchor, (360, 520), area), (1000, 380));
-        // Anchor near the left and top edges: clamped inside.
-        let anchor = rect(-50, 100, 50, 150);
-        assert_eq!(above_position(anchor, (360, 520), area), (0, 0));
-        // Anchor near the right and top edges: clamped to the right.
-        let anchor = rect(1900, 500, 1950, 550);
-        assert_eq!(above_position(anchor, (360, 520), area), (1560, 0));
-    }
 
     #[test]
     fn day_cell_label_has_the_dates_weekday_and_tithi() {
@@ -502,7 +426,7 @@ mod tests {
             show_seconds: true,
             extra_time_zone: "Asia/Kathmandu".to_owned(),
             launch_at_login: false,
-            taskbar_text: false,
+            bar: false,
             ..Settings::default()
         };
         let zones = vec!["Asia/Kathmandu".to_owned()];
@@ -513,7 +437,8 @@ mod tests {
         assert!(data.clock_24h);
         assert!(data.show_seconds);
         assert!(!data.launch_at_login);
-        assert!(!data.taskbar_text);
+        assert!(!data.bar);
+        assert_eq!(data.bar_available, cfg!(windows), "only Windows has a bar");
         assert_eq!(data.zone.as_str(), "Asia/Kathmandu");
         assert_eq!(data.zones.row_count(), 1);
         assert_eq!(data.coverage.as_str(), "2077/01/01 to 2084/08/20");

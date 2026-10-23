@@ -21,7 +21,7 @@ const MONTHS: [&str; 12] = [
     "December",
 ];
 
-/// The three-letter AD month names used by the month title and the taskbar text.
+/// The three-letter AD month names used by the month title and the bar.
 const MONTHS_SHORT: [&str; 12] = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
@@ -48,7 +48,7 @@ pub fn ad_long(ad: GregorianDate, lang: Lang) -> String {
     )
 }
 
-/// `Oct 15, 2026` with the language's digits, for the Windows taskbar text.
+/// `Oct 15, 2026` with the language's digits, for the bar.
 #[must_use]
 pub fn ad_day_month_year(ad: GregorianDate, lang: Lang) -> String {
     format!(
@@ -56,6 +56,16 @@ pub fn ad_day_month_year(ad: GregorianDate, lang: Lang) -> String {
         month_name(ad.month(), &MONTHS_SHORT),
         lang.digits(u32::from(ad.day()), 1),
         lang.digits(year(ad), 1)
+    )
+}
+
+/// `Oct 15` with the language's digits, for the bar.
+#[must_use]
+pub fn ad_month_day(ad: GregorianDate, lang: Lang) -> String {
+    format!(
+        "{} {}",
+        month_name(ad.month(), &MONTHS_SHORT),
+        lang.digits(u32::from(ad.day()), 1)
     )
 }
 
@@ -91,6 +101,8 @@ mod tests {
         assert_eq!(ad_long(ad, Lang::Ne), "April १३, २०२४");
         assert_eq!(ad_day_month_year(ad, Lang::En), "Apr 13, 2024");
         assert_eq!(ad_day_month_year(ad, Lang::Ne), "Apr १३, २०२४");
+        assert_eq!(ad_month_day(ad, Lang::En), "Apr 13");
+        assert_eq!(ad_month_day(ad, Lang::Ne), "Apr १३");
     }
 
     #[test]

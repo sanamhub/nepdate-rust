@@ -34,10 +34,24 @@ pub fn load_default() -> (Settings, Vec<String>) {
 pub fn load(path: &Path) -> (Settings, Vec<String>) {
     let mut warnings = Vec::new();
     match fs::read_to_string(path) {
-        Ok(text) => match toml::from_str::<Settings>(&text) {
-            Ok(mut settings) => {
-                warnings.extend(settings.validate());
-                (settings, warnings)
+        Ok(text) => match Settings::from_toml(&text) {
+            Ok(loaded) => {
+                warnings.extend(loaded.warnings);
+                if loaded.migrated {
+                    // An older schema is rewritten as the current one, so the next start reads it
+                    // as such (WR-06). The migrated values are used either way.
+                    match save(path, &loaded.settings) {
+                        Ok(()) => warnings.push(format!(
+                            "rewrote settings.toml as schema {}",
+                            loaded.settings.schema
+                        )),
+                        Err(write_err) => warnings.push(format!(
+                            "could not rewrite settings.toml as schema {}: {write_err}",
+                            loaded.settings.schema
+                        )),
+                    }
+                }
+                (loaded.settings, warnings)
             }
             Err(err) => {
                 warnings.push(format!("settings.toml did not parse: {err}"));
@@ -118,7 +132,13 @@ mod tests {
             show_seconds: true,
             extra_time_zone: "Europe/Berlin".to_owned(),
             launch_at_login: false,
-            taskbar_text: false,
+            bar: false,
+            bar_locked: true,
+            bar_top: vec!["tithi".to_owned()],
+            bar_bottom: vec!["bs_short".to_owned(), "holiday".to_owned()],
+            bar_monitor: r"\\.\DISPLAY2".to_owned(),
+            bar_x: -12,
+            bar_y: 40,
             ..Settings::default()
         };
         save(&path, &settings).expect("save");
@@ -154,7 +174,113 @@ mod tests {
         assert!(warnings.is_empty(), "{warnings:?}");
         assert!(path.exists(), "the defaults were written");
         let text = fs::read_to_string(&path).expect("read");
-        assert!(text.contains("schema = 1"), "{text}");
+        assert!(text.contains("schema = 2"), "{text}");
+        assert!(text.contains("bar = true"), "{text}");
+        assert!(text.contains("bar_top"), "{text}");
+        assert!(text.contains("zone_time"), "{text}");
+    }
+
+    #[test]
+    fn wr06_schema_1_with_the_taskbar_text_off_is_read_as_bar_off_and_rewritten() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("settings.toml");
+        fs::write(
+            &path,
+            "schema = 1\nlanguage = \"ne\"\ntheme = \"dark\"\nclock_24h = false\n\
+             show_seconds = false\nextra_time_zone = \"Asia/Kathmandu\"\n\
+             launch_at_login = false\ntaskbar_text = false\n",
+        )
+        .expect("write");
+        let (loaded, warnings) = load(&path);
+        assert!(!loaded.bar, "taskbar_text = false became bar = false");
+        assert_eq!(loaded.schema, 2);
+        assert_eq!(loaded.language, "ne");
+        assert_eq!(loaded.theme, "dark");
+        assert!(!loaded.launch_at_login);
+        assert_eq!(loaded.bar_top, Settings::default().bar_top);
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(warnings[0].contains("schema 2"), "{warnings:?}");
+
+        let text = fs::read_to_string(&path).expect("read");
+        assert!(
+            text.contains("schema = 2"),
+            "rewritten as schema 2:\n{text}"
+        );
+        assert!(
+            !text.contains("taskbar_text"),
+            "the old key is gone:\n{text}"
+        );
+        assert!(text.contains("bar = false"), "{text}");
+        // The next start reads the rewritten file as it is, with nothing to migrate.
+        let (again, warnings) = load(&path);
+        assert_eq!(again, loaded);
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    #[test]
+    fn wr06_schema_1_with_the_taskbar_text_on_keeps_the_bar_on() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("settings.toml");
+        fs::write(&path, "schema = 1\ntaskbar_text = true\n").expect("write");
+        let (loaded, _) = load(&path);
+        assert!(loaded.bar);
+        assert!(
+            fs::read_to_string(&path)
+                .expect("read")
+                .contains("schema = 2")
+        );
+    }
+
+    #[test]
+    fn wr06_a_schema_1_file_that_cannot_be_rewritten_still_loads_migrated() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("settings.toml");
+        fs::write(&path, "schema = 1\ntaskbar_text = false\n").expect("write");
+        // The temp file's name is taken by a directory, so the rewrite fails.
+        fs::create_dir(path.with_extension("toml.tmp")).expect("block the temp file");
+        let (loaded, warnings) = load(&path);
+        assert!(!loaded.bar);
+        assert_eq!(loaded.schema, 2);
+        assert!(
+            warnings.iter().any(|w| w.contains("could not rewrite")),
+            "{warnings:?}"
+        );
+    }
+
+    #[test]
+    fn wr06_ac2_invalid_bar_values_fall_back_with_a_warning_each() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("settings.toml");
+        fs::write(
+            &path,
+            "schema = 2\nbar_top = [\"weekday\", \"sunrise\"]\nbar_bottom = []\nbar_locked = true\n\
+             unknown_key = 1\n",
+        )
+        .expect("write");
+        let (loaded, warnings) = load(&path);
+        assert_eq!(
+            loaded.bar_top,
+            Settings::default().bar_top,
+            "unknown field id"
+        );
+        assert!(loaded.bar_bottom.is_empty(), "one empty line is allowed");
+        assert!(loaded.bar_locked, "valid keys are kept");
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(warnings[0].contains("bar_top"), "{warnings:?}");
+    }
+
+    #[test]
+    fn wr06_ac2_unknown_keys_in_a_schema_2_file_are_ignored_without_a_warning() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("settings.toml");
+        fs::write(
+            &path,
+            "schema = 2\nbar = false\nshortcut = \"Win+Shift+N\"\n",
+        )
+        .expect("write");
+        let (loaded, warnings) = load(&path);
+        assert!(!loaded.bar);
+        assert!(warnings.is_empty(), "{warnings:?}");
     }
 
     #[test]

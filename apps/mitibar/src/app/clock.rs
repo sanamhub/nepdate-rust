@@ -53,8 +53,8 @@ pub fn clock_lines(now: &jiff::Zoned, s: &Settings) -> Vec<ClockLine> {
     lines
 }
 
-/// The local time string for `now`, per WR-05 AC2. The taskbar text (WR-12 AC1) reuses this so
-/// the two surfaces never format the time differently.
+/// The local time string for `now`, per WR-05 AC2. The bar (WR-08 AC2) reuses this so the two
+/// surfaces never format the time differently.
 pub fn local_time(now: &jiff::Zoned, s: &Settings) -> String {
     format_time(now.time(), s.clock_24h, s.show_seconds, s.lang())
 }

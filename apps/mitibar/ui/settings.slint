@@ -13,7 +13,10 @@ export struct SettingsData {
     show-seconds: bool,
     zone: string,
     launch-at-login: bool,
-    taskbar-text: bool,
+    /// The `bar` setting: whether the floating bar is shown (WR-08).
+    bar: bool,
+    /// Whether this platform has the bar at all; the bar controls are hidden elsewhere.
+    bar-available: bool,
     zones: [string],
     version: string,
     coverage: string,
@@ -29,7 +32,8 @@ export component SettingsPanel inherits Rectangle {
     callback seconds-changed(bool);
     callback zone-picked(string);
     callback launch-changed(bool);
-    callback taskbar-changed(bool);
+    callback bar-changed(bool);
+    callback reset-bar();
     callback filter-zones(string);
     callback closed();
     callback control-focused(string);
@@ -222,17 +226,31 @@ export component SettingsPanel inherits Rectangle {
                         }
                     }
                 }
-                FocusFrame {
-                    width: taskbar-switch.width;
-                    height: taskbar-switch.height;
-                    focused: taskbar-switch.has-focus;
-                    taskbar-switch := Switch {
-                        text: @tr("Taskbar text (Windows 11)");
-                        checked <=> root.data.taskbar-text;
-                        toggled => { root.taskbar-changed(root.data.taskbar-text); }
+                if root.data.bar-available : FocusFrame {
+                    width: bar-switch.width;
+                    height: bar-switch.height;
+                    focused: bar-switch.has-focus;
+                    bar-switch := Switch {
+                        text: @tr("Show bar");
+                        checked <=> root.data.bar;
+                        toggled => { root.bar-changed(root.data.bar); }
                         changed has-focus => {
-                            if (taskbar-switch.has-focus) {
-                                root.active-control = "settings taskbar";
+                            if (bar-switch.has-focus) {
+                                root.active-control = "settings bar";
+                            }
+                        }
+                    }
+                }
+                if root.data.bar-available : FocusFrame {
+                    width: reset-bar-button.width;
+                    height: reset-bar-button.height;
+                    focused: reset-bar-button.has-focus;
+                    reset-bar-button := Button {
+                        text: @tr("Reset position");
+                        clicked => { root.reset-bar(); }
+                        changed has-focus => {
+                            if (reset-bar-button.has-focus) {
+                                root.active-control = "settings reset position";
                             }
                         }
                     }
