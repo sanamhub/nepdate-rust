@@ -36,12 +36,6 @@ msgstr "अघिल्लो वर्ष"
 msgid "Next year"
 msgstr "अर्को वर्ष"
 
-msgid "Month"
-msgstr "महिना"
-
-msgid "Year"
-msgstr "वर्ष"
-
 msgid "Today"
 msgstr "आज"
 
@@ -170,3 +164,51 @@ msgstr "संस्करण {0}"
 
 msgid "Data {0}"
 msgstr "डेटा {0}"
+
+msgid "BS or AD date"
+msgstr "वि.सं. वा ई.सं. मिति"
+
+msgid "Change view"
+msgstr "दृश्य बदल्नुहोस्"
+
+msgid "Convert (C)"
+msgstr "रूपान्तरण (C)"
+
+msgid "Events: {0}"
+msgstr "घटनाहरू: {0}"
+
+msgid "Go to date"
+msgstr "मितिमा जानुहोस्"
+
+msgid "Next decade"
+msgstr "अर्को दशक"
+
+msgid "Previous decade"
+msgstr "अघिल्लो दशक"
+
+msgid "Pin (P)"
+msgstr "टाँस्नुहोस् (P)"
+
+msgid "Unpin (P)"
+msgstr "फुकाउनुहोस् (P)"
+
+msgid "Pin, pinned"
+msgstr "टाँस्नुहोस्, टाँसिएको"
+
+msgid "Pin, not pinned"
+msgstr "टाँस्नुहोस्, टाँसिएको छैन"
+
+msgid "Settings (Ctrl+,)"
+msgstr "सेटिङ्हरू (Ctrl+,)"
+
+msgid "Upcoming holidays"
+msgstr "आगामी बिदाहरू"
+
+msgid "in {0} days"
+msgstr "{0} दिनमा"
+
+msgid "today"
+msgstr "आज"
+
+msgid "tomorrow"
+msgstr "भोलि"

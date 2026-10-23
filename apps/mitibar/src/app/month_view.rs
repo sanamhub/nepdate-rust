@@ -271,6 +271,43 @@ pub fn day_detail(date: NepaliDate, lang: Lang) -> DayDetail {
     }
 }
 
+/// What the day tooltip says (WR-14 AC2). Each field shows only when it has data.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DayTooltip {
+    pub bs_long: String,
+    pub ad_long: String,
+    pub weekday: String,
+    pub tithi: Option<&'static str>,
+    /// The public holiday's name; `None` on an ordinary day.
+    pub holiday: Option<&'static str>,
+    /// How many events the day has, a count and not the names.
+    pub events: usize,
+}
+
+/// Builds the tooltip for `date`. Outside the patro coverage the tithi, holiday and events are
+/// empty (WR-03 AC4), and nothing panics.
+#[must_use]
+pub fn day_tooltip(date: NepaliDate, lang: Lang) -> DayTooltip {
+    let info = patro::info(date);
+    DayTooltip {
+        bs_long: date
+            .long(
+                LongDate {
+                    weekday: false,
+                    year: true,
+                    pad: false,
+                },
+                lang,
+            )
+            .to_string(),
+        ad_long: format::ad_long(date.to_gregorian(), lang),
+        weekday: date.weekday().name(lang).to_owned(),
+        tithi: info.tithi().map(|t| t.name(lang)),
+        holiday: crate::app::holidays::holiday_name(date, lang),
+        events: info.events().count(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -586,6 +623,35 @@ mod tests {
         assert_eq!(detail.tithi, None);
         assert!(!detail.is_holiday);
         assert!(detail.events.is_empty());
+    }
+
+    #[test]
+    fn wr14_ac2_the_tooltip_has_the_dates_weekday_tithi_holiday_and_event_count() {
+        let tip = day_tooltip(date(2081, 1, 1), Lang::En);
+        assert_eq!(tip.bs_long, "Baishakh 1, 2081");
+        assert_eq!(tip.ad_long, "April 13, 2024");
+        assert_eq!(tip.weekday, "Saturday");
+        assert_eq!(tip.tithi, Some("Panchami"));
+        assert_eq!(tip.holiday, Some("New Year"));
+        assert_eq!(tip.events, 3, "New Year, Mesh Sankranti and Bisket Jatra");
+
+        let ne = day_tooltip(date(2081, 1, 1), Lang::Ne);
+        assert_eq!(ne.bs_long, "बैशाख १, २०८१");
+        assert_eq!(ne.weekday, "शनिवार");
+        assert_eq!(ne.holiday, Some("नयाँ वर्ष"));
+    }
+
+    #[test]
+    fn wr14_ac2_an_ordinary_day_and_a_day_outside_the_data_leave_fields_out() {
+        let ordinary = day_tooltip(date(2081, 1, 2), Lang::En);
+        assert_eq!(ordinary.holiday, None);
+        assert!(ordinary.tithi.is_some());
+
+        let outside = day_tooltip(date(2090, 1, 1), Lang::En);
+        assert_eq!(outside.tithi, None);
+        assert_eq!(outside.holiday, None);
+        assert_eq!(outside.events, 0);
+        assert_eq!(outside.weekday, date(2090, 1, 1).weekday().name(Lang::En));
     }
 
     #[test]

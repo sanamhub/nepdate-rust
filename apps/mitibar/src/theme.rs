@@ -136,6 +136,56 @@ mod tests {
         }
     }
 
+    /// Today's numeral is `surface-raised` on the filled `sindoor` disc (WR-03 AC3, widget-design
+    /// §7). WCAG 2.1 wants 4.5:1 for text this size, in both themes.
+    #[test]
+    fn wr03_ac3_todays_numeral_on_the_sindoor_disc_has_at_least_4_5_to_1_contrast() {
+        let design = include_str!("../../../docs/design/widget-design.md");
+        let mut values = std::collections::HashMap::new();
+        for line in design.lines() {
+            let cells: Vec<&str> = line.split('|').map(str::trim).collect();
+            let [_, token, light, dark, ..] = cells.as_slice() else {
+                continue;
+            };
+            let unquote = |s: &str| {
+                s.strip_prefix('`')
+                    .and_then(|s| s.strip_suffix('`'))
+                    .map(str::to_owned)
+            };
+            if let (Some(token), Some(light), Some(dark)) =
+                (unquote(token), unquote(light), unquote(dark))
+                && light.starts_with('#')
+            {
+                values.insert(token, (light, dark));
+            }
+        }
+        for (side, pick) in [("light", 0), ("dark", 1)] {
+            let colour = |token: &str| {
+                let (light, dark) = values
+                    .get(token)
+                    .unwrap_or_else(|| panic!("design table lacks {token}"));
+                if pick == 0 { light } else { dark }
+            };
+            let numeral = luminance(colour("surface-raised"));
+            let disc = luminance(colour("sindoor"));
+            let (lighter, darker) = if numeral > disc {
+                (numeral, disc)
+            } else {
+                (disc, numeral)
+            };
+            let ratio = (lighter + 0.05) / (darker + 0.05);
+            println!(
+                "{side}: {} numeral on the {} disc is {ratio:.2}:1",
+                colour("surface-raised"),
+                colour("sindoor")
+            );
+            assert!(
+                ratio >= 4.5,
+                "{side}: today's numeral on the sindoor disc is {ratio:.2}:1, below 4.5:1"
+            );
+        }
+    }
+
     fn luminance(hex: &str) -> f64 {
         let value = u32::from_str_radix(hex.trim_start_matches('#'), 16).expect("hex colour");
         let channel = |shift: u32| {

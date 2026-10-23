@@ -1,7 +1,7 @@
 //! Maps `app` view models to Slint generated types and callbacks (ADR-0015). The only place that
 //! converts between the two, including popup placement and the bar anchor.
 
-use nepdate::{DateOrder, Lang, Month, NepaliDate, Separator};
+use nepdate::{DateOrder, Lang, LongDate, Month, NepaliDate, Separator};
 use slint::ComponentHandle;
 
 use crate::app::bar_place::{self, Size, to_physical};
@@ -9,11 +9,14 @@ use crate::app::clock::Header;
 use crate::app::converter::ConvertOutcome;
 use crate::app::format;
 use crate::app::holidays::NextHoliday;
-use crate::app::month_view::{Cell, DayDetail, MonthView};
+use crate::app::month_view::{Cell, DayDetail, DayTooltip, MonthView};
 use crate::app::settings::Settings;
+use crate::app::zoom::{Zoom, ZoomState};
 use crate::platform::bar::Anchor;
+use crate::platform::frame::{self, Frame, Surface};
 use crate::{
-    AppInfo, CellData, ConverterData, DayDetailData, PopupClockLine, PopupWindow, SettingsData,
+    AppInfo, CellData, ConverterData, DayDetailData, FrameStyle, PopupClockLine, PopupWindow,
+    SettingsData, TipData, UpcomingData, ZoomCellData,
 };
 
 /// Where to open the popup.
@@ -33,6 +36,9 @@ pub fn show_popup_at(popup: &PopupWindow, anchor: PopupAnchor) -> anyhow::Result
         PopupAnchor::Bar(anchor) => position_at_bar(popup, anchor),
     }
     popup.show()?;
+    // The window exists from the second open on. On the first, the filter below frames it with
+    // the first event it sees, before the first paint.
+    let mut framed = apply_frame(popup);
     // Window deactivation reaches only the focused item. A FocusScope handler would miss a
     // child control, so the winit filter hides the popup whatever holds focus.
     {
@@ -40,6 +46,9 @@ pub fn show_popup_at(popup: &PopupWindow, anchor: PopupAnchor) -> anyhow::Result
         use slint::winit_030::{EventResult, WinitWindowAccessor};
         let weak = popup.as_weak();
         popup.window().on_winit_window_event(move |_window, event| {
+            if !framed && let Some(popup) = weak.upgrade() {
+                framed = apply_frame(&popup);
+            }
             if matches!(event, WinitEvent::Focused(false))
                 && let Some(popup) = weak.upgrade()
             {
@@ -50,6 +59,39 @@ pub fn show_popup_at(popup: &PopupWindow, anchor: PopupAnchor) -> anyhow::Result
     }
     popup.invoke_focus();
     Ok(())
+}
+
+/// Tells the markup who draws the corners (WR-02 AC5). Reads the winit window's handle, asks
+/// `platform::frame` for the style (on Windows 11 that asks DWM), and sets it. A window with no
+/// handle yet returns `false` and keeps the square hairline default: Slint creates the winit
+/// window after `show` returns, on the first open.
+fn apply_frame(popup: &PopupWindow) -> bool {
+    use slint::winit_030::WinitWindowAccessor;
+    use slint::winit_030::winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+    let surface = popup
+        .window()
+        .with_winit_window(|window| {
+            window
+                .window_handle()
+                .ok()
+                .map(|handle| match handle.as_raw() {
+                    RawWindowHandle::Win32(handle) => Surface::Win32(handle.hwnd.get()),
+                    RawWindowHandle::AppKit(_) => Surface::AppKit,
+                    RawWindowHandle::Wayland(_) => Surface::Wayland,
+                    _ => Surface::Other,
+                })
+        })
+        .flatten();
+    let Some(surface) = surface else {
+        return false;
+    };
+    popup.set_frame_style(match frame::choose(surface) {
+        Frame::System => FrameStyle::System,
+        Frame::Rounded => FrameStyle::Rounded,
+        Frame::Square => FrameStyle::Square,
+    });
+    true
 }
 
 /// Sets the popup's header and clock lines from the app clock model (WR-02 AC3).
@@ -82,9 +124,88 @@ pub fn set_app_name(popup: &PopupWindow) {
         .set_app_name(crate::app::APP_NAME.into());
 }
 
-/// Fills the grid from `app::MonthView` (WR-03). The language is passed separately because
-/// the view keeps names, not the language.
-pub fn set_month(popup: &PopupWindow, view: &MonthView, lang: Lang) {
+/// Fills the calendar for the current zoom level (WR-03 AC6): the title, the Previous, Next and
+/// Today controls, the roving cursor and the cells. `view` is the month's cells and is only
+/// needed, and only built, in the month view. The language is passed separately because the
+/// models keep names, not the language.
+pub fn set_calendar(
+    popup: &PopupWindow,
+    zoom: ZoomState,
+    view: Option<&MonthView>,
+    today: NepaliDate,
+    lang: Lang,
+) {
+    popup.set_zoom_mode(match zoom.zoom() {
+        Zoom::Month => 0,
+        Zoom::Year => 1,
+        Zoom::Decade => 2,
+    });
+    popup.set_can_prev(zoom.can_step(-1));
+    popup.set_can_next(zoom.can_step(1));
+    popup.set_today_shown(zoom.today_pill_shown(today));
+    // The AD day is body size (13 px); Devanagari needs 12 px minimum and is narrower at 12 px
+    // (widget-design §3/§4). The UI only needs the size, not the language.
+    popup.set_ad_day_size(if lang == Lang::Ne { 12.0 } else { 13.0 });
+    // The tithi is a Latin caption at 11 px in English; Devanagari needs 12 px or more
+    // (widget-design §3/§4).
+    popup.set_tithi_size(if lang == Lang::Ne { 12.0 } else { 11.0 });
+    let digits = |year: u16| lang.digits(u32::from(year), 1).to_string();
+    match zoom.zoom() {
+        Zoom::Month => {
+            let Some(view) = view else {
+                return;
+            };
+            set_month_cells(popup, view, lang);
+            popup.set_month_title(view.title.as_str().into());
+            popup.set_nav_title(view.title.as_str().into());
+            let cursor = zoom
+                .cursor_date()
+                .and_then(|date| view.cells.iter().position(|cell| cell.date == Some(date)))
+                .and_then(|index| i32::try_from(index).ok());
+            popup.set_cursor_index(cursor.unwrap_or(-1));
+        }
+        Zoom::Year => {
+            let year = digits(zoom.year());
+            let cells: Vec<ZoomCellData> = Month::ALL
+                .iter()
+                .map(|month| ZoomCellData {
+                    label: month.name(lang).into(),
+                    is_today: zoom.year() == today.year() && *month == today.month(),
+                    is_viewed: *month == zoom.month(),
+                    enabled: true,
+                    accessible_label: format!("{} {year}", month.name(lang)).into(),
+                })
+                .collect();
+            popup.set_zoom_cells(slint::ModelRc::new(slint::VecModel::from(cells)));
+            popup.set_nav_title(year.into());
+            popup.set_cursor_index(i32::from(zoom.cursor()));
+        }
+        Zoom::Decade => {
+            let cells: Vec<ZoomCellData> = zoom
+                .decade_years()
+                .iter()
+                .map(|year| match year {
+                    Some(year) => ZoomCellData {
+                        label: digits(*year).into(),
+                        is_today: *year == today.year(),
+                        is_viewed: *year == zoom.year(),
+                        enabled: true,
+                        accessible_label: digits(*year).into(),
+                    },
+                    None => ZoomCellData::default(),
+                })
+                .collect();
+            popup.set_zoom_cells(slint::ModelRc::new(slint::VecModel::from(cells)));
+            popup.set_nav_title(
+                format!("{}–{}", digits(zoom.decade()), digits(zoom.decade() + 9)).into(),
+            );
+            popup.set_cursor_index(i32::from(zoom.cursor()));
+        }
+    }
+}
+
+/// The month view's day cells and weekday headers.
+fn set_month_cells(popup: &PopupWindow, view: &MonthView, lang: Lang) {
     let cells: Vec<CellData> = view
         .cells
         .iter()
@@ -97,24 +218,6 @@ pub fn set_month(popup: &PopupWindow, view: &MonthView, lang: Lang) {
         .map(|header| (*header).into())
         .collect();
     popup.set_weekday_headers(slint::ModelRc::new(slint::VecModel::from(headers)));
-    let months: Vec<slint::SharedString> = Month::ALL
-        .iter()
-        .map(|month| month.name(lang).into())
-        .collect();
-    popup.set_month_names(slint::ModelRc::new(slint::VecModel::from(months)));
-    popup.set_month_index(i32::from(view.month.number()) - 1);
-    popup.set_year(i32::from(view.year));
-    // The custom year control shows the language's digits; Slint's SpinBox cannot.
-    popup.set_year_text(lang.digits(u32::from(view.year), 0).to_string().into());
-    popup.set_month_title(view.title.as_str().into());
-    popup.set_can_prev(view.can_prev);
-    popup.set_can_next(view.can_next);
-    // The AD day is body size (13 px); Devanagari needs 12 px minimum and is narrower at 12 px
-    // (widget-design §3/§4). The UI only needs the size, not the language.
-    popup.set_ad_day_size(if lang == Lang::Ne { 12.0 } else { 13.0 });
-    // The tithi is a Latin caption at 11 px in English; Devanagari needs 12 px or more
-    // (widget-design §3/§4).
-    popup.set_tithi_size(if lang == Lang::Ne { 12.0 } else { 11.0 });
 }
 
 /// One `Cell` to one `CellData` (WR-03 AC3). The model keeps Saturday and public holidays
@@ -164,6 +267,43 @@ pub fn set_next_holiday(popup: &PopupWindow, holiday: Option<&NextHoliday>) {
     });
     popup.set_holiday_name(name.into());
     popup.set_holiday_days(days);
+}
+
+/// Fills the upcoming-holidays list (WR-14 AC4): the name, the BS date and how many days away.
+pub fn set_upcoming(popup: &PopupWindow, holidays: &[NextHoliday], lang: Lang) {
+    let rows: Vec<UpcomingData> = holidays
+        .iter()
+        .map(|holiday| UpcomingData {
+            name: holiday.name.unwrap_or_default().into(),
+            date: holiday
+                .date
+                .long(
+                    LongDate {
+                        weekday: false,
+                        year: true,
+                        pad: false,
+                    },
+                    lang,
+                )
+                .to_string()
+                .into(),
+            days: i32::try_from(holiday.days_away).unwrap_or(0),
+        })
+        .collect();
+    popup.set_upcoming(slint::ModelRc::new(slint::VecModel::from(rows)));
+}
+
+/// Fills the day tooltip card (WR-14 AC2). A field with no data stays empty, so its line is not
+/// drawn.
+pub fn set_tip(popup: &PopupWindow, tip: &DayTooltip) {
+    popup.set_tip(TipData {
+        bs_long: tip.bs_long.as_str().into(),
+        ad_long: tip.ad_long.as_str().into(),
+        weekday: tip.weekday.as_str().into(),
+        tithi: tip.tithi.unwrap_or_default().into(),
+        holiday: tip.holiday.unwrap_or_default().into(),
+        events: i32::try_from(tip.events).unwrap_or(0),
+    });
 }
 
 /// Fills the day detail overlay (WR-04). `None` hides it and leaves the last text in
@@ -290,14 +430,25 @@ pub fn theme_choice(theme: &str) -> crate::ThemeChoice {
 /// left-aligned and inside the work area of the bar's monitor (WR-02 AC1). The anchor is in
 /// physical pixels, and so is the position set here; the popup's size is its logical size at the
 /// scale of the monitor the bar is on.
-// The popup size is a few hundred px, so the f64-to-i32 cast is lossless.
-#[allow(clippy::cast_possible_truncation)]
 fn position_at_bar(popup: &PopupWindow, anchor: Anchor) {
-    let size = Size {
-        width: to_physical(POPUP_W as i32, anchor.dpi),
-        height: to_physical(POPUP_H as i32, anchor.dpi),
-    };
+    let size = popup_size(anchor.dpi);
     let at = bar_place::popup_position(anchor.bar, size, anchor.work);
+    popup.window().set_position(slint::WindowPosition::Physical(
+        slint::PhysicalPosition::new(at.x, at.y),
+    ));
+}
+
+/// Positions the popup at the tray corner of the primary monitor (WR-02 AC1): bottom-right of the
+/// work area, which is the corner above the taskbar wherever the taskbar is. The monitor, its
+/// work area and its scale come from the shell, not from the popup's window, which does not exist
+/// yet on the first open.
+#[cfg(windows)]
+fn position_tray_corner(popup: &PopupWindow) {
+    let Some(primary) = crate::platform::screen::primary_monitor() else {
+        return; // No monitor to read; keep the OS default placement.
+    };
+    let size = popup_size(primary.dpi);
+    let at = bar_place::tray_corner(&primary, size);
     popup.window().set_position(slint::WindowPosition::Physical(
         slint::PhysicalPosition::new(at.x, at.y),
     ));
@@ -306,6 +457,7 @@ fn position_at_bar(popup: &PopupWindow, anchor: Anchor) {
 /// Positions the popup at the OS-specific corner of the primary monitor (WR-02 AC1).
 /// Screen coordinates are far below f32's exact integer range (2^24), so the f64-to-f32 cast
 /// at the end is lossless.
+#[cfg(not(windows))]
 #[allow(clippy::cast_possible_truncation)]
 fn position_tray_corner(popup: &PopupWindow) {
     use slint::winit_030::WinitWindowAccessor;
@@ -328,18 +480,20 @@ fn position_tray_corner(popup: &PopupWindow) {
         )));
 }
 
+/// The popup size in physical px at `dpi`.
+// The popup size is a few hundred px, so the f64-to-i32 cast is lossless.
+#[allow(clippy::cast_possible_truncation)]
+fn popup_size(dpi: u32) -> Size {
+    Size {
+        width: to_physical(POPUP_W as i32, dpi),
+        height: to_physical(POPUP_H as i32, dpi),
+    }
+}
+
 /// The popup size and the per-OS corner margins (logical px), WR-02 AC1. 520 replaced 440 in the
 /// 520 fits the 44 px grid cells and a 6-row month.
 const POPUP_W: f64 = 360.0;
 const POPUP_H: f64 = 520.0;
-
-/// Top-left position of the popup for the primary monitor, per OS (WR-02 AC1). Wayland ignores
-/// `set_position`, so the Linux value is a hint only.
-#[cfg(target_os = "windows")]
-fn tray_corner_position(monitor_w: f64, monitor_h: f64) -> (f64, f64) {
-    // Bottom-right, 12 px from the right, 56 px above the bottom (standard taskbar).
-    (monitor_w - POPUP_W - 12.0, monitor_h - POPUP_H - 56.0)
-}
 
 #[cfg(target_os = "macos")]
 fn tray_corner_position(monitor_w: f64, monitor_h: f64) -> (f64, f64) {
@@ -463,18 +617,25 @@ mod tests {
 
         let today = NepaliDate::new(2083, 6, 1).expect("date");
         let view = month_view(2083, Month::Ashoj, today, Lang::En);
-        set_month(&popup, &view, Lang::En);
+        let zoom = ZoomState::new(today);
+        set_calendar(&popup, zoom, Some(&view), today, Lang::En);
         assert_eq!(
             popup.get_month_title().as_str(),
             "Ashoj 2083 · Sep/Oct 2026"
         );
-        assert_eq!(popup.get_month_index(), 5);
-        assert_eq!(popup.get_year(), 2083);
+        assert_eq!(popup.get_nav_title().as_str(), "Ashoj 2083 · Sep/Oct 2026");
+        assert_eq!(popup.get_zoom_mode(), 0);
         assert_eq!(popup.get_cells().row_count(), view.cells.len());
         let first = popup.get_cells().row_data(4).expect("Ashoj 1");
         assert_eq!(first.bs_day.as_str(), "1");
         assert_eq!(first.ad_month.as_str(), "");
-        assert_eq!(popup.get_month_names().row_count(), 12);
+        assert_eq!(
+            popup.get_cursor_index(),
+            4,
+            "the cursor is on today, Ashoj 1"
+        );
+        assert!(!popup.get_today_shown());
+        assert!(popup.get_can_prev() && popup.get_can_next());
 
         let detail = day_detail(NepaliDate::new(2081, 1, 1).expect("date"), Lang::En);
         set_detail(&popup, Some(&detail));

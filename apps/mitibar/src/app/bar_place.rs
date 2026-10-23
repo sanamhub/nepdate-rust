@@ -8,6 +8,8 @@
 
 /// How far the bar sits from the edge it is placed against, in logical px (ADR-0019 point 7).
 const INSET: i32 = 12;
+/// How far above the work area's bottom edge the popup opens at the tray corner, in logical px.
+const POPUP_GAP: i32 = 8;
 /// How close to the taskbar's centre line a drop snaps to it, in logical px (ADR-0019 point 5).
 const SNAP: i32 = 8;
 
@@ -279,6 +281,18 @@ pub fn popup_position(bar: Rect, popup: Size, work: Rect) -> Point {
         x: bar.left.min(work.right - popup.width).max(work.left),
         y: y.min(work.bottom - popup.height).max(work.top),
     }
+}
+
+/// Where the popup opens when no bar is involved (WR-02 AC1): the bottom-right corner of the primary
+/// monitor's work area, `INSET` from the right edge and `POPUP_GAP` above the taskbar. Fully
+/// inside the work area, so a vertical, top or hidden taskbar gets a corner that is on-screen too.
+pub fn tray_corner(primary: &Monitor, popup: Size) -> Point {
+    let work = primary.work;
+    let at = Point {
+        x: work.right - to_physical(INSET, primary.dpi) - popup.width,
+        y: work.bottom - to_physical(POPUP_GAP, primary.dpi) - popup.height,
+    };
+    clamp(at, popup, work)
 }
 
 /// Whether a window covers a whole monitor, which is what the full-screen check looks for
@@ -966,5 +980,106 @@ mod tests {
         );
         assert!(!covers_monitor(Rect::new(1, 0, 1920, 1080), monitor));
         assert!(!covers_monitor(Rect::new(100, 100, 900, 700), monitor));
+    }
+
+    #[test]
+    fn wr02_ac1_the_tray_corner_is_above_a_bottom_taskbar_and_12_px_from_the_right() {
+        let (windows_11, _) = windows_11_centred();
+        // Right edge at 1908, bottom edge 8 px above the taskbar at 1032: the 56 px above the
+        // screen's bottom that the popup always used.
+        assert_eq!(
+            tray_corner(&windows_11, size(360, 520)),
+            Point {
+                x: 1920 - 12 - 360,
+                y: 1032 - 8 - 520
+            }
+        );
+        let (windows_10, _) = windows_10();
+        assert_eq!(
+            tray_corner(&windows_10, size(360, 520)),
+            Point {
+                x: 1920 - 12 - 360,
+                y: 1040 - 8 - 520
+            },
+            "a 40 px taskbar puts the corner lower, not under the taskbar"
+        );
+    }
+
+    #[test]
+    fn wr02_ac1_the_tray_corner_scales_with_the_monitor() {
+        // 3840x2160 at 200 %: a 96 px taskbar, so the work area ends at 2064.
+        let primary = monitor(
+            r"\\.\DISPLAY1",
+            Rect::new(0, 0, 3840, 2160),
+            Rect::new(0, 0, 3840, 2064),
+            192,
+            true,
+        );
+        assert_eq!(
+            tray_corner(&primary, size(720, 1040)),
+            Point {
+                x: 3840 - 24 - 720,
+                y: 2064 - 16 - 1040
+            }
+        );
+    }
+
+    #[test]
+    fn wr02_ac1_the_tray_corner_stays_on_screen_with_any_taskbar() {
+        let popup = size(360, 520);
+        // Taskbar on the left, 60 px wide: the corner is still the work area's bottom-right.
+        let left = monitor(
+            r"\\.\DISPLAY1",
+            Rect::new(0, 0, 1920, 1080),
+            Rect::new(60, 0, 1920, 1080),
+            96,
+            true,
+        );
+        assert_eq!(
+            tray_corner(&left, popup),
+            Point {
+                x: 1920 - 12 - 360,
+                y: 1080 - 8 - 520
+            }
+        );
+        // A hidden taskbar leaves the whole monitor.
+        let hidden = monitor(
+            r"\\.\DISPLAY1",
+            Rect::new(0, 0, 1920, 1080),
+            Rect::new(0, 0, 1920, 1080),
+            96,
+            true,
+        );
+        assert_eq!(
+            tray_corner(&hidden, popup),
+            Point {
+                x: 1548,
+                y: 1080 - 8 - 520
+            }
+        );
+        // A work area smaller than the popup keeps the top-left corner on screen.
+        let tiny = monitor(
+            r"\\.\DISPLAY1",
+            Rect::new(0, 0, 300, 400),
+            Rect::new(0, 0, 300, 400),
+            96,
+            true,
+        );
+        assert_eq!(tray_corner(&tiny, popup), Point { x: 0, y: 0 });
+        // A second monitor at negative coordinates, as the primary.
+        let negative = monitor(
+            r"\\.\DISPLAY2",
+            Rect::new(-1920, 0, 0, 1080),
+            Rect::new(-1920, 0, 0, 1040),
+            96,
+            true,
+        );
+        assert_eq!(
+            tray_corner(&negative, popup),
+            Point {
+                x: -12 - 360,
+                y: 1040 - 8 - 520
+            }
+        );
     }
 }

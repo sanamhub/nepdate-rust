@@ -1,12 +1,15 @@
 // The popup window (WR-02): borderless, always-on-top, fixed 360x520. It shows today's header
-// and the clock lines, hides on Escape and on focus loss (WR-02 AC2). The 520 px height fits
-// the 44 px day cells and a 6-row month (WR-02 AC1).
+// with its three pill actions and the clock line, the calendar at one of three zoom levels, and the
+// next-holiday line. It hides on Escape and on focus loss unless pinned (WR-02 AC2, WR-14 AC1).
+// The 520 px height fits the 48 px day cells and a 6-row month (WR-02 AC1).
 import { AppInfo } from "app-info.slint";
 import { Converter, ConverterData } from "converter.slint";
 import { DayDetail, DayDetailData } from "day-detail.slint";
+import { LineIcon, Pill } from "controls.slint";
 import { FocusFrame } from "focus-frame.slint";
-import { MonthGrid, CellData } from "month-grid.slint";
+import { MonthGrid, CellData, ZoomCellData } from "month-grid.slint";
 import { SettingsData, SettingsPanel } from "settings.slint";
+import { LineEdit } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
 export struct PopupClockLine {
@@ -16,36 +19,94 @@ export struct PopupClockLine {
     time: string,
 }
 
+/// The day tooltip's lines (WR-14 AC2). A line with no data is left empty and not drawn.
+export struct TipData {
+    bs-long: string,
+    ad-long: string,
+    weekday: string,
+    tithi: string,
+    holiday: string,
+    events: int,
+}
+
+/// One row of the upcoming-holidays list (WR-14 AC4).
+export struct UpcomingData {
+    name: string,
+    date: string,
+    days: int,
+}
+
+/// Who draws the popup's corners (WR-02 AC5). Set by `ui_bridge::show_popup_at` from the window.
+export enum FrameStyle {
+    /// Square corners and a 1 px hairline border: Windows 10, X11, the snapshot tool.
+    square,
+    /// The OS rounds the window and draws its border and shadow (Windows 11).
+    system,
+    /// A 10 px radius drawn here, on a transparent window (macOS, Wayland).
+    rounded,
+}
+
 export component PopupWindow inherits Window {
     title: AppInfo.app-name;
     no-frame: true;
     always-on-top: true;
     width: 360px;
     height: 520px;
-    background: Theme.surface;
+    // The rounded style needs a transparent window, or the corners show a solid colour.
+    background: root.frame-style == FrameStyle.rounded ? transparent : Theme.surface;
     default-font-family: "Noto Sans";
+
+    in property <FrameStyle> frame-style: FrameStyle.square;
 
     in property <string> bs: "";
     in property <string> weekday: "";
     in property <string> ad: "";
     in property <[PopupClockLine]> clocks: [];
 
-    // Month grid state, filled by `ui_bridge::set_month`.
+    // Calendar state, filled by `ui_bridge::set_month` and `ui_bridge::set_zoom`.
+    /// 0 is the month view, 1 the year view, 2 the decade view (WR-03 AC6).
+    in property <int> zoom-mode: 0;
     in property <[CellData]> cells: [];
+    in property <[ZoomCellData]> zoom-cells: [];
     in property <[string]> weekday-headers: [];
-    in property <[string]> month-names: [];
-    in property <int> month-index: 0;
-    in property <int> year: 1901;
-    in property <string> year-text: "";
+    in property <string> nav-title: "";
+    /// The month view's title, `Ashoj 2083 · Sep/Oct 2026`, whatever level is shown.
     in property <string> month-title: "";
+    in property <int> cursor-index: -1;
     in property <bool> can-prev: false;
     in property <bool> can-next: false;
+    in property <bool> today-shown: false;
+    /// The snapshot tool shows the tooltip of this day without a pointer; -1 in the app.
+    in property <int> forced-tip-index: -1;
     in property <string> holiday-name: "";
     in property <int> holiday-days: -1;
     /// 13 px for Latin, 12 px for Devanagari (WR-03 AC2), set by `ui_bridge::set_month`.
     in property <length> ad-day-size: 13px;
     /// 11 px for Latin, 12 px for Devanagari, set by `ui_bridge::set_month`.
     in property <length> tithi-size: 12px;
+
+    // Pin (WR-14 AC1): while pinned, focus loss does not hide the popup. Not saved.
+    in-out property <bool> pinned: false;
+
+    // Go to date (WR-14 AC3): one field in the header.
+    in-out property <bool> goto-visible: false;
+    in-out property <string> goto-text: "";
+    in property <string> goto-error: "";
+
+    // Upcoming holidays (WR-14 AC4): the next-holiday line expands to a list.
+    in property <[UpcomingData]> upcoming: [];
+    in-out property <bool> upcoming-visible: false;
+
+    // Tooltips (WR-14 AC2, WR-10 AC2): the day card and the pill hint.
+    in property <TipData> tip;
+    in-out property <bool> tip-visible: false;
+    in-out property <string> pill-tip: "";
+    property <length> tip-x: 0px;
+    property <length> tip-y: 0px;
+    property <length> tip-w: 0px;
+    property <length> tip-h: 0px;
+    property <length> pill-tip-x: 0px;
+    property <length> pill-tip-y: 0px;
 
     // Day detail: an overlay inside the popup, never a new OS window (WR-04 AC1).
     in property <DayDetailData> detail;
@@ -60,19 +121,33 @@ export component PopupWindow inherits Window {
     in-out property <int> converter-tab: 0;
     in-out property <int> converter-direction: 0;
 
-    // Settings: the third inline overlay, opened from the tray menu.
+    // Settings: the third inline overlay, opened from the header, the tray menu or Ctrl+Comma.
     in-out property <bool> settings-visible: false;
     in-out property <SettingsData> settings-data;
     in-out property <string> settings-filter: "";
 
-    // Fired by the tray menu, the bar's menu and the grid.
+    // Fired by the tray menu, the bar's menu and the calendar.
     callback day-clicked(int);
-    callback prev-month();
-    callback next-month();
+    /// Previous (-1) or next (1) month, year or decade, by the zoom level (WR-03 AC6).
+    callback step(int);
     callback today();
-    callback month-picked(int);
-    callback year-picked(int);
-    callback wheel(int);
+    /// The title was clicked: month to year to decade.
+    callback title-clicked();
+    callback zoom-cell-clicked(int);
+    /// An arrow key moved the cursor: 0 left, 1 right, 2 up, 3 down (WR-10 AC2).
+    callback arrow(int);
+    /// Enter or Space on the grid's cursor.
+    callback activate-cursor();
+    /// Escape in a zoom view: steps back one level. Returns false in the month view.
+    callback escape-zoom() -> bool;
+    /// The pointer rested on a day; fills `tip` and returns whether there is one to show.
+    callback day-tip(int) -> bool;
+    callback goto-edited(string);
+    callback goto-submitted(string);
+    callback goto-closed();
+    callback upcoming-picked(int);
+    callback upcoming-closed();
+    callback settings-requested();
     // Fired by the day detail.
     callback detail-closed();
     callback copy-detail-bs();
@@ -102,26 +177,35 @@ export component PopupWindow inherits Window {
     in-out property <string> converter-focused: "";
     in-out property <string> settings-focused: "";
     in-out property <string> detail-focused: "";
+    in-out property <string> goto-focused: "";
+    in-out property <string> upcoming-focused: "";
     // A reopened panel starts with nothing focused, not the control focused when it last closed.
     changed converter-visible => { root.converter-focused = ""; }
     changed settings-visible => { root.settings-focused = ""; }
     changed detail-visible => { root.detail-focused = ""; }
+    changed goto-visible => { root.goto-focused = ""; }
+    changed upcoming-visible => { root.upcoming-focused = ""; }
+    // A tooltip belongs to the cell it was shown for; a new month or zoom level hides it.
+    changed nav-title => { root.tip-visible = false; }
 
     /// The focused control's stable name. Read by the interaction test; draws nothing.
     out property <string> focused-control:
         root.settings-visible ? root.settings-focused
         : root.converter-visible ? root.converter-focused
         : root.detail-visible ? root.detail-focused
-        : convert-scope.has-focus ? "convert"
+        : convert-pill.has-focus ? "convert"
+        : settings-pill.has-focus ? "settings"
+        : pin-pill.has-focus ? "pin"
+        : root.goto-focused != "" ? root.goto-focused
         : fs.has-focus ? ""
-        : grid.focused-control;
-
-    public function focus-next-year() { grid.focus-next-year(); }
+        : grid.focused-control != "" ? grid.focused-control
+        : holiday-line.has-focus ? "upcoming"
+        : root.upcoming-focused;
 
     /// Called by the winit focus filter. The FocusScope below also calls it when the root holds
-    /// focus, since window deactivation reaches only the focused item.
+    /// focus, since window deactivation reaches only the focused item. A pinned popup stays.
     public function window-deactivated() {
-        if (root.visible) {
+        if (root.visible && !root.pinned) {
             root.hidden();
             root.hide();
         }
@@ -136,6 +220,58 @@ export component PopupWindow inherits Window {
     // or that click would reopen it.
     callback hidden();
 
+    /// When a holiday falls: "today", "tomorrow" or "in N days".
+    pure function when(days: int) -> string {
+        return days == 0 ? @tr("today") : days == 1 ? @tr("tomorrow") : @tr("in {0} days", days);
+    }
+
+    function open-converter() {
+        root.converter-visible = true;
+        root.converter-opened();
+    }
+
+    function toggle-pin() {
+        root.pinned = !root.pinned;
+    }
+
+    function close-goto() {
+        root.goto-visible = false;
+        root.goto-text = "";
+        root.goto-closed();
+        convert-pill.focus();
+    }
+
+    /// Focus moves to the field one tick after it shows: Slint ignores a `focus()` made in the
+    /// same turn that makes the control visible.
+    property <bool> focus-goto-pending: false;
+    Timer {
+        interval: 1ms;
+        running: root.focus-goto-pending;
+        triggered => {
+            root.focus-goto-pending = false;
+            goto-input.focus();
+        }
+    }
+
+    function open-goto() {
+        root.upcoming-visible = false;
+        root.goto-visible = true;
+        root.focus-goto-pending = true;
+    }
+
+    /// Closing the popup also unpins it: the popup always opens unpinned (WR-14 AC1).
+    function close-popup() {
+        root.pinned = false;
+        root.hidden();
+        root.hide();
+    }
+
+    // The surface, with the radius when the markup rounds the window.
+    Rectangle {
+        background: Theme.surface;
+        border-radius: root.frame-style == FrameStyle.rounded ? 10px : 0px;
+    }
+
     fs := FocusScope {
         // The root receives initial focus for Escape and focus-loss, but Tab starts at Convert.
         focus-on-tab-navigation: false;
@@ -147,142 +283,433 @@ export component PopupWindow inherits Window {
             }
         }
         key-pressed(event) => {
+            // A key hides the day tooltip (WR-14 AC2).
+            root.tip-visible = false;
+            root.pill-tip = "";
             if (event.text == Key.Escape) {
-                // An overlay closes before the day detail, and the day detail before the popup.
+                // The open panels close first, innermost first: settings, converter, day detail,
+                // the Go to date field, the upcoming list; then a zoom view steps out; then the
+                // popup closes (WR-10 AC2, WR-04 AC3).
                 if (root.settings-visible) {
                     root.settings-visible = false;
                     root.settings-closed();
-                    convert-scope.focus();
+                    convert-pill.focus();
                     return accept;
                 }
                 if (root.converter-visible) {
                     root.converter-visible = false;
                     root.converter-closed();
-                    convert-scope.focus();
+                    convert-pill.focus();
                     return accept;
                 }
-                // WR-04 AC3: Escape closes the detail first, then the popup.
                 if (root.detail-visible) {
                     root.detail-visible = false;
                     root.detail-closed();
-                    convert-scope.focus();
+                    convert-pill.focus();
                     return accept;
                 }
-                root.hidden();
-                root.hide();
+                if (root.goto-visible) {
+                    root.close-goto();
+                    return accept;
+                }
+                if (root.upcoming-visible) {
+                    root.upcoming-visible = false;
+                    root.upcoming-closed();
+                    holiday-line.focus();
+                    return accept;
+                }
+                if (root.escape-zoom()) {
+                    return accept;
+                }
+                root.close-popup();
                 return accept;
             }
-            // WR-10 AC2: the grid shortcuts work wherever the focus is inside the popup.
-            if (event.text == Key.PageUp) {
-                grid.prev-month();
-                return accept;
-            }
-            if (event.text == Key.PageDown) {
-                grid.next-month();
-                return accept;
-            }
-            if (event.text == Key.Home) {
-                grid.today();
-                return accept;
+            // WR-10 AC2: these keys work wherever the focus is inside the popup, while no overlay
+            // covers it. A text field takes its own typing first, so the letters never reach here
+            // from the Go to date field.
+            if (root.base-interactive) {
+                if (event.text == Key.PageUp) {
+                    root.step(-1);
+                    return accept;
+                }
+                if (event.text == Key.PageDown) {
+                    root.step(1);
+                    return accept;
+                }
+                if (event.text == Key.Home) {
+                    root.today();
+                    return accept;
+                }
+                if (event.modifiers.control && !event.modifiers.alt && !event.modifiers.meta) {
+                    if (event.text == "g" || event.text == "G") {
+                        root.open-goto();
+                        return accept;
+                    }
+                    if (event.text == ",") {
+                        root.settings-requested();
+                        return accept;
+                    }
+                } else if (!event.modifiers.alt && !event.modifiers.meta) {
+                    if (event.text == "t" || event.text == "T") {
+                        root.today();
+                        return accept;
+                    }
+                    if (event.text == "c" || event.text == "C") {
+                        root.open-converter();
+                        return accept;
+                    }
+                    if (event.text == "p" || event.text == "P") {
+                        root.toggle-pin();
+                        return accept;
+                    }
+                }
             }
             reject
         }
 
-        // Content stacks from the top; the month grid takes the remaining height. An open
-        // overlay makes the base inert, so Tab cannot reach a control behind the scrim.
+        // Content stacks from the top; the calendar takes the remaining height, which keeps the
+        // holiday line at the bottom whether the month has 5 or 6 rows. An open overlay makes the
+        // base inert, so Tab cannot reach a control behind the scrim.
         VerticalLayout {
-            alignment: start;
             padding: 12px;
             spacing: 4px;
 
-            // Two lines: the weekday and AD date share one, so a 6-row month still fits the grid
-            // and the WR-03 AC8 holiday line in 520 px (WR-02 AC3 keeps every field). The
-            // converter sits at the end of that line at the 11 px caption size and adds no height.
+            // Line 1: the BS date at display size, and the three pill actions (WR-02 AC3).
             HorizontalLayout {
-                spacing: 4px;
+                spacing: 6px;
                 Text {
-                    text: root.weekday + " · " + root.ad;
-                    color: Theme.ink-muted;
-                    font-size: 13px;
+                    text: root.bs;
+                    color: Theme.ink;
+                    // 20 px, not the 22 px `display` step: with the three pills on the line,
+                    // 22 px elides the longest English date, "Baishakh 31, 2081".
+                    font-size: 20px;
                     horizontal-stretch: 1;
                     vertical-alignment: center;
+                    overflow: elide;
                 }
-                convert-scope := FocusScope {
-                    width: 52px;
-                    height: 16px;
+                convert-pill := Pill {
+                    font-size: 13px;
+                    text: @tr("Convert");
+                    label: @tr("Convert");
+                    tooltip: @tr("Convert (C)");
+                    has-icon: true;
                     enabled: root.base-interactive;
-                    accessible-role: button;
-                    accessible-label: @tr("Convert");
-                    accessible-action-default => {
-                        root.converter-visible = true;
-                        root.converter-opened();
+                    activated => { root.open-converter(); }
+                    tip-requested(text, x, y, w, h) => {
+                        root.pill-tip = text;
+                        root.pill-tip-x = x + w - 140px;
+                        root.pill-tip-y = y + h + 4px;
                     }
-                    Text {
-                        text: @tr("Convert");
-                        // The FocusScope above is the one accessible button; without this the
-                        // Text would expose the same label a second time.
-                        accessible-role: none;
-                        color: Theme.ink-muted;
-                        font-size: 11px;
-                        horizontal-alignment: right;
-                        vertical-alignment: center;
+                    tip-dismissed => { root.pill-tip = ""; }
+                    LineIcon {
+                        commands: "M 2 5 L 13 5 M 10 2 L 13 5 L 10 8 M 14 11 L 3 11 M 6 8 L 3 11 L 6 14";
+                        color: convert-pill.foreground;
                     }
-                    TouchArea {
-                        clicked => {
-                            root.converter-visible = true;
-                            root.converter-opened();
-                        }
+                }
+                settings-pill := Pill {
+                    width: 28px;
+                    label: @tr("Settings");
+                    tooltip: @tr("Settings (Ctrl+,)");
+                    has-icon: true;
+                    enabled: root.base-interactive;
+                    activated => { root.settings-requested(); }
+                    tip-requested(text, x, y, w, h) => {
+                        root.pill-tip = text;
+                        root.pill-tip-x = x + w - 140px;
+                        root.pill-tip-y = y + h + 4px;
                     }
-
-                    FocusFrame {
-                        width: 100%;
-                        height: 100%;
-                        focused: convert-scope.has-focus;
-                        thickness: 2px;
-                        radius: 3px;
+                    tip-dismissed => { root.pill-tip = ""; }
+                    LineIcon {
+                        commands: "M 2 4 L 14 4 M 2 8 L 14 8 M 2 12 L 14 12 M 5 2 L 5 6 M 11 6 L 11 10 M 6 10 L 6 14";
+                        color: settings-pill.foreground;
+                    }
+                }
+                pin-pill := Pill {
+                    width: 28px;
+                    filled: root.pinned;
+                    label: root.pinned ? @tr("Pin, pinned") : @tr("Pin, not pinned");
+                    tooltip: root.pinned ? @tr("Unpin (P)") : @tr("Pin (P)");
+                    has-icon: true;
+                    enabled: root.base-interactive;
+                    activated => { root.toggle-pin(); }
+                    tip-requested(text, x, y, w, h) => {
+                        root.pill-tip = text;
+                        root.pill-tip-x = x + w - 140px;
+                        root.pill-tip-y = y + h + 4px;
+                    }
+                    tip-dismissed => { root.pill-tip = ""; }
+                    LineIcon {
+                        commands: "M 6 2 L 10 2 L 10 6 L 12 9 L 4 9 L 6 6 Z M 8 9 L 8 14";
+                        color: pin-pill.foreground;
                     }
                 }
             }
-            Text { text: root.bs; color: Theme.ink; font-size: 22px; }
+
+            // Lines 2 and 3, or the Go to date field in their place. The block keeps one height,
+            // so opening the field moves nothing below it.
+            Rectangle {
+                height: 44px;
+
+                if !root.goto-visible: VerticalLayout {
+                    spacing: 4px;
+                    // The weekday and AD date share one line, so a 6-row month still fits the
+                    // grid and the holiday line in 520 px (WR-02 AC3 keeps every field).
+                    Text {
+                        text: root.weekday + " · " + root.ad;
+                        color: Theme.ink-muted;
+                        font-size: 13px;
+                        height: 18px;
+                        vertical-alignment: center;
+                    }
+                    // The local time and the extra zone's, on one line (widget-design §7).
+                    HorizontalLayout {
+                        height: 22px;
+                        spacing: 12px;
+                        for line in root.clocks: HorizontalLayout {
+                            spacing: 4px;
+                            Text {
+                                text: line.time;
+                                color: Theme.ink;
+                                font-size: 14px;
+                                vertical-alignment: center;
+                            }
+                            Text {
+                                text: line.is-local ? @tr("Local") : line.zone-city + " " + line.offset;
+                                color: Theme.ink-muted;
+                                font-size: 14px;
+                                vertical-alignment: center;
+                            }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                    }
+                }
+
+                // The field exists while hidden, so `open-goto` can focus it at once; a hidden
+                // control is not a Tab stop and has no accessible node.
+                Rectangle {
+                    visible: root.goto-visible;
+                    VerticalLayout {
+                        spacing: 2px;
+                        // The token ring replaces the standard widget's own focus frame (W7).
+                        FocusFrame {
+                            height: 28px;
+                            focused: goto-input.has-focus;
+                            radius: 4px;
+                            goto-input := LineEdit {
+                                width: 100%;
+                                height: 100%;
+                                enabled: root.goto-visible;
+                                placeholder-text: @tr("BS or AD date");
+                                accessible-label: @tr("Go to date");
+                                text <=> root.goto-text;
+                                edited(text) => { root.goto-edited(text); }
+                                accepted(text) => { root.goto-submitted(text); }
+                                changed has-focus => {
+                                    if (goto-input.has-focus) { root.goto-focused = "goto"; }
+                                }
+                            }
+                        }
+                        Text {
+                            text: root.goto-error;
+                            color: Theme.ink;
+                            font-size: 12px;
+                            height: 14px;
+                            overflow: elide;
+                        }
+                    }
+                }
+            }
 
             Rectangle { height: 1px; background: Theme.hairline; }
 
-            for line in root.clocks: HorizontalLayout {
-                spacing: 8px;
-                Text {
-                    text: line.is-local ? @tr("Local") : line.zone-city + " " + line.offset;
-                    color: Theme.ink-muted;
-                    font-size: 14px;
-                    horizontal-stretch: 1;
-                    vertical-alignment: center;
-                }
-                Text { text: line.time; color: Theme.ink; font-size: 16px; vertical-alignment: center; }
-            }
-
             grid := MonthGrid {
+                vertical-stretch: 1;
                 interactive: root.base-interactive;
+                zoom-mode: root.zoom-mode;
                 cells: root.cells;
+                zoom-cells: root.zoom-cells;
                 weekday-headers: root.weekday-headers;
-                month-names: root.month-names;
-                month-index: root.month-index;
-                year: root.year;
-                year-text: root.year-text;
-                title: root.month-title;
+                title: root.nav-title;
+                cursor-index: root.cursor-index;
                 can-prev: root.can-prev;
                 can-next: root.can-next;
-                holiday-name: root.holiday-name;
-                holiday-days: root.holiday-days;
+                today-shown: root.today-shown;
+                forced-tip-index: root.forced-tip-index;
                 ad-day-size: root.ad-day-size;
                 tithi-size: root.tithi-size;
 
-                day-clicked(index) => { root.day-clicked(index); }
-                prev-month => { root.prev-month(); }
-                next-month => { root.next-month(); }
+                step(delta) => { root.step(delta); }
+                title-clicked => { root.title-clicked(); }
                 today => { root.today(); }
-                month-picked(index) => { root.month-picked(index); }
-                year-picked(year) => { root.year-picked(year); }
-                wheel(delta) => { root.wheel(delta); }
+                cell-clicked(index) => { root.day-clicked(index); }
+                zoom-cell-clicked(index) => { root.zoom-cell-clicked(index); }
+                arrow(direction) => { root.arrow(direction); }
+                activate => { root.activate-cursor(); }
+                day-tip-requested(index, x, y, w, h) => {
+                    if (root.day-tip(index)) {
+                        root.tip-x = x;
+                        root.tip-y = y;
+                        root.tip-w = w;
+                        root.tip-h = h;
+                        root.tip-visible = true;
+                    }
+                }
+                tip-dismissed => { root.tip-visible = false; }
             }
+
+            // WR-03 AC8, WR-14 AC4. The sentence is built here with @tr, never in Rust. The line
+            // is a button: it expands the list of the next five holidays.
+            holiday-line := FocusScope {
+                height: 28px;
+                visible: root.holiday-days >= 0;
+                enabled: root.base-interactive && root.holiday-days >= 0;
+                focus-on-tab-navigation: root.base-interactive && root.holiday-days >= 0;
+                accessible-role: button;
+                accessible-label: @tr("Upcoming holidays");
+                accessible-expandable: true;
+                accessible-expanded: root.upcoming-visible;
+                accessible-action-default => { root.upcoming-visible = !root.upcoming-visible; }
+                accessible-action-expand => { root.upcoming-visible = true; }
+                key-pressed(event) => {
+                    if (event.text == Key.Return || event.text == " ") {
+                        root.upcoming-visible = !root.upcoming-visible;
+                        return accept;
+                    }
+                    reject
+                }
+                TouchArea {
+                    clicked => {
+                        holiday-line.focus();
+                        root.upcoming-visible = !root.upcoming-visible;
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 6px;
+                    alignment: center;
+                    Text {
+                        color: Theme.ink-muted;
+                        font-size: 12px;
+                        vertical-alignment: center;
+                        accessible-role: none;
+                        text: root.holiday-name == ""
+                            ? (root.holiday-days == 0
+                                ? @tr("Public holiday today")
+                                : root.holiday-days == 1
+                                    ? @tr("Public holiday tomorrow")
+                                    : @tr("Public holiday in {0} days", root.holiday-days))
+                            : (root.holiday-days == 0
+                                ? @tr("Next holiday: {0} today", root.holiday-name)
+                                : root.holiday-days == 1
+                                    ? @tr("Next holiday: {0} tomorrow", root.holiday-name)
+                                    : @tr("Next holiday: {0} in {1} days", root.holiday-name, root.holiday-days));
+                    }
+                    LineIcon {
+                        y: (parent.height - self.height) / 2;
+                        width: 12px;
+                        height: 12px;
+                        commands: root.upcoming-visible ? "M 3 10 L 8 5 L 13 10" : "M 3 6 L 8 11 L 13 6";
+                        color: Theme.ink-muted;
+                    }
+                }
+                FocusFrame {
+                    width: 100%;
+                    height: 100%;
+                    focused: holiday-line.has-focus;
+                    thickness: 2px;
+                    radius: 6px;
+                }
+            }
+        }
+
+        // The upcoming holidays: a card over the bottom of the calendar, above the holiday line
+        // (WR-14 AC4). Each row opens its month and day detail.
+        if root.upcoming-visible: Rectangle {
+            x: 12px;
+            width: parent.width - 24px;
+            height: upcoming-list.preferred-height + 8px;
+            y: parent.height - self.height - 12px - 28px - 4px;
+            background: Theme.surface-raised;
+            border-radius: 6px;
+            border-width: 1px;
+            border-color: Theme.hairline;
+            // Swallow clicks on the card.
+            TouchArea {}
+            upcoming-list := VerticalLayout {
+                padding: 4px;
+                for item[i] in root.upcoming: FocusScope {
+                    height: 40px;
+                    focus-on-tab-navigation: true;
+                    accessible-role: button;
+                    accessible-label: (item.name == "" ? @tr("Public holiday") : item.name)
+                        + ", " + item.date + ", " + root.when(item.days);
+                    accessible-action-default => { root.upcoming-picked(i); }
+                    key-pressed(event) => {
+                        if (event.text == Key.Return || event.text == " ") {
+                            root.upcoming-picked(i);
+                            return accept;
+                        }
+                        reject
+                    }
+                    focus-gained(_) => { root.upcoming-focused = "upcoming " + (i + 1); }
+                    Rectangle {
+                        border-radius: 6px;
+                        background: row-touch.has-hover ? Theme.hairline : transparent;
+                    }
+                    row-touch := TouchArea {
+                        clicked => { root.upcoming-picked(i); }
+                    }
+                    HorizontalLayout {
+                        padding-left: 6px;
+                        padding-right: 6px;
+                        spacing: 8px;
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            alignment: center;
+                            Text {
+                                text: item.name == "" ? @tr("Public holiday") : item.name;
+                                color: Theme.ink;
+                                font-size: 13px;
+                                overflow: elide;
+                                accessible-role: none;
+                            }
+                            Text {
+                                text: item.date;
+                                color: Theme.ink-muted;
+                                font-size: 12px;
+                                accessible-role: none;
+                            }
+                        }
+                        Text {
+                            text: root.when(item.days);
+                            color: Theme.ink-muted;
+                            font-size: 12px;
+                            vertical-alignment: center;
+                            accessible-role: none;
+                        }
+                    }
+                    FocusFrame {
+                        width: 100%;
+                        height: 100%;
+                        focused: parent.has-focus;
+                        thickness: 2px;
+                        radius: 6px;
+                    }
+                }
+            }
+        }
+
+        // The hairline frame, above the content so a day cell cannot cover it. The OS draws its own
+        // border on Windows 11, so only the other two styles need this.
+        Rectangle {
+            x: 0;
+            y: 0;
+            width: 100%;
+            height: 100%;
+            visible: root.frame-style != FrameStyle.system;
+            border-width: 1px;
+            border-color: Theme.hairline;
+            border-radius: root.frame-style == FrameStyle.rounded ? 10px : 0px;
+            background: transparent;
         }
 
         // Day detail overlay (WR-04): the scrim closes only the detail; the card sits above it.
@@ -298,12 +725,12 @@ export component PopupWindow inherits Window {
                 accessible-action-default => {
                     root.detail-visible = false;
                     root.detail-closed();
-                    convert-scope.focus();
+                    convert-pill.focus();
                 }
                 clicked => {
                     root.detail-visible = false;
                     root.detail-closed();
-                    convert-scope.focus();
+                    convert-pill.focus();
                 }
             }
             DayDetail {
@@ -329,12 +756,12 @@ export component PopupWindow inherits Window {
                 accessible-action-default => {
                     root.converter-visible = false;
                     root.converter-closed();
-                    convert-scope.focus();
+                    convert-pill.focus();
                 }
                 clicked => {
                     root.converter-visible = false;
                     root.converter-closed();
-                    convert-scope.focus();
+                    convert-pill.focus();
                 }
             }
             Converter {
@@ -352,7 +779,7 @@ export component PopupWindow inherits Window {
                 closed => {
                     root.converter-visible = false;
                     root.converter-closed();
-                    convert-scope.focus();
+                    convert-pill.focus();
                 }
             }
         }
@@ -370,12 +797,12 @@ export component PopupWindow inherits Window {
                 accessible-action-default => {
                     root.settings-visible = false;
                     root.settings-closed();
-                    convert-scope.focus();
+                    convert-pill.focus();
                 }
                 clicked => {
                     root.settings-visible = false;
                     root.settings-closed();
-                    convert-scope.focus();
+                    convert-pill.focus();
                 }
             }
             SettingsPanel {
@@ -396,8 +823,78 @@ export component PopupWindow inherits Window {
                 closed => {
                     root.settings-visible = false;
                     root.settings-closed();
-                    convert-scope.focus();
+                    convert-pill.focus();
                 }
+            }
+        }
+
+        // The day tooltip (WR-14 AC2): a `surface-raised` card with a 6 px radius, above or below
+        // the day so it never covers it, and inside the popup. Drawn last, so it sits on top.
+        if root.tip-visible: tip-card := Rectangle {
+            width: 200px;
+            height: tip-lines.preferred-height + 16px;
+            x: max(4px, min(root.tip-x + root.tip-w / 2 - self.width / 2, root.width - self.width - 4px));
+            y: root.tip-y - self.height - 4px >= 4px
+                ? root.tip-y - self.height - 4px
+                : root.tip-y + root.tip-h + 4px;
+            background: Theme.surface-raised;
+            border-radius: 6px;
+            border-width: 1px;
+            border-color: Theme.hairline;
+            tip-lines := VerticalLayout {
+                padding: 8px;
+                spacing: 2px;
+                Text { text: root.tip.bs-long; color: Theme.ink; font-size: 13px; accessible-role: none; }
+                if root.tip.ad-long != "": Text {
+                    text: root.tip.ad-long;
+                    color: Theme.ink-muted;
+                    font-size: 13px;
+                    accessible-role: none;
+                }
+                if root.tip.weekday != "": Text {
+                    text: root.tip.weekday;
+                    color: Theme.ink-muted;
+                    font-size: 13px;
+                    accessible-role: none;
+                }
+                if root.tip.tithi != "": Text {
+                    text: root.tip.tithi;
+                    color: Theme.ink-muted;
+                    font-size: 13px;
+                    accessible-role: none;
+                }
+                if root.tip.holiday != "": Text {
+                    text: root.tip.holiday;
+                    color: Theme.sindoor;
+                    font-size: 13px;
+                    accessible-role: none;
+                }
+                if root.tip.events > 0: Text {
+                    text: @tr("Events: {0}", root.tip.events);
+                    color: Theme.ink-muted;
+                    font-size: 13px;
+                    accessible-role: none;
+                }
+            }
+        }
+
+        // A pill's tooltip names its action and key (WR-10 AC2).
+        if root.pill-tip != "": Rectangle {
+            width: pill-tip-text.preferred-width + 16px;
+            height: 24px;
+            x: max(4px, min(root.pill-tip-x + 140px - self.width, root.width - self.width - 4px));
+            y: root.pill-tip-y;
+            background: Theme.surface-raised;
+            border-radius: 6px;
+            border-width: 1px;
+            border-color: Theme.hairline;
+            pill-tip-text := Text {
+                text: root.pill-tip;
+                color: Theme.ink;
+                font-size: 13px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                accessible-role: none;
             }
         }
     }

@@ -38,6 +38,24 @@ pub fn next_holiday(from: NepaliDate, lang: Lang) -> Option<NextHoliday> {
     None
 }
 
+/// The next `limit` public holidays on or after `from`, within the patro data (WR-14 AC4). Unlike
+/// `next_holiday` there is no 400-day cut-off: the list ends where the data does.
+#[must_use]
+pub fn upcoming_holidays(from: NepaliDate, lang: Lang, limit: usize) -> Vec<NextHoliday> {
+    patro::public_holidays()
+        .filter(|date| *date >= from)
+        .take(limit)
+        .map(|date| NextHoliday {
+            date,
+            name: patro::info(date)
+                .events()
+                .next()
+                .map(|event| event.name(lang)),
+            days_away: u32::try_from(from.days_until(date)).unwrap_or(0),
+        })
+        .collect()
+}
+
 /// The name of `date`'s public holiday: its first event, as `next_holiday` names a holiday. `None`
 /// when the day is not a public holiday, or the holiday has no events.
 #[must_use]
@@ -62,6 +80,47 @@ mod tests {
         assert_eq!(holiday_name(date(2081, 1, 1), Lang::En), Some("New Year"));
         assert_eq!(holiday_name(date(2081, 1, 2), Lang::En), None);
         assert_eq!(holiday_name(date(2090, 1, 1), Lang::En), None);
+    }
+
+    #[test]
+    fn wr14_ac4_the_upcoming_list_has_five_holidays_in_date_order() {
+        let list = upcoming_holidays(date(2081, 1, 1), Lang::En, 5);
+        assert_eq!(list.len(), 5);
+        assert_eq!(list[0].date, date(2081, 1, 1));
+        assert_eq!(list[0].days_away, 0);
+        assert_eq!(list[0].name, Some("New Year"));
+        assert_eq!(list[1].date, date(2081, 1, 5));
+        assert_eq!(list[1].days_away, 4);
+        assert!(
+            list.windows(2).all(|pair| pair[0].date < pair[1].date),
+            "ascending dates"
+        );
+        assert!(
+            list.iter().all(|holiday| holiday.date >= date(2081, 1, 1)),
+            "nothing before today"
+        );
+    }
+
+    #[test]
+    fn wr14_ac4_the_upcoming_list_is_shorter_near_the_end_of_the_data_and_empty_past_it() {
+        let coverage = patro::coverage();
+        let last = patro::public_holidays()
+            .next_back()
+            .expect("a last holiday");
+        let near_end = upcoming_holidays(last, Lang::En, 5);
+        assert_eq!(near_end.len(), 1, "only the last holiday is left");
+        assert_eq!(near_end[0].date, last);
+        assert!(last <= coverage.end());
+        assert!(upcoming_holidays(date(2090, 1, 1), Lang::En, 5).is_empty());
+        assert!(upcoming_holidays(date(2081, 1, 1), Lang::En, 0).is_empty());
+    }
+
+    #[test]
+    fn wr14_ac4_names_follow_the_language() {
+        let en = upcoming_holidays(date(2081, 1, 1), Lang::En, 1);
+        let ne = upcoming_holidays(date(2081, 1, 1), Lang::Ne, 1);
+        assert_eq!(en[0].name, Some("New Year"));
+        assert_eq!(ne[0].name, Some("नयाँ वर्ष"));
     }
 
     #[test]
