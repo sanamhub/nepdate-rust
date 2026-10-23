@@ -44,6 +44,8 @@ export component Pill inherits Rectangle {
     out property <bool> has-focus: scope.has-focus;
 
     callback activated();
+    /// The pill gained keyboard focus, for the Settings window's focus report and scrolling.
+    callback focused();
     /// `pill.focus()` moves keyboard focus here; the popup returns to Convert when an overlay
     /// closes.
     forward-focus: scope;
@@ -85,6 +87,7 @@ export component Pill inherits Rectangle {
                 root.activated();
             }
         }
+        focus-gained(_) => { root.focused(); }
         key-pressed(event) => {
             if (event.text == Key.Return || event.text == " ") {
                 root.activated();
@@ -140,6 +143,162 @@ export component Pill inherits Rectangle {
             focused: scope.has-focus;
             thickness: 2px;
             radius: root.pill-size / 2;
+        }
+    }
+}
+
+/// An on/off switch (widget-design §8): a 36 by 20 px pill, `ink` track with a `surface` knob when
+/// on, `hairline` track with an `ink-muted` knob when off. The owner flips `checked` in answer to
+/// `toggled`, so the state lives in one place.
+export component Toggle inherits Rectangle {
+    in property <string> label;
+    in property <bool> checked;
+    in property <bool> enabled: true;
+    out property <bool> has-focus: scope.has-focus;
+
+    /// The user asked to flip it, by click, key or assistive technology.
+    callback toggled();
+    callback focused();
+    forward-focus: scope;
+
+    width: 36px;
+    height: 20px;
+    border-radius: 10px;
+    background: root.checked ? Theme.ink : Theme.hairline;
+    opacity: root.enabled ? 1.0 : 0.4;
+
+    scope := FocusScope {
+        width: 100%;
+        height: 100%;
+        enabled: root.enabled;
+        focus-on-tab-navigation: root.enabled;
+        accessible-role: switch;
+        accessible-label: root.label;
+        accessible-checkable: true;
+        accessible-checked: root.checked;
+        accessible-enabled: root.enabled;
+        accessible-action-default => {
+            if (root.enabled) {
+                root.toggled();
+            }
+        }
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == " ") {
+                root.toggled();
+                return accept;
+            }
+            reject
+        }
+        focus-gained(_) => { root.focused(); }
+
+        Rectangle {
+            x: root.checked ? parent.width - self.width - 2px : 2px;
+            y: 2px;
+            width: 16px;
+            height: 16px;
+            border-radius: 8px;
+            background: root.checked ? Theme.surface : Theme.ink-muted;
+        }
+        TouchArea {
+            enabled: root.enabled;
+            mouse-cursor: pointer;
+            clicked => {
+                scope.focus();
+                root.toggled();
+            }
+        }
+        FocusFrame {
+            width: 100%;
+            height: 100%;
+            focused: scope.has-focus;
+            thickness: 2px;
+            radius: 10px;
+        }
+    }
+}
+
+/// A segmented control for two or three values (widget-design §8): a `surface-raised` pill track,
+/// the selected segment filled with `ink` and its text in `surface`. The control is one Tab stop;
+/// the arrow keys move the choice, like a radio group. Each segment has an accessible name of its
+/// own, so an assistive technology can pick one directly.
+export component Segmented inherits Rectangle {
+    in property <[string]> options;
+    in property <int> selected;
+    /// The group's accessible name.
+    in property <string> label;
+    in property <length> segment-width: 84px;
+    out property <bool> has-focus: scope.has-focus;
+
+    callback picked(int);
+    callback focused();
+    forward-focus: scope;
+
+    height: 28px;
+    width: root.options.length * root.segment-width;
+    border-radius: 14px;
+    background: Theme.surface-raised;
+    border-width: 1px;
+    border-color: Theme.hairline;
+
+    scope := FocusScope {
+        width: 100%;
+        height: 100%;
+        accessible-role: tab-list;
+        accessible-label: root.label;
+        focus-gained(_) => { root.focused(); }
+        key-pressed(event) => {
+            if ((event.text == Key.LeftArrow || event.text == Key.UpArrow) && root.selected > 0) {
+                root.picked(root.selected - 1);
+                return accept;
+            }
+            if ((event.text == Key.RightArrow || event.text == Key.DownArrow)
+                && root.selected < root.options.length - 1) {
+                root.picked(root.selected + 1);
+                return accept;
+            }
+            if (event.text == Key.Home && root.selected != 0) {
+                root.picked(0);
+                return accept;
+            }
+            if (event.text == Key.End && root.selected != root.options.length - 1) {
+                root.picked(root.options.length - 1);
+                return accept;
+            }
+            reject
+        }
+
+        HorizontalLayout {
+            for option[i] in root.options: Rectangle {
+                border-radius: 14px;
+                background: i == root.selected ? Theme.ink : transparent;
+                accessible-role: tab;
+                accessible-label: option;
+                accessible-checkable: true;
+                accessible-checked: i == root.selected;
+                accessible-action-default => { root.picked(i); }
+                Text {
+                    text: option;
+                    color: i == root.selected ? Theme.surface : Theme.ink;
+                    font-size: 13px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    accessible-role: none;
+                }
+                TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        scope.focus();
+                        root.picked(i);
+                    }
+                }
+            }
+        }
+        FocusFrame {
+            width: 100%;
+            height: 100%;
+            focused: scope.has-focus;
+            thickness: 2px;
+            radius: 14px;
         }
     }
 }

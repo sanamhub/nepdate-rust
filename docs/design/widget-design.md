@@ -139,7 +139,8 @@ shape with the same radius.
 
 ## 8. Settings window (WR-06)
 
-420 × 560 logical px, one left-aligned column, scrolls when needed.
+420 × 560 logical px of content in the system's window frame (title `MitiBar Settings`, the close
+button), one left-aligned column that scrolls when it needs more room.
 
 ```
 Settings                                  Saved ✓
@@ -151,29 +152,40 @@ General
 Clock
   24-hour clock                         [──○]
   Show seconds                          [──○]
-  Extra clock       [ Singapore              ⌄ ]
+  Extra clock       [ Asia/Singapore         ]
 Bar
   Show bar                              [●──]
   Lock position                         [──○]
-  Top line     (Thu ×) (Time ×) (Zone ×) (+ Add field)
-  Bottom line  (BS date ×) (AD short ×)  (+ Add field)
-  Reset to default      Reset position
+  Top line                         (+ Add field)
+  (Weekday ×) (Time ×) (Extra clock time ×)
+  Bottom line                      (+ Add field)
+  (BS date ×) (AD date, short ×)
+  (Reset to default) (Reset position)
 Shortcut
-  Open MitiBar      [ Win+Shift+N ]  Clear  Reset
+  Open MitiBar
+  [ Win+Shift+N                 ] (Clear) (Reset)
 About
-  MitiBar 0.1.0 · MIT license · Third-party notices
+  MitiBar 0.1.0 · MIT license
+  Third-party notices: Slint, the fonts, NepDate
 ```
 
 - Section headings are `title`, sentence case, no rules between rows; one `hairline` divider
   under the header only.
 - Rows: label left in `ink`, control right-aligned. Help text, when a row needs it, is `body`
-  `ink-muted` under the label.
+  `ink-muted` under the label. The line editor and the shortcut field are wider than a row, so
+  their label sits above them in `body` `ink-muted`.
 - Segmented control: a `surface-raised` pill track, the selected segment filled with `ink` and its
-  text in `surface`.
+  text in `surface`. It is one Tab stop; the arrow keys move the choice.
 - Switch: 36 × 20 px pill. On is an `ink` track with a `surface` knob; off is a `hairline` track
   with an `ink-muted` knob. No other colour: `sindoor` stays reserved for the calendar.
-- Chips: full radius, `surface-raised`, `hairline` border, `body` text, a remove button inside.
+- Chips: full radius, `surface-raised`, `hairline` border, `body` text, a remove button inside. A
+  focused chip also shows its two arrow buttons. A line with more chips than fit scrolls sideways,
+  and the focused chip is kept in view. "Add field" lists the unused fields under its line.
+- The extra clock is one field: its drop-down is a `surface-raised` card of 28 px rows under it,
+  6 px radius, the highlighted row filled with `hairline`.
+- The shortcut field shows the combination; while it has focus it says `Press the keys`.
 - The `Saved` note is `body` `ink-muted` with a check mark; the failure note is `ink`.
+- A focused control is scrolled into view, with 8 px to spare.
 
 ## 9. Principles
 

@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::app::bar::{BarField, DEFAULT_BOTTOM, DEFAULT_TOP, ids};
 use crate::app::bar_place::Saved;
+use crate::app::shortcut::Combo;
 
 /// The schema this build reads and writes (WR-06).
 const SCHEMA: u32 = 2;
@@ -35,6 +36,8 @@ pub struct Settings {
     /// The bar's top-left, in logical px from that monitor's top-left.
     pub bar_x: i32,
     pub bar_y: i32,
+    /// The global shortcut as text, such as `Win+Shift+N`; empty means none (WR-13).
+    pub shortcut: String,
 }
 
 /// What `Settings::from_toml` read, and whether the file needs writing back.
@@ -97,6 +100,11 @@ impl Settings {
         self.bar_monitor.clone_from(&saved.monitor);
         self.bar_x = saved.x;
         self.bar_y = saved.y;
+    }
+
+    /// The global shortcut, or `None` when the setting is empty or not a valid combination.
+    pub fn shortcut_combo(&self) -> Option<Combo> {
+        Combo::parse(&self.shortcut).filter(|combo| combo.check().is_ok())
     }
 
     /// The active language. Anything other than `"ne"` is English (WR-06 AC2 fallback).
@@ -163,6 +171,13 @@ impl Settings {
                 *line = default;
             }
         }
+        if !self.shortcut.is_empty() && self.shortcut_combo().is_none() {
+            warnings.push(format!(
+                "shortcut {:?} is not a valid combination; using {}",
+                self.shortcut, defaults.shortcut
+            ));
+            self.shortcut.clone_from(&defaults.shortcut);
+        }
         if lines_conflict(&self.bar_top, &self.bar_bottom) {
             warnings.push(
                 "bar_top and bar_bottom repeat a field or are both empty; using the defaults"
@@ -202,6 +217,7 @@ impl Default for Settings {
             bar_monitor: String::new(),
             bar_x: 0,
             bar_y: 0,
+            shortcut: Combo::DEFAULT.to_string(),
         }
     }
 }
@@ -230,6 +246,10 @@ mod tests {
         assert_eq!(s.bar_bottom, strings(&["bs_date", "ad_short"]));
         assert_eq!(s.bar_monitor, "");
         assert_eq!((s.bar_x, s.bar_y), (0, 0));
+        assert_eq!(
+            s.shortcut,
+            format!("{}+Shift+N", crate::app::shortcut::META)
+        );
     }
 
     #[test]
@@ -279,6 +299,48 @@ mod tests {
         let warnings = s.validate();
         assert_eq!(warnings.len(), 5, "{warnings:?}");
         assert_eq!(s, Settings::default());
+    }
+
+    #[test]
+    fn wr06_ac2_a_shortcut_that_is_not_valid_takes_the_default() {
+        for bad in [
+            "Ctrl+Alt+N",
+            "N",
+            "Ctrl+N",
+            "Win+Hyper+N",
+            "Win+",
+            "Win+F13",
+        ] {
+            let mut s = Settings {
+                shortcut: bad.to_owned(),
+                ..Settings::default()
+            };
+            let warnings = s.validate();
+            assert_eq!(warnings.len(), 1, "{bad}: {warnings:?}");
+            assert!(warnings[0].contains("shortcut"), "{warnings:?}");
+            assert_eq!(s.shortcut, Settings::default().shortcut, "{bad}");
+        }
+    }
+
+    #[test]
+    fn wr06_ac2_an_empty_shortcut_is_none_and_a_valid_one_is_kept() {
+        let mut none = Settings {
+            shortcut: String::new(),
+            ..Settings::default()
+        };
+        assert!(none.validate().is_empty());
+        assert_eq!(none.shortcut_combo(), None);
+
+        let mut chosen = Settings {
+            shortcut: "Ctrl+Shift+K".to_owned(),
+            ..Settings::default()
+        };
+        assert!(chosen.validate().is_empty());
+        assert_eq!(chosen.shortcut, "Ctrl+Shift+K");
+        assert_eq!(
+            chosen.shortcut_combo().map(|combo| combo.to_string()),
+            Some("Ctrl+Shift+K".to_owned())
+        );
     }
 
     #[test]
@@ -410,6 +472,7 @@ mod tests {
             bar_monitor: r"\\.\DISPLAY2".to_owned(),
             bar_x: -40,
             bar_y: 12,
+            shortcut: "Alt+Shift+F5".to_owned(),
             ..Settings::default()
         };
         let text = toml::to_string_pretty(&s).expect("serialize");

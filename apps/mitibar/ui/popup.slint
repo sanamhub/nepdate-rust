@@ -8,7 +8,6 @@ import { DayDetail, DayDetailData } from "day-detail.slint";
 import { LineIcon, Pill, TooltipTiming } from "controls.slint";
 import { FocusFrame } from "focus-frame.slint";
 import { MonthGrid, CellData, ZoomCellData } from "month-grid.slint";
-import { SettingsData, SettingsPanel } from "settings.slint";
 import { LineEdit } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
@@ -122,11 +121,6 @@ export component PopupWindow inherits Window {
     in-out property <int> converter-tab: 0;
     in-out property <int> converter-direction: 0;
 
-    // Settings: the third inline overlay, opened from the header, the tray menu or Ctrl+Comma.
-    in-out property <bool> settings-visible: false;
-    in-out property <SettingsData> settings-data;
-    in-out property <string> settings-filter: "";
-
     // Fired by the tray menu, the bar's menu and the calendar.
     callback day-clicked(int);
     /// Previous (-1) or next (1) month, year or decade, by the zoom level (WR-03 AC6).
@@ -148,6 +142,7 @@ export component PopupWindow inherits Window {
     callback goto-closed();
     callback upcoming-picked(int);
     callback upcoming-closed();
+    /// The Settings pill and Ctrl+Comma: Rust opens the Settings window (WR-06 AC1).
     callback settings-requested();
     // Fired by the day detail.
     callback detail-closed();
@@ -158,31 +153,17 @@ export component PopupWindow inherits Window {
     callback converter-closed();
     callback converter-edited(string, int);
     callback converter-days-edited(string, string);
-    // Fired by the settings panel.
-    callback settings-closed();
-    callback settings-language(int);
-    callback settings-theme(int);
-    callback settings-clock(bool);
-    callback settings-seconds(bool);
-    callback settings-zone(string);
-    callback settings-launch(bool);
-    callback settings-bar(bool);
-    callback settings-reset-bar();
-    callback settings-filter-changed(string);
 
     /// False while an overlay is open, so the base controls leave the Tab cycle.
-    out property <bool> base-interactive:
-        !(root.detail-visible || root.converter-visible || root.settings-visible);
+    out property <bool> base-interactive: !(root.detail-visible || root.converter-visible);
     /// Set by each overlay when one of its controls gains focus. Kept per overlay so a value
     /// from a closed panel cannot leak into the next one.
     in-out property <string> converter-focused: "";
-    in-out property <string> settings-focused: "";
     in-out property <string> detail-focused: "";
     in-out property <string> goto-focused: "";
     in-out property <string> upcoming-focused: "";
     // A reopened panel starts with nothing focused, not the control focused when it last closed.
     changed converter-visible => { root.converter-focused = ""; }
-    changed settings-visible => { root.settings-focused = ""; }
     changed detail-visible => { root.detail-focused = ""; }
     // Only on close: the open path focuses the field from a timer that can run before this handler.
     changed goto-visible => {
@@ -194,8 +175,7 @@ export component PopupWindow inherits Window {
 
     /// The focused control's stable name. Read by the interaction test; draws nothing.
     out property <string> focused-control:
-        root.settings-visible ? root.settings-focused
-        : root.converter-visible ? root.converter-focused
+        root.converter-visible ? root.converter-focused
         : root.detail-visible ? root.detail-focused
         : convert-pill.has-focus ? "convert"
         : settings-pill.has-focus ? "settings"
@@ -207,13 +187,28 @@ export component PopupWindow inherits Window {
         : root.upcoming-focused;
 
     /// Called by the winit focus filter. The FocusScope below also calls it when the root holds
-    /// focus, since window deactivation reaches only the focused item. A pinned popup stays.
+    /// focus, since window deactivation reaches only the focused item. A pinned popup stays. Rust
+    /// decides what the loss means, because focus moving to the Settings window is not one
+    /// (WR-02 AC2).
     public function window-deactivated() {
-        if (root.visible && !root.pinned) {
-            root.hidden();
-            root.hide();
+        if (root.visible) {
+            root.deactivated();
         }
     }
+
+    /// Called by the winit focus filter when the popup gains the OS focus.
+    public function window-activated() {
+        root.activated();
+    }
+
+    /// Hides the popup: the end of a focus loss that counts.
+    public function dismiss() {
+        root.hidden();
+        root.hide();
+    }
+
+    callback deactivated();
+    callback activated();
 
     // Forward the window focus to the FocusScope so it receives key events and its focus-lost
     // fires when the popup is deactivated (WR-02 AC2).
@@ -291,15 +286,9 @@ export component PopupWindow inherits Window {
             root.tip-visible = false;
             root.pill-tip = "";
             if (event.text == Key.Escape) {
-                // The open panels close first, innermost first: settings, converter, day detail,
-                // the Go to date field, the upcoming list; then a zoom view steps out; then the
-                // popup closes (WR-10 AC2, WR-04 AC3).
-                if (root.settings-visible) {
-                    root.settings-visible = false;
-                    root.settings-closed();
-                    convert-pill.focus();
-                    return accept;
-                }
+                // The open panels close first, innermost first: converter, day detail, the
+                // Go to date field, the upcoming list; then a zoom view steps out; then the
+                // popup closes (WR-10 AC2, WR-04 AC3). Settings is a window of its own.
                 if (root.converter-visible) {
                     root.converter-visible = false;
                     root.converter-closed();
@@ -839,50 +828,6 @@ export component PopupWindow inherits Window {
                 closed => {
                     root.converter-visible = false;
                     root.converter-closed();
-                    convert-pill.focus();
-                }
-            }
-        }
-
-        // Settings overlay: its scrim closes only the settings panel.
-        if root.settings-visible: Rectangle {
-            x: 0;
-            y: 0;
-            width: 100%;
-            height: 100%;
-            background: #40000000;
-            TouchArea {
-                accessible-role: button;
-                accessible-label: @tr("Close settings");
-                accessible-action-default => {
-                    root.settings-visible = false;
-                    root.settings-closed();
-                    convert-pill.focus();
-                }
-                clicked => {
-                    root.settings-visible = false;
-                    root.settings-closed();
-                    convert-pill.focus();
-                }
-            }
-            SettingsPanel {
-                x: (parent.width - self.width) / 2;
-                y: (parent.height - self.height) / 2;
-                data: root.settings-data;
-                zone-filter <=> root.settings-filter;
-                language-picked(index) => { root.settings-language(index); }
-                theme-picked(index) => { root.settings-theme(index); }
-                clock-changed(value) => { root.settings-clock(value); }
-                seconds-changed(value) => { root.settings-seconds(value); }
-                zone-picked(zone) => { root.settings-zone(zone); }
-                launch-changed(value) => { root.settings-launch(value); }
-                bar-changed(value) => { root.settings-bar(value); }
-                reset-bar => { root.settings-reset-bar(); }
-                filter-zones(text) => { root.settings-filter-changed(text); }
-                control-focused(name) => { root.settings-focused = name; }
-                closed => {
-                    root.settings-visible = false;
-                    root.settings-closed();
                     convert-pill.focus();
                 }
             }

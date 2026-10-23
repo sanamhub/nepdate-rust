@@ -2,21 +2,24 @@
 //! converts between the two, including popup placement and the bar anchor.
 
 use nepdate::{DateOrder, Lang, LongDate, Month, NepaliDate, Separator};
-use slint::ComponentHandle;
+use slint::{ComponentHandle, Model};
 
-use crate::app::bar_place::{self, Size, to_physical};
+use crate::app::bar_place::{self, Monitor, Point, Rect, Size, to_physical};
 use crate::app::clock::Header;
 use crate::app::converter::ConvertOutcome;
 use crate::app::format;
 use crate::app::holidays::NextHoliday;
+use crate::app::line_editor;
 use crate::app::month_view::{Cell, DayDetail, DayTooltip, MonthView};
 use crate::app::settings::Settings;
+use crate::app::settings_place;
+use crate::app::shortcut::{Key, Pressed};
 use crate::app::zoom::{Zoom, ZoomState};
 use crate::platform::bar::Anchor;
 use crate::platform::frame::{self, Frame, Surface};
 use crate::{
     AppInfo, CellData, ConverterData, DayDetailData, FrameStyle, PopupClockLine, PopupWindow,
-    SettingsData, TipData, UpcomingData, ZoomCellData,
+    SettingsData, SettingsWindow, TipData, UpcomingData, ZoomCellData,
 };
 
 /// Where to open the popup.
@@ -49,10 +52,14 @@ pub fn show_popup_at(popup: &PopupWindow, anchor: PopupAnchor) -> anyhow::Result
             if !framed && let Some(popup) = weak.upgrade() {
                 framed = apply_frame(&popup);
             }
-            if matches!(event, WinitEvent::Focused(false))
+            if let WinitEvent::Focused(active) = event
                 && let Some(popup) = weak.upgrade()
             {
-                popup.invoke_window_deactivated();
+                if *active {
+                    popup.invoke_window_activated();
+                } else {
+                    popup.invoke_window_deactivated();
+                }
             }
             EventResult::Propagate
         });
@@ -117,10 +124,13 @@ pub fn set_clocks(popup: &PopupWindow, lines: &[crate::app::clock::ClockLine]) {
 }
 
 /// Sets the one Slint copy of the display name from `app::APP_NAME` (ADR-0017). Called once per
-/// window before it is shown, so the popup title and any later window title read one value.
-pub fn set_app_name(popup: &PopupWindow) {
-    popup
-        .global::<AppInfo>()
+/// window before it is shown, so the popup title and the Settings title read one value.
+pub fn set_app_name<'a, T>(ui: &'a T)
+where
+    T: ComponentHandle,
+    AppInfo<'a>: slint::Global<'a, T>,
+{
+    ui.global::<AppInfo<'a>>()
         .set_app_name(crate::app::APP_NAME.into());
 }
 
@@ -377,32 +387,66 @@ pub fn all_time_zones() -> Vec<String> {
     zones
 }
 
-/// The zones whose id contains `filter`, case-insensitively. An empty filter returns all.
+/// The zones whose id contains `filter`, case-insensitively, by city or region. An underscore in
+/// an id reads as a space, so `new york` finds `America/New_York`. An empty filter returns all.
 #[must_use]
 pub fn filter_time_zones(zones: &[String], filter: &str) -> Vec<String> {
     if filter.is_empty() {
         return zones.to_vec();
     }
-    let needle = filter.to_lowercase();
+    let needle = filter.trim().to_lowercase();
     zones
         .iter()
-        .filter(|zone| zone.to_lowercase().contains(&needle))
+        .filter(|zone| zone.to_lowercase().replace('_', " ").contains(&needle))
         .cloned()
         .collect()
 }
 
-/// Fills the settings panel from `Settings` and the filtered zone list.
-pub fn set_settings(popup: &PopupWindow, settings: &Settings, zones: &[String]) {
+/// The extra clock's drop-down rows for what is typed (WR-06 AC4): the matching zones, with an
+/// empty id, which the window shows as "None", first when nothing is typed or the text could
+/// start "None". Also the row to highlight: the chosen zone when nothing is typed, else the first.
+#[must_use]
+pub fn zone_rows(zones: &[String], query: &str, current: &str) -> (Vec<String>, usize) {
+    let typed = query.trim().to_lowercase();
+    let mut rows = Vec::new();
+    if typed.is_empty() || "none".contains(&typed) {
+        rows.push(String::new());
+    }
+    rows.extend(filter_time_zones(zones, query));
+    let highlight = if typed.is_empty() {
+        rows.iter().position(|row| row == current).unwrap_or(0)
+    } else {
+        0
+    };
+    (rows, highlight)
+}
+
+/// Fills the Settings window from `Settings` (WR-06 AC6). `bar_available` is true where the app has
+/// a bar (Windows); `shortcut_available` is false where the OS has no way to grab a global key.
+pub fn set_settings(
+    window: &SettingsWindow,
+    settings: &Settings,
+    bar_available: bool,
+    shortcut_available: bool,
+) {
     let language_index = i32::from(u8::from(settings.lang() == Lang::Ne));
     let theme_index = match settings.theme.as_str() {
         "light" => 1,
         "dark" => 2,
         _ => 0,
     };
-    let coverage = nepdate_patro::coverage();
-    let zone_model: Vec<slint::SharedString> =
-        zones.iter().map(|zone| zone.as_str().into()).collect();
-    popup.set_settings_data(SettingsData {
+    // The chip rows are repeaters over these models. Replacing a model rebuilds every chip and
+    // drops the keyboard focus from the one that has it, so the models are updated in place; the
+    // window refreshes on every change and every `Saved` note.
+    let previous = window.get_data();
+    let top = synced(&previous.top, &settings.bar_top);
+    let bottom = synced(&previous.bottom, &settings.bar_bottom);
+    let unused_ids: Vec<String> = line_editor::unused(settings)
+        .iter()
+        .map(|field| field.id().to_owned())
+        .collect();
+    let unused = synced(&previous.unused, &unused_ids);
+    window.set_data(SettingsData {
         language_index,
         theme_index,
         clock_24h: settings.clock_24h,
@@ -410,11 +454,245 @@ pub fn set_settings(popup: &PopupWindow, settings: &Settings, zones: &[String]) 
         zone: settings.extra_time_zone.as_str().into(),
         launch_at_login: settings.launch_at_login,
         bar: settings.bar,
-        bar_available: cfg!(windows),
-        zones: slint::ModelRc::new(slint::VecModel::from(zone_model)),
+        bar_locked: settings.bar_locked,
+        bar_available,
+        top,
+        bottom,
+        unused,
+        only_one_field: line_editor::is_last_chip(settings),
+        shortcut: settings
+            .shortcut_combo()
+            .map(|combo| combo.to_string())
+            .unwrap_or_default()
+            .into(),
+        shortcut_available,
         version: env!("CARGO_PKG_VERSION").into(),
-        coverage: format!("{} to {}", coverage.start(), coverage.end()).into(),
     });
+}
+
+/// `items` as a model of ids, reusing `model` when it is already a `VecModel` so that a repeater
+/// over it keeps its rows: only the rows that differ change, and rows are added or removed at the
+/// end.
+fn synced(
+    model: &slint::ModelRc<slint::SharedString>,
+    items: &[String],
+) -> slint::ModelRc<slint::SharedString> {
+    let Some(rows) = model
+        .as_any()
+        .downcast_ref::<slint::VecModel<slint::SharedString>>()
+    else {
+        let fresh: Vec<slint::SharedString> = items
+            .iter()
+            .map(|item| slint::SharedString::from(item.as_str()))
+            .collect();
+        return slint::ModelRc::new(slint::VecModel::from(fresh));
+    };
+    while rows.row_count() > items.len() {
+        rows.remove(rows.row_count() - 1);
+    }
+    for (index, item) in items.iter().enumerate() {
+        if index < rows.row_count() {
+            if rows.row_data(index).as_deref() != Some(item.as_str()) {
+                rows.set_row_data(index, item.as_str().into());
+            }
+        } else {
+            rows.push(item.as_str().into());
+        }
+    }
+    model.clone()
+}
+
+/// Fills the extra clock's drop-down (WR-06 AC4).
+pub fn set_zone_rows(window: &SettingsWindow, rows: &[String], highlight: usize) {
+    let model: Vec<slint::SharedString> = rows
+        .iter()
+        .map(|row| slint::SharedString::from(row.as_str()))
+        .collect();
+    window.set_zone_rows(slint::ModelRc::new(slint::VecModel::from(model)));
+    window.set_zone_highlight(i32::try_from(highlight).unwrap_or(0));
+}
+
+/// Reads a Slint key event's text for the shortcut field (WR-13 AC2): a main key, a modifier on
+/// its own, or a key the field leaves to the window, such as Tab and Escape.
+#[must_use]
+pub fn pressed(text: &str) -> Pressed {
+    use slint::platform::Key as Special;
+
+    let mut chars = text.chars();
+    let (Some(only), None) = (chars.next(), chars.next()) else {
+        return Pressed::Navigation;
+    };
+    let is = |key: Special| only == char::from(key);
+    if [
+        Special::Shift,
+        Special::ShiftR,
+        Special::Control,
+        Special::ControlR,
+        Special::Alt,
+        Special::AltGr,
+        Special::Meta,
+        Special::MetaR,
+        Special::CapsLock,
+    ]
+    .into_iter()
+    .any(is)
+    {
+        return Pressed::Modifier;
+    }
+    if [
+        Special::Tab,
+        Special::Backtab,
+        Special::Escape,
+        Special::Return,
+        Special::Backspace,
+    ]
+    .into_iter()
+    .any(is)
+    {
+        return Pressed::Navigation;
+    }
+    let named = [
+        (Special::Home, Key::Home),
+        (Special::End, Key::End),
+        (Special::PageUp, Key::PageUp),
+        (Special::PageDown, Key::PageDown),
+        (Special::Insert, Key::Insert),
+        (Special::Delete, Key::Delete),
+        (Special::LeftArrow, Key::Left),
+        (Special::RightArrow, Key::Right),
+        (Special::UpArrow, Key::Up),
+        (Special::DownArrow, Key::Down),
+        (Special::F1, Key::Function(1)),
+        (Special::F2, Key::Function(2)),
+        (Special::F3, Key::Function(3)),
+        (Special::F4, Key::Function(4)),
+        (Special::F5, Key::Function(5)),
+        (Special::F6, Key::Function(6)),
+        (Special::F7, Key::Function(7)),
+        (Special::F8, Key::Function(8)),
+        (Special::F9, Key::Function(9)),
+        (Special::F10, Key::Function(10)),
+        (Special::F11, Key::Function(11)),
+        (Special::F12, Key::Function(12)),
+    ];
+    if let Some((_, key)) = named.into_iter().find(|(special, _)| is(*special)) {
+        return Pressed::Key(key);
+    }
+    if only == ' ' {
+        return Pressed::Key(Key::Space);
+    }
+    Key::from_char(only).map_or(Pressed::Navigation, Pressed::Key)
+}
+
+/// Where a Settings window opens, with the monitor it is placed on (WR-06 AC1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct SettingsHint {
+    /// The work area and DPI of the bar's monitor, when Settings was asked for from the bar and
+    /// the popup is closed.
+    pub bar_monitor: Option<(Rect, u32)>,
+}
+
+/// The Settings window's logical size (WR-06, widget-design §8).
+const SETTINGS_W: i32 = 420;
+const SETTINGS_H: i32 = 560;
+
+/// Positions the Settings window beside the popup, or centred when the popup is closed or neither
+/// side has room (WR-06 AC1). Leaves it to the OS when no monitor can be read.
+pub fn place_settings(window: &SettingsWindow, popup: Option<&PopupWindow>, hint: SettingsHint) {
+    let monitors = desktop_monitors(popup);
+    let popup_rect = popup
+        .filter(|popup| popup.window().is_visible())
+        .map(|popup| {
+            let at = popup.window().position();
+            let size = popup.window().size();
+            Rect::at(
+                Point { x: at.x, y: at.y },
+                Size {
+                    width: i32::try_from(size.width).unwrap_or(0),
+                    height: i32::try_from(size.height).unwrap_or(0),
+                },
+            )
+        });
+    let (work, dpi) = if let Some(rect) = popup_rect {
+        let centre = Point {
+            x: i32::midpoint(rect.left, rect.right),
+            y: i32::midpoint(rect.top, rect.bottom),
+        };
+        bar_place::monitor_at(&monitors, centre).map(|monitor| (monitor.work, monitor.dpi))
+    } else if let Some(bar) = hint.bar_monitor {
+        Some(bar)
+    } else {
+        monitors
+            .iter()
+            .find(|monitor| monitor.primary)
+            .or_else(|| monitors.first())
+            .map(|monitor| (monitor.work, monitor.dpi))
+    }
+    .map_or((None, 96), |(work, dpi)| (Some(work), dpi));
+    let Some(work) = work else {
+        return;
+    };
+    let client = Size {
+        width: to_physical(SETTINGS_W, dpi),
+        height: to_physical(SETTINGS_H, dpi),
+    };
+    // The window has a frame of its own, with an invisible resize border on Windows; place what is
+    // drawn.
+    let (visible, insets) = crate::platform::screen::frame_metrics(dpi).map_or(
+        (client, settings_place::Insets::default()),
+        |(caption, frame)| settings_place::framed(client, caption, frame),
+    );
+    let at = settings_place::position(popup_rect, visible, insets, work, dpi);
+    window
+        .window()
+        .set_position(slint::WindowPosition::Physical(
+            slint::PhysicalPosition::new(at.x, at.y),
+        ));
+}
+
+/// Every monitor the placement can use. Windows asks the shell; elsewhere the popup's winit window
+/// lists them, so with no popup yet there is nothing to go on and the OS places the window.
+fn desktop_monitors(popup: Option<&PopupWindow>) -> Vec<Monitor> {
+    #[cfg(windows)]
+    {
+        let _ = popup;
+        crate::platform::screen::monitors()
+    }
+    #[cfg(not(windows))]
+    {
+        use slint::winit_030::WinitWindowAccessor;
+
+        let Some(popup) = popup else {
+            return Vec::new();
+        };
+        popup
+            .window()
+            .with_winit_window(|window| {
+                let primary = window.primary_monitor();
+                window
+                    .available_monitors()
+                    .map(|monitor| {
+                        let at = monitor.position();
+                        let size = monitor.size();
+                        let bounds = Rect::new(
+                            at.x,
+                            at.y,
+                            at.x + i32::try_from(size.width).unwrap_or(0),
+                            at.y + i32::try_from(size.height).unwrap_or(0),
+                        );
+                        Monitor {
+                            name: monitor.name().unwrap_or_default(),
+                            bounds,
+                            work: bounds,
+                            // Winit gives a scale; 96 dpi is 1.0.
+                            dpi: (monitor.scale_factor() * 96.0).round() as u32,
+                            primary: primary.as_ref() == Some(&monitor),
+                        }
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
 }
 
 /// Maps the `theme` setting of WR-06 onto the `ThemeChoice` of `ui/theme.slint`.
@@ -567,12 +845,12 @@ mod tests {
     }
 
     #[test]
-    fn wr06_settings_panel_maps_the_indices_and_zones() {
+    fn wr06_settings_window_maps_the_indices_and_lines() {
         use crate::app::settings::Settings;
         use slint::Model;
 
         crate::test_support::init_platform();
-        let popup = crate::PopupWindow::new().expect("popup component");
+        let window = crate::SettingsWindow::new().expect("settings component");
         let settings = Settings {
             language: "ne".to_owned(),
             theme: "dark".to_owned(),
@@ -581,21 +859,95 @@ mod tests {
             extra_time_zone: "Asia/Kathmandu".to_owned(),
             launch_at_login: false,
             bar: false,
+            bar_locked: true,
+            shortcut: "Ctrl+Shift+K".to_owned(),
             ..Settings::default()
         };
-        let zones = vec!["Asia/Kathmandu".to_owned()];
-        set_settings(&popup, &settings, &zones);
-        let data = popup.get_settings_data();
+        set_settings(&window, &settings, true, true);
+        let data = window.get_data();
         assert_eq!(data.language_index, 1);
         assert_eq!(data.theme_index, 2);
         assert!(data.clock_24h);
         assert!(data.show_seconds);
         assert!(!data.launch_at_login);
         assert!(!data.bar);
-        assert_eq!(data.bar_available, cfg!(windows), "only Windows has a bar");
+        assert!(data.bar_locked);
+        assert!(data.bar_available);
         assert_eq!(data.zone.as_str(), "Asia/Kathmandu");
-        assert_eq!(data.zones.row_count(), 1);
-        assert_eq!(data.coverage.as_str(), "2077/01/01 to 2084/08/20");
+        assert_eq!(data.top.row_count(), 3);
+        assert_eq!(data.bottom.row_count(), 2);
+        assert_eq!(data.unused.row_count(), 5);
+        assert!(!data.only_one_field);
+        assert_eq!(data.shortcut.as_str(), "Ctrl+Shift+K");
+        assert!(data.shortcut_available);
+    }
+
+    #[test]
+    fn the_zone_rows_start_with_none_when_nothing_is_typed() {
+        let zones = vec![
+            "Asia/Kathmandu".to_owned(),
+            "Asia/Singapore".to_owned(),
+            "America/New_York".to_owned(),
+        ];
+        let (rows, highlight) = zone_rows(&zones, "", "Asia/Singapore");
+        assert_eq!(
+            rows,
+            ["", "Asia/Kathmandu", "Asia/Singapore", "America/New_York"]
+        );
+        assert_eq!(highlight, 2, "the chosen zone is highlighted");
+        let (_, none_chosen) = zone_rows(&zones, "", "");
+        assert_eq!(none_chosen, 0);
+
+        let (typed, first) = zone_rows(&zones, "new york", "Asia/Singapore");
+        assert_eq!(
+            typed,
+            ["America/New_York"],
+            "an underscore reads as a space"
+        );
+        assert_eq!(first, 0);
+        let (region, _) = zone_rows(&zones, "asia", "");
+        assert_eq!(region, ["Asia/Kathmandu", "Asia/Singapore"]);
+        let (none, _) = zone_rows(&zones, "no", "");
+        assert_eq!(none, [""], "typing the start of None offers None");
+    }
+
+    #[test]
+    fn a_key_event_reads_as_a_main_key_a_modifier_or_navigation() {
+        use slint::platform::Key as Special;
+
+        let text = |key: Special| String::from(char::from(key));
+        assert_eq!(pressed("n"), Pressed::Key(Key::Letter('N')));
+        assert_eq!(pressed("N"), Pressed::Key(Key::Letter('N')));
+        assert_eq!(pressed("7"), Pressed::Key(Key::Digit(7)));
+        assert_eq!(pressed(" "), Pressed::Key(Key::Space));
+        assert_eq!(pressed(&text(Special::F5)), Pressed::Key(Key::Function(5)));
+        assert_eq!(
+            pressed(&text(Special::PageDown)),
+            Pressed::Key(Key::PageDown)
+        );
+        assert_eq!(pressed(&text(Special::UpArrow)), Pressed::Key(Key::Up));
+        for modifier in [
+            Special::Shift,
+            Special::Control,
+            Special::Alt,
+            Special::Meta,
+        ] {
+            assert_eq!(pressed(&text(modifier)), Pressed::Modifier);
+        }
+        for navigation in [
+            Special::Tab,
+            Special::Backtab,
+            Special::Escape,
+            Special::Return,
+        ] {
+            assert_eq!(pressed(&text(navigation)), Pressed::Navigation);
+        }
+        assert_eq!(
+            pressed(";"),
+            Pressed::Navigation,
+            "punctuation is not a main key"
+        );
+        assert_eq!(pressed(""), Pressed::Navigation);
     }
 
     #[test]
@@ -646,7 +998,7 @@ mod tests {
         assert!(!popup.get_detail_visible());
     }
 
-    /// The settings panel's zone list is a few hundred short strings, not a memory cause.
+    /// The Settings window's zone list is a few hundred short strings, not a memory cause.
     #[test]
     fn the_time_zone_list_is_small() {
         let zones = all_time_zones();

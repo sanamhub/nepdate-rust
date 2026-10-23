@@ -66,6 +66,9 @@ pub trait Bar {
     /// Puts the bar at a saved position; `Saved::default()` is the default position (WR-08 AC5).
     fn set_position(&self, saved: &Saved);
     fn set_menu_labels(&self, labels: &MenuLabels);
+    /// Where the bar is now, for opening the popup beside it from the shortcut (WR-02 AC1). `None`
+    /// when the bar has no place: hidden, not drawn yet, or not on this platform.
+    fn anchor(&self) -> Option<Anchor>;
 }
 
 /// Creates the platform bar (Windows) or a no-op (elsewhere). `on_event` receives `BarEvent`s on
@@ -97,6 +100,9 @@ impl Bar for Noop {
     fn set_locked(&self, _locked: bool) {}
     fn set_position(&self, _saved: &Saved) {}
     fn set_menu_labels(&self, _labels: &MenuLabels) {}
+    fn anchor(&self) -> Option<Anchor> {
+        None
+    }
 }
 
 // The `--bar-snapshot` tool renders the bar exactly as the window sends it to

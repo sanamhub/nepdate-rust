@@ -225,6 +225,12 @@ impl Bar for WindowsBar {
         // Cannot re-enter, as `set_locked`.
         self.inner.borrow_mut().labels.clone_from(labels);
     }
+
+    fn anchor(&self) -> Option<Anchor> {
+        // Cannot re-enter: a read-only borrow, and the window procedure's `try_borrow_mut` just
+        // gives way to it.
+        self.inner.borrow().anchor()
+    }
 }
 
 impl Controller {
