@@ -661,11 +661,6 @@ pub fn place_settings(window: &SettingsWindow, popup: Option<&PopupWindow>, hint
 
 /// Every monitor the placement can use. Windows asks the shell; elsewhere the popup's winit window
 /// lists them, so with no popup yet there is nothing to go on and the OS places the window.
-// A scale factor is a small positive number, so times 96 it fits a `u32`.
-#[cfg_attr(
-    not(windows),
-    allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)
-)]
 fn desktop_monitors(popup: Option<&PopupWindow>) -> Vec<Monitor> {
     #[cfg(windows)]
     {
