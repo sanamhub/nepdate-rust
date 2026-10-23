@@ -761,9 +761,16 @@ fn handle_tray_event(event: TrayEvent, state: &Rc<RefCell<AppState>>, slot: &Pop
 fn handle_bar_event(event: BarEvent, state: &Rc<RefCell<AppState>>, slot: &PopupSlot) {
     match event {
         BarEvent::Toggle(anchor) => {
+            // The bar claims the foreground before this runs, which deactivates an open popup. If
+            // that deactivation is handled first, the popup is already hidden here, and the click
+            // meant "close": the same guard as the tray keeps it from reopening.
+            let just_hidden = state
+                .borrow()
+                .popup_hidden_at
+                .is_some_and(|at| at.elapsed() < REOPEN_GUARD);
             if popup_visible(state) {
                 hide_popup(state);
-            } else {
+            } else if !just_hidden {
                 open_popup(slot, state, ui_bridge::PopupAnchor::Bar(anchor));
             }
         }
@@ -1342,8 +1349,10 @@ fn update_tick(state: &Rc<RefCell<AppState>>, tray: &Rc<SlintTray>, bar: &Rc<dyn
     note_wake();
     update_tray(state, tray);
     update_popup(state);
-    let s = state.borrow();
-    bar.set_lines(&bar_lines(&jiff::Zoned::now(), &s.settings));
+    // The lines are built before the bar redraws, so no state borrow is held across its Win32
+    // calls.
+    let lines = bar_lines(&jiff::Zoned::now(), &state.borrow().settings);
+    bar.set_lines(&lines);
 }
 
 /// Schedules the next single-shot tick. The closure re-arms itself, so the process sleeps about

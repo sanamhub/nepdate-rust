@@ -1004,6 +1004,29 @@ fn wr08_ac6_a_click_on_the_bar_toggles_the_popup() {
 }
 
 #[test]
+fn wr08_ac6_a_click_that_deactivated_the_popup_closes_it_and_does_not_reopen_it() {
+    // The bar claims the foreground before it sends the toggle. If the popup's deactivation is
+    // handled first, the popup has just hidden itself, and the toggle must not reopen it.
+    let app = bar_app();
+    app.popup.invoke_window_deactivated();
+    assert!(!app.popup.window().is_visible(), "the focus loss hid it");
+    bar_event(&app, BarEvent::Toggle(bar_anchor()));
+    assert!(
+        !app.popup.window().is_visible(),
+        "the click meant close, so the popup stays closed"
+    );
+
+    // Past the guard, a click opens it again.
+    app.state.borrow_mut().popup_hidden_at = Some(
+        std::time::Instant::now()
+            .checked_sub(std::time::Duration::from_secs(1))
+            .expect("the clock is past its first second"),
+    );
+    bar_event(&app, BarEvent::Toggle(bar_anchor()));
+    assert!(app.popup.window().is_visible());
+}
+
+#[test]
 fn wr08_ac6_a_double_click_opens_the_popup_and_never_closes_it() {
     let app = bar_app();
     // The popup was closed: the first click opens it and the second is ignored as a toggle.
