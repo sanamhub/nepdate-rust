@@ -1952,3 +1952,160 @@ fn the_settings_window_speaks_nepali_when_the_language_is_nepali() {
     assert!(exists(&window, "बार"));
     assert!(exists(&window, "बार हटाउनुहोस्"));
 }
+
+// W8-4a: icons and captions sit in the middle of what holds them.
+
+fn centre_x(element: &ElementHandle) -> f32 {
+    element.absolute_position().x + element.size().width / 2.0
+}
+
+fn centre_y(element: &ElementHandle) -> f32 {
+    element.absolute_position().y + element.size().height / 2.0
+}
+
+fn right_edge(element: &ElementHandle) -> f32 {
+    element.absolute_position().x + element.size().width
+}
+
+/// The elements of `type_name` whose top-left corner is inside `outer`.
+fn inside(window: &SettingsWindow, outer: &ElementHandle, type_name: &str) -> Vec<ElementHandle> {
+    let (position, size) = (outer.absolute_position(), outer.size());
+    ElementHandle::find_by_element_type_name(window, type_name)
+        .filter(|inner| {
+            let at = inner.absolute_position();
+            at.x >= position.x
+                && at.x < position.x + size.width
+                && at.y >= position.y
+                && at.y < position.y + size.height
+        })
+        .collect()
+}
+
+/// The `Text` element showing exactly `text`. Only a text that does not opt out of accessibility
+/// has its text as its label, so this finds the notes, not the captions of controls.
+fn text_element(window: &SettingsWindow, text: &str) -> ElementHandle {
+    let found: Vec<ElementHandle> = ElementHandle::find_by_element_type_name(window, "Text")
+        .filter(|element| element.accessible_label().as_deref() == Some(text))
+        .collect();
+    assert_eq!(
+        found.len(),
+        1,
+        "expected one text {text:?}, found {}",
+        found.len()
+    );
+    found.into_iter().next().expect("one text")
+}
+
+/// The one `Text` inside `holder`: a chip's name or a segment's caption.
+fn caption_in(window: &SettingsWindow, holder: &ElementHandle) -> ElementHandle {
+    let mut texts = inside(window, holder, "Text");
+    assert!(!texts.is_empty(), "the holder has no text");
+    texts.remove(0)
+}
+
+#[test]
+fn w8_4a_the_saved_note_icon_is_level_with_its_text() {
+    let (_f, window) = opened();
+    window.set_save_status(1);
+    walk(&window);
+    let text = text_element(&window, "Saved");
+    let icons: Vec<ElementHandle> = ElementHandle::find_by_element_type_name(&window, "LineIcon")
+        .filter(|icon| (centre_y(icon) - centre_y(&text)).abs() < 20.0)
+        .collect();
+    assert_eq!(icons.len(), 1, "the check mark in the header row");
+    let dy = centre_y(&icons[0]) - centre_y(&text);
+    assert!(
+        dy.abs() < 0.01,
+        "the check mark is {dy} px off the text's middle"
+    );
+}
+
+#[test]
+fn w8_4a_the_add_field_pill_has_the_same_air_on_both_sides_of_the_ink() {
+    let (_f, window) = opened();
+    scroll_to_end(&window);
+    let pill = element(&window, "Add field to the top line");
+    let icons = inside(&window, &pill, "LineIcon");
+    let texts = inside(&window, &pill, "Text");
+    let (icon, text) = (&icons[0], &texts[0]);
+    let left = icon.absolute_position().x - pill.absolute_position().x;
+    let right = right_edge(&pill) - right_edge(text);
+    assert!(
+        (right - left - 2.0).abs() < 0.01,
+        "the icon box is {left} px from the edge and the text ends {right} px from the other"
+    );
+    assert!((centre_y(icon) - centre_y(text)).abs() < 0.01);
+    assert!((centre_y(icon) - centre_y(&pill)).abs() < 0.01);
+}
+
+#[test]
+fn w8_4a_a_chip_centres_its_name_and_its_remove_button() {
+    let (_f, window) = opened();
+    scroll_to_end(&window);
+    let chip = element(&window, "Weekday");
+    let name = caption_in(&window, &chip);
+    let remove = element(&window, "Remove Weekday");
+    for (what, part) in [("name", &name), ("remove button", &remove)] {
+        let dy = centre_y(part) - centre_y(&chip);
+        assert!(
+            dy.abs() < 0.01,
+            "the {what} is {dy} px off the chip's middle"
+        );
+    }
+    // 10 px before the name, and 4 px around a 20 px button that holds a 16 px icon with 4 px of
+    // air at each side, so the cross is 8 px from the edge.
+    let left = name.absolute_position().x - chip.absolute_position().x;
+    let right = right_edge(&chip) - right_edge(&remove);
+    assert!((left - 10.0).abs() < 0.01, "the name starts {left} px in");
+    assert!(
+        (right - 4.0).abs() < 0.01,
+        "the remove button ends {right} px from the edge"
+    );
+}
+
+#[test]
+fn w8_4a_a_segment_centres_its_text() {
+    let (_f, window) = opened();
+    for label in ["English", "System", "Dark"] {
+        let segment = element(&window, label);
+        let text = caption_in(&window, &segment);
+        let (dx, dy) = (
+            centre_x(&text) - centre_x(&segment),
+            centre_y(&text) - centre_y(&segment),
+        );
+        assert!(
+            dx.abs() < 0.01 && dy.abs() < 0.01,
+            "{label}: the text is {dx} px right and {dy} px below the segment's middle"
+        );
+    }
+}
+
+#[test]
+fn w8_4a_a_row_centres_its_label_and_its_control() {
+    let (_f, window) = opened();
+    for (label, control) in [
+        ("Language", "English"),
+        ("Theme", "System"),
+        ("Launch at login", "Launch at login"),
+    ] {
+        let control = element(&window, control);
+        // The row's label is the text that ends where the row's controls begin, on the control's
+        // row: the nearest text to the left.
+        let text = ElementHandle::find_by_element_type_name(&window, "Text")
+            .filter(|text| {
+                text.absolute_position().x < control.absolute_position().x
+                    && (centre_y(text) - centre_y(&control)).abs() < 14.0
+            })
+            .min_by(|a, b| {
+                (centre_y(a) - centre_y(&control))
+                    .abs()
+                    .total_cmp(&(centre_y(b) - centre_y(&control)).abs())
+            })
+            .unwrap_or_else(|| panic!("no label for {label}"));
+        let dy = centre_y(&control) - centre_y(&text);
+        assert!(
+            dy.abs() < 0.01,
+            "{label}: the control is {dy} px off the label's middle"
+        );
+    }
+}
