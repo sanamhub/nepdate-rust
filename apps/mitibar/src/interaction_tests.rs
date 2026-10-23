@@ -2076,3 +2076,16 @@ fn wr08_ac2_the_bar_follows_the_clock_settings_at_once() {
         last.top
     );
 }
+
+#[test]
+fn the_longest_header_date_is_not_elided_by_the_pills() {
+    // "Baishakh 31, 2081" is the longest English date. The header's date box once asked for no
+    // width, so the Convert pill took the room and the date showed as "Baishakh ...".
+    let (popup, _state, _) = app(date(2081, 1, 31));
+    let button = element(&popup, "Go to date (Ctrl+G)");
+    assert!(
+        button.size().width >= 150.0,
+        "the date has room for its text: {} px",
+        button.size().width
+    );
+}

@@ -384,6 +384,10 @@ export component PopupWindow inherits Window {
                 // The date is the mouse way to Go to date (WR-14 AC3); Ctrl+G is the keyboard way.
                 Rectangle {
                     horizontal-stretch: 1;
+                    // The date's own width is what it asks for; without it this box asks for 0 and
+                    // the Convert pill takes the room, which elides the date.
+                    preferred-width: date-text.preferred-width;
+                    min-width: 0px;
                     date-button := Rectangle {
                         x: 0px;
                         width: min(date-text.preferred-width, parent.width);
