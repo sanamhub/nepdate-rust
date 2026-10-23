@@ -79,7 +79,8 @@ fn main() -> Result<(), nepdate::Error> {
 ## MitiBar
 
 MitiBar keeps today's BS date in the tray, with a month grid, tithi, public holidays, a converter
-and settings. It opens from the tray or the Windows 11 taskbar and closes when it loses focus. It
+and settings. On Windows a small floating bar shows the date and time wherever you put it. The popup
+opens from the tray, the bar or a global shortcut (Win+Shift+N) and closes when it loses focus. It
 makes no network requests.
 
 <a href="https://slint.dev"><img src="https://raw.githubusercontent.com/slint-ui/slint/v1.18.1/logo/MadeWithSlint-logo-whitebg.png" alt="Made with Slint" width="160"></a>
