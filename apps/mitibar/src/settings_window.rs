@@ -52,6 +52,8 @@ pub(crate) enum ShortcutNote {
     InUse,
     /// Wayland has no global shortcuts.
     NoGlobalShortcuts,
+    /// The key typed a character the field can't tell a key from, such as `&` from Shift+7.
+    KeyNotSupported,
 }
 
 impl ShortcutNote {
@@ -63,6 +65,7 @@ impl ShortcutNote {
             ShortcutNote::TooFewModifiers => 2,
             ShortcutNote::InUse => 3,
             ShortcutNote::NoGlobalShortcuts => 4,
+            ShortcutNote::KeyNotSupported => 5,
         }
     }
 }
@@ -256,7 +259,6 @@ pub(crate) fn refresh(state: &Rc<RefCell<AppState>>) {
         ShortcutNote::NoGlobalShortcuts
     };
     window.set_shortcut_note(note.code());
-    window.set_meta_key(shortcut::META.into());
     window.set_meta_key(shortcut::META.into());
 }
 
@@ -629,6 +631,7 @@ fn wire_shortcut(window: &SettingsWindow, state: &Rc<RefCell<AppState>>) {
                     state.borrow_mut().shortcut_note = match refusal {
                         Refusal::CtrlAlt => ShortcutNote::CtrlAlt,
                         Refusal::TooFewModifiers => ShortcutNote::TooFewModifiers,
+                        Refusal::KeyNotSupported => ShortcutNote::KeyNotSupported,
                     };
                     refresh(&state);
                     true

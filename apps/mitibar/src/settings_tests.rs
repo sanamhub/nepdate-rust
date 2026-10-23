@@ -1149,6 +1149,18 @@ fn wr08_ac3_every_field_can_be_added_until_none_is_left() {
 #[test]
 fn wr08_ac3_a_chip_is_removed_with_its_button_and_focus_moves_to_its_neighbour() {
     let (f, window) = opened();
+    // The extra clock shows only where its offset differs from the local one, so count the parts
+    // of the line rather than look for a time: the machine decides whether there are two or three.
+    let parts = |f: &Fixture| {
+        f.bar
+            .lines
+            .borrow()
+            .last()
+            .map_or(0, |lines| lines.top.split(" · ").count())
+    };
+    settings_window::refresh(&f.state);
+    crate::update_bar(&f.state);
+    let before = parts(&f);
     click(&window, "Remove Time");
     assert_eq!(top(&f), ids(&["weekday", "zone_time"]));
     assert!(!exists(&window, "Time"));
@@ -1158,11 +1170,9 @@ fn wr08_ac3_a_chip_is_removed_with_its_button_and_focus_moves_to_its_neighbour()
         "chip top 2",
         "the chip that took its place"
     );
-    let last = f.bar.lines.borrow().last().cloned().expect("lines");
     assert!(
-        !last.top.contains("PM") && !last.top.contains("AM"),
-        "{}",
-        last.top
+        parts(&f) < before,
+        "the bar lost the time: {before} parts before"
     );
 
     // Delete does the same from the keyboard.
@@ -1422,6 +1432,25 @@ fn wr13_ac2_a_combination_needs_the_win_key_or_two_other_modifiers() {
     );
     type_with(&window, &[Key::Alt, Key::Shift], "k");
     assert_eq!(settings(&f).shortcut, "Alt+Shift+K");
+}
+
+#[test]
+fn wr13_ac2_a_key_that_types_a_symbol_is_answered_and_not_recorded() {
+    let (f, window) = opened();
+    tab_to(&window, "shortcut");
+    let before = settings(&f).shortcut;
+    // Shift+7 on a US keyboard: the key event carries `&`, not the 7 key.
+    type_with(&window, &[Key::Control, Key::Shift], "&");
+    assert_eq!(settings(&f).shortcut, before);
+    assert_eq!(
+        window.get_shortcut_note(),
+        5,
+        "That key can't be recorded; use a letter or F1 to F12"
+    );
+    assert_eq!(focused(&window), "shortcut", "the field keeps waiting");
+    type_with(&window, &[Key::Control, Key::Shift], "k");
+    assert_eq!(settings(&f).shortcut, "Ctrl+Shift+K");
+    assert_eq!(window.get_shortcut_note(), 0, "and the note goes");
 }
 
 #[test]

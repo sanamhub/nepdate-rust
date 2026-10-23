@@ -309,6 +309,9 @@ msgstr "यो सर्टकट अर्को एपले प्रयो�
 msgid "Global shortcuts aren't available on Wayland"
 msgstr "Wayland मा ग्लोबल सर्टकट उपलब्ध छैन"
 
+msgid "That key can't be recorded; use a letter or F1 to F12"
+msgstr "त्यो कुञ्जी रेकर्ड गर्न सकिँदैन; अक्षर वा F1 देखि F12 प्रयोग गर्नुहोस्"
+
 msgid "{0} Settings"
 msgstr "{0} सेटिङ"
 

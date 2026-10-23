@@ -135,6 +135,10 @@ pub enum Refusal {
     CtrlAlt,
     /// Needs Win, Cmd or Super, or at least two of Ctrl, Alt and Shift.
     TooFewModifiers,
+    /// The key typed a character that is not a letter or a digit, such as `&` from Shift+7 or a
+    /// macOS Option letter. The key event carries only that character, so the key itself can't be
+    /// told.
+    KeyNotSupported,
 }
 
 impl Combo {
@@ -215,6 +219,8 @@ pub enum Pressed {
     Key(Key),
     /// A modifier by itself. The field keeps waiting for the key.
     Modifier,
+    /// A key that typed some other character: punctuation, or a symbol a modifier made.
+    Unsupported,
     /// Tab, Escape, Enter or a key with no meaning here. These move focus or close the window as
     /// usual, so the field leaves them alone.
     Navigation,
@@ -237,6 +243,7 @@ pub enum Recorded {
 pub fn record(mods: Modifiers, pressed: Pressed) -> Recorded {
     match pressed {
         Pressed::Navigation | Pressed::Modifier => Recorded::Ignored,
+        Pressed::Unsupported => Recorded::Refused(Refusal::KeyNotSupported),
         Pressed::Key(key) => {
             let combo = Combo { mods, key };
             if !mods.any() {
@@ -380,6 +387,21 @@ mod tests {
             Recorded::Refused(Refusal::TooFewModifiers),
             "a bare letter is answered, not ignored"
         );
+    }
+
+    #[test]
+    fn recording_answers_a_key_it_cannot_tell_instead_of_ignoring_it() {
+        let ctrl_shift = Modifiers {
+            ctrl: true,
+            shift: true,
+            ..Modifiers::default()
+        };
+        for mods in [ctrl_shift, Modifiers::default()] {
+            assert_eq!(
+                record(mods, Pressed::Unsupported),
+                Recorded::Refused(Refusal::KeyNotSupported)
+            );
+        }
     }
 
     #[test]

@@ -293,7 +293,7 @@ export component SettingsWindow inherits Window {
     /// What the Win, Cmd or Super key is called here, for the shortcut note.
     in property <string> meta-key: "Win";
     /// The shortcut field's note (WR-13): 0 none, 1 Ctrl+Alt, 2 too few modifiers, 3 in use by
-    /// another app, 4 no global shortcuts here.
+    /// another app, 4 no global shortcuts here, 5 a key the field can't record.
     in property <int> shortcut-note: 0;
     /// After a chip moves or goes, Rust names the one to focus; a timer applies it.
     in-out property <int> focus-line: 0;
@@ -830,7 +830,8 @@ export component SettingsWindow inherits Window {
                         text: root.shortcut-note == 1 ? @tr("Ctrl+Alt is AltGr on many keyboards")
                             : root.shortcut-note == 2 ? @tr("Use {0}, or two of Ctrl, Alt and Shift", root.meta-key)
                             : root.shortcut-note == 3 ? @tr("This shortcut is used by another app")
-                            : @tr("Global shortcuts aren't available on Wayland");
+                            : root.shortcut-note == 4 ? @tr("Global shortcuts aren't available on Wayland")
+                            : @tr("That key can't be recorded; use a letter or F1 to F12");
                         color: Theme.ink;
                         font-size: 13px;
                         wrap: word-wrap;

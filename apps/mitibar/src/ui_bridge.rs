@@ -581,7 +581,16 @@ pub fn pressed(text: &str) -> Pressed {
     if only == ' ' {
         return Pressed::Key(Key::Space);
     }
-    Key::from_char(only).map_or(Pressed::Navigation, Pressed::Key)
+    if let Some(key) = Key::from_char(only) {
+        return Pressed::Key(key);
+    }
+    // Slint names its special keys with private-use characters; any other key we don't know is
+    // left to the window. A printable character is a key the field can't tell from what it typed.
+    if only.is_control() || ('\u{E000}'..='\u{F8FF}').contains(&only) {
+        Pressed::Navigation
+    } else {
+        Pressed::Unsupported
+    }
 }
 
 /// Where a Settings window opens, with the monitor it is placed on (WR-06 AC1).
@@ -652,6 +661,11 @@ pub fn place_settings(window: &SettingsWindow, popup: Option<&PopupWindow>, hint
 
 /// Every monitor the placement can use. Windows asks the shell; elsewhere the popup's winit window
 /// lists them, so with no popup yet there is nothing to go on and the OS places the window.
+// A scale factor is a small positive number, so times 96 it fits a `u32`.
+#[cfg_attr(
+    not(windows),
+    allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)
+)]
 fn desktop_monitors(popup: Option<&PopupWindow>) -> Vec<Monitor> {
     #[cfg(windows)]
     {
@@ -684,8 +698,7 @@ fn desktop_monitors(popup: Option<&PopupWindow>) -> Vec<Monitor> {
                             name: monitor.name().unwrap_or_default(),
                             bounds,
                             work: bounds,
-                            // Winit gives a scale; 96 dpi is 1.0.
-                            dpi: (monitor.scale_factor() * 96.0).round() as u32,
+                            dpi: dpi_of(monitor.scale_factor()),
                             primary: primary.as_ref() == Some(&monitor),
                         }
                     })
@@ -693,6 +706,14 @@ fn desktop_monitors(popup: Option<&PopupWindow>) -> Vec<Monitor> {
             })
             .unwrap_or_default()
     }
+}
+
+/// The DPI of a winit monitor scale, where 96 dpi is 1.0. A scale is a small positive number, so
+/// the clamped, rounded product fits a `u32` exactly.
+#[cfg(not(windows))]
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn dpi_of(scale: f64) -> u32 {
+    (scale * 96.0).round().clamp(1.0, 9600.0) as u32
 }
 
 /// Maps the `theme` setting of WR-06 onto the `ThemeChoice` of `ui/theme.slint`.
@@ -942,11 +963,16 @@ mod tests {
         ] {
             assert_eq!(pressed(&text(navigation)), Pressed::Navigation);
         }
-        assert_eq!(
-            pressed(";"),
-            Pressed::Navigation,
-            "punctuation is not a main key"
-        );
+        for typed in [";", "&", "å", "न"] {
+            assert_eq!(
+                pressed(typed),
+                Pressed::Unsupported,
+                "{typed:?} is not a main key, and is answered"
+            );
+        }
+        for other in [Special::Menu, Special::ScrollLock, Special::F24] {
+            assert_eq!(pressed(&text(other)), Pressed::Navigation, "{other:?}");
+        }
         assert_eq!(pressed(""), Pressed::Navigation);
     }
 
