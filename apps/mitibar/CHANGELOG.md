@@ -6,7 +6,7 @@ All notable changes to MitiBar are recorded here. The format follows
 
 ## [Unreleased]
 
-## [0.1.0-beta.1] - 2026-10-22
+## [0.1.0-beta.1] - 2026-10-23
 
 First public pre-release, unsigned on Windows and macOS. Behaviour and settings may still change
 before 0.1.0. The idle memory, CPU and cold-start targets are not confirmed yet: the last
@@ -14,21 +14,26 @@ measurements ran on a loaded machine ([benchmarks](https://github.com/sanamhub/n
 
 ### Added
 
-- Tray icon and menu: Open, Copy today (BS), Copy today (AD), Settings and Quit, translated into
-  Nepali.
-- Popup with today's BS long date, weekday, AD date and clocks for the local zone and one extra
-  IANA zone. It hides when it loses activation and on Escape.
-- Month grid with AD days, tithi, event dots, today and holiday colours, month and year pickers,
-  wheel navigation and a next-holiday line. The year box has previous-year and next-year buttons,
-  disabled at 1901 and 2199.
+- Tray icon and menu: Open, Copy today (BS), Copy today (AD), Show bar (Windows), Settings and
+  Quit, translated into Nepali.
+- Floating bar on Windows: a small rounded pill with two lines you choose, such as the weekday,
+  time, an extra clock, the BS date and the AD date. Drag it anywhere, lock it, or snap it to the
+  taskbar's centre line. A click toggles the popup; right-click opens its menu.
+- Popup with rounded corners on Windows 11: today's BS long date, weekday, AD date and clocks for
+  the local zone and one extra IANA zone. It hides when it loses focus and on Escape, unless it is
+  pinned.
+- Month grid with AD days, tithi, event dots and holiday colours. Click the month title to zoom
+  out to the year and decade views. A day tooltip, Go to date (Ctrl+G, BS or AD) and the next five
+  holidays.
 - Day detail with tithi, holiday, events and Copy BS / Copy AD.
 - Converter for BS to AD and AD to BS, plus the number of days between two dates.
-- Settings for language, theme, clock format, seconds, extra time zone, launch at login and the
-  Windows 11 taskbar text. Changes apply at once and are saved atomically.
-- Windows 11 taskbar text: two lines of date and time inside the taskbar, with a click to open
-  the popup and a right-click menu.
-- Keyboard use: Tab and Shift+Tab follow the visual order, Return or Space activates the focused
-  control, and every focusable control shows a focus ring.
+- Settings window: language, theme, launch at login, clock format, seconds, extra time zone, the
+  bar and its line editor, and the global shortcut. Changes apply at once and are saved
+  atomically, with a Saved note.
+- Global shortcut to toggle the popup: Win+Shift+N on Windows, Cmd+Shift+N on macOS,
+  Super+Shift+N on Linux X11. Not available on Wayland.
+- Keyboard use: Tab and Shift+Tab follow the visual order, arrows move around the grid, and every
+  focusable control shows a focus ring.
 - Nepali digits in the year box and Copy AD when the language is Nepali, like Copy BS.
 - Single instance: a second launch opens the running instance's popup and exits.
 - Software rendering only, so no OpenGL or GPU driver is loaded.

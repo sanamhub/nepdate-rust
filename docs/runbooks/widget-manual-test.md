@@ -80,20 +80,33 @@ account or a clean VM, and keep a firewall log or a packet capture open for the 
 - [ ] A pointer click on a year button leaves focus on it.
 - [ ] Narrator, VoiceOver and Orca read every button, day cell and field.
 
-## Windows taskbar text (WR-12, Windows 11)
+## Floating bar (WR-08, Windows)
 
-- [ ] Text shows inside a bottom, centre-aligned taskbar, left of Start.
-- [ ] Light and dark taskbar, including a live switch.
-- [ ] Open apps until the icons reach the text: it hides. Close them: it returns.
-- [ ] Widgets button on and off; taskbar alignment left and centre.
-- [ ] Auto-hide taskbar and a full-screen video.
-- [ ] Restart Explorer: the text returns within 5 s.
-- [ ] Scale 100 %, 150 % and 200 %.
-- [ ] Left click opens the popup above the text; right click opens the menu; Quit leaves no process.
+- [ ] First run: the bar sits at its default position on the primary monitor, fully on-screen.
+- [ ] Light and dark theme, including a live switch.
+- [ ] Drag it: it follows the pointer, stays on one monitor and snaps to the taskbar's centre
+      line within 8 px. Quit and start again: it is where it was left.
+- [ ] Lock position: a drag does nothing and a click still toggles the popup.
+- [ ] Click toggles the popup beside the bar; double-click leaves it open; right-click menu items
+      all work in English and Nepali; Hide bar and the tray's Show bar agree.
+- [ ] Settings line editor: add, remove, move and move across lines; the bar updates each time.
+- [ ] Restart Explorer: the bar stays or returns. Scale 100 %, 150 % and 200 %.
 
+## Global shortcut (WR-13)
+
+- [ ] Win+Shift+N (Cmd+Shift+N, Super+Shift+N on X11) toggles the popup from another app.
+- [ ] Record Ctrl+Shift+K, then a combination another app owns: the in-use note shows.
+- [ ] Ctrl+Alt+K is refused with the AltGr note; Clear and Reset work.
+- [ ] Wayland: the field is disabled with its note.
+
+## Settings window and popup helpers (WR-06, WR-14)
+
+- [ ] The Settings pill, Ctrl+Comma, the tray and the bar menu open one Settings window beside
+      the popup; the popup stays open; a pinned popup stays pinned when focus leaves.
+- [ ] Saved shows for 2 s after a change; a read-only settings file shows the failure note.
+- [ ] Pin, the day tooltip, Go to date (Ctrl+G, with and without `AD`) and the next holidays list.
 ## Known gaps
 
-- The settings zone list is pointer-only. Keyboard users can filter it but cannot select a zone.
 - A real alt-tab and a real tray click are not automated. The unit tests call the hide path
   directly.
 - IME typing in the converter is untested.
