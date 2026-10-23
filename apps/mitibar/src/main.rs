@@ -17,6 +17,8 @@
 mod app;
 #[cfg(test)]
 mod interaction_tests;
+#[cfg(test)]
+mod layout_tests;
 mod platform;
 #[cfg(test)]
 mod settings_tests;

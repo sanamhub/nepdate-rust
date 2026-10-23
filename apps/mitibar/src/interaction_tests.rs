@@ -83,7 +83,7 @@ fn exists(popup: &PopupWindow, label: &str) -> bool {
 }
 
 /// Opens `year`/`month` in the month view without going through the UI, then repaints.
-fn show_month(state: &Rc<RefCell<AppState>>, year: u16, month: Month) {
+pub(crate) fn show_month(state: &Rc<RefCell<AppState>>, year: u16, month: Month) {
     {
         let mut s = state.borrow_mut();
         s.zoom.jump_to(date(year, month.number(), 1));

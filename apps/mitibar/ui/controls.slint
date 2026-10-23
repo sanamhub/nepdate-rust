@@ -58,7 +58,7 @@ export component Pill inherits Rectangle {
     min-width: root.pill-size;
     preferred-width: root.text == ""
         ? root.pill-size
-        : caption.preferred-width + 20px + (root.has-icon ? 22px : 0px);
+        : caption.preferred-width + 20px + (root.has-icon ? 20px : 0px);
     border-radius: root.pill-size / 2;
     background: root.filled
         ? Theme.ink
@@ -102,7 +102,9 @@ export component Pill inherits Rectangle {
             // belongs only between an icon and text: next to an empty slot it pushed text 6 px past
             // the pill's preferred width, and an icon-only pill's icon 3 px left of centre.
             spacing: root.has-icon && root.text != "" ? 6px : 0px;
-            padding-left: root.text == "" ? 0px : 10px;
+            // An icon has about 2 px of air inside its 16 px box, so with one the left padding is
+            // 8 px and the ink sits 10 px from the edge, like the text on the other side.
+            padding-left: root.text == "" ? 0px : root.has-icon ? 8px : 10px;
             padding-right: root.text == "" ? 0px : 10px;
             // The icon is centred in the pill's height; a layout would otherwise top-align it.
             VerticalLayout {
@@ -114,6 +116,10 @@ export component Pill inherits Rectangle {
                 color: root.foreground;
                 font-size: root.font-size;
                 vertical-alignment: center;
+                // An empty text still takes 4 px in a layout, which moved an icon-only pill's icon
+                // 2 px left of centre.
+                min-width: root.text == "" ? 0px : self.preferred-width;
+                max-width: root.text == "" ? 0px : 10000px;
                 accessible-role: none;
             }
         }

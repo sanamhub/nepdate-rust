@@ -191,6 +191,24 @@ component Chip inherits Rectangle {
     }
 }
 
+/// Lets the mouse wheel move a row of chips sideways (W8-4a). It sits behind the row's `Flickable`,
+/// which does not scroll for a vertical wheel, and takes the wheel only while the row is wider than
+/// its window and has room to move that way; otherwise the page scrolls as it would anywhere else.
+component WheelScroll inherits TouchArea {
+    in-out property <length> content-x;
+    in property <length> content-width;
+
+    scroll-event(event) => {
+        let lowest = min(0px, self.width - root.content-width);
+        let next = max(lowest, min(0px, root.content-x + event.delta-y + event.delta-x));
+        if (next == root.content-x) {
+            return reject;
+        }
+        root.content-x = next;
+        accept
+    }
+}
+
 /// The extra clock's drop-down list (WR-06 AC4): one row per zone, the highlighted one filled.
 component ZoneList inherits Rectangle {
     in property <[string]> rows;
@@ -628,30 +646,38 @@ export component SettingsWindow inherits Window {
                                 focused => { root.focus-on("add item " + (k + 1), self.absolute-position.y, self.height); }
                             }
                         }
-                        top-chips := Flickable {
+                        Rectangle {
                             height: 28px;
-                            content-width: top-row.preferred-width;
-                            interactive: false;
-                            top-row := HorizontalLayout {
-                                spacing: 6px;
-                                for id[i] in root.data.top: Chip {
-                                    id: id;
-                                    can-remove: !root.data.only-one-field;
-                                    can-left: i > 0;
-                                    can-right: i < root.data.top.length - 1;
-                                    focus-wanted: root.focus-pending && root.focus-line == 0 && root.focus-index == i;
-                                    focus-served => { root.focus-pending = false; }
-                                    remove => { root.chip-removed(0, i); }
-                                    move-left => { root.chip-moved(0, i, -1); }
-                                    move-right => { root.chip-moved(0, i, 1); }
-                                    move-up => { root.chip-moved-line(0, i, true); }
-                                    move-down => { root.chip-moved-line(0, i, false); }
-                                    focused => {
-                                        root.focus-on("chip top " + (i + 1), self.absolute-position.y, self.height);
-                                        if (self.x + top-chips.content-x < 0px) {
-                                            top-chips.content-x = -self.x;
-                                        } else if (self.x + self.width + top-chips.content-x > top-chips.width) {
-                                            top-chips.content-x = top-chips.width - self.x - self.width;
+                            WheelScroll {
+                                content-x <=> top-chips.content-x;
+                                content-width: top-chips.content-width;
+                            }
+                            top-chips := Flickable {
+                                width: parent.width;
+                                height: parent.height;
+                                content-width: top-row.preferred-width;
+                                interactive: false;
+                                top-row := HorizontalLayout {
+                                    spacing: 6px;
+                                    for id[i] in root.data.top: Chip {
+                                        id: id;
+                                        can-remove: !root.data.only-one-field;
+                                        can-left: i > 0;
+                                        can-right: i < root.data.top.length - 1;
+                                        focus-wanted: root.focus-pending && root.focus-line == 0 && root.focus-index == i;
+                                        focus-served => { root.focus-pending = false; }
+                                        remove => { root.chip-removed(0, i); }
+                                        move-left => { root.chip-moved(0, i, -1); }
+                                        move-right => { root.chip-moved(0, i, 1); }
+                                        move-up => { root.chip-moved-line(0, i, true); }
+                                        move-down => { root.chip-moved-line(0, i, false); }
+                                        focused => {
+                                            root.focus-on("chip top " + (i + 1), self.absolute-position.y, self.height);
+                                            if (self.x + top-chips.content-x < 0px) {
+                                                top-chips.content-x = -self.x;
+                                            } else if (self.x + self.width + top-chips.content-x > top-chips.width) {
+                                                top-chips.content-x = top-chips.width - self.x - self.width;
+                                            }
                                         }
                                     }
                                 }
@@ -702,30 +728,38 @@ export component SettingsWindow inherits Window {
                                 focused => { root.focus-on("add item " + (k + 1), self.absolute-position.y, self.height); }
                             }
                         }
-                        bottom-chips := Flickable {
+                        Rectangle {
                             height: 28px;
-                            content-width: bottom-row.preferred-width;
-                            interactive: false;
-                            bottom-row := HorizontalLayout {
-                                spacing: 6px;
-                                for id[i] in root.data.bottom: Chip {
-                                    id: id;
-                                    can-remove: !root.data.only-one-field;
-                                    can-left: i > 0;
-                                    can-right: i < root.data.bottom.length - 1;
-                                    focus-wanted: root.focus-pending && root.focus-line == 1 && root.focus-index == i;
-                                    focus-served => { root.focus-pending = false; }
-                                    remove => { root.chip-removed(1, i); }
-                                    move-left => { root.chip-moved(1, i, -1); }
-                                    move-right => { root.chip-moved(1, i, 1); }
-                                    move-up => { root.chip-moved-line(1, i, true); }
-                                    move-down => { root.chip-moved-line(1, i, false); }
-                                    focused => {
-                                        root.focus-on("chip bottom " + (i + 1), self.absolute-position.y, self.height);
-                                        if (self.x + bottom-chips.content-x < 0px) {
-                                            bottom-chips.content-x = -self.x;
-                                        } else if (self.x + self.width + bottom-chips.content-x > bottom-chips.width) {
-                                            bottom-chips.content-x = bottom-chips.width - self.x - self.width;
+                            WheelScroll {
+                                content-x <=> bottom-chips.content-x;
+                                content-width: bottom-chips.content-width;
+                            }
+                            bottom-chips := Flickable {
+                                width: parent.width;
+                                height: parent.height;
+                                content-width: bottom-row.preferred-width;
+                                interactive: false;
+                                bottom-row := HorizontalLayout {
+                                    spacing: 6px;
+                                    for id[i] in root.data.bottom: Chip {
+                                        id: id;
+                                        can-remove: !root.data.only-one-field;
+                                        can-left: i > 0;
+                                        can-right: i < root.data.bottom.length - 1;
+                                        focus-wanted: root.focus-pending && root.focus-line == 1 && root.focus-index == i;
+                                        focus-served => { root.focus-pending = false; }
+                                        remove => { root.chip-removed(1, i); }
+                                        move-left => { root.chip-moved(1, i, -1); }
+                                        move-right => { root.chip-moved(1, i, 1); }
+                                        move-up => { root.chip-moved-line(1, i, true); }
+                                        move-down => { root.chip-moved-line(1, i, false); }
+                                        focused => {
+                                            root.focus-on("chip bottom " + (i + 1), self.absolute-position.y, self.height);
+                                            if (self.x + bottom-chips.content-x < 0px) {
+                                                bottom-chips.content-x = -self.x;
+                                            } else if (self.x + self.width + bottom-chips.content-x > bottom-chips.width) {
+                                                bottom-chips.content-x = bottom-chips.width - self.x - self.width;
+                                            }
                                         }
                                     }
                                 }

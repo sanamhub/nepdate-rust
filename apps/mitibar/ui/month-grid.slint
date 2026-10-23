@@ -52,12 +52,22 @@ component DayCell inherits Rectangle {
     callback tip-dismissed();
 
     property <bool> tip-shown: false;
+    /// The AD month stands in for the AD day on an AD 1st, except in today's cell.
+    property <bool> month-marker: data.ad-month != "" && !data.is-today;
+    // The content block is 28 px of numeral row and up to 26 px of tithi, and it sits in the
+    // middle of the cell: a five-row month stretches the cells to about 63 px, a six-row one to
+    // about 53 px (widget-design §6).
+    property <length> top: max(0px, (root.height - 54px) / 2);
+    // Where the numeral and the AD day stand: the disc is 28 px, so its middle is 14 px down, and
+    // the digits' baseline is 20 px down (cap height 11 px centred on that middle).
+    property <length> baseline: root.top + 20px;
+    // The numeral's middle, and the disc's: the disc is flush with the cell's edge, which leaves
+    // the AD month the room it needs after a two-digit numeral.
+    property <length> numeral-centre: 14px;
 
     horizontal-stretch: 1;
-    // Two lines on the 4 px grid: the 28 px numeral disc, 2 px of air and a 16 px tithi line,
-    // 48 px in total. The grid gap is 2 px (see the GridLayout comment), so a 6-row month is 298 px
-    // and leaves room for the header and the holiday line in 520 px.
-    height: 48px;
+    vertical-stretch: 1;
+    min-height: 52px;
     border-radius: 6px;
     background: touch.has-hover && !data.is-padding ? Theme.surface-raised : transparent;
     accessible-role: button;
@@ -79,18 +89,37 @@ component DayCell inherits Rectangle {
     // Today's numeral sits on a filled disc (WR-03 AC3). The numeral is `surface-raised` on
     // `sindoor`, which reaches 4.5:1 in both themes (checked by `theme.rs`).
     Rectangle {
-        x: 2px;
-        y: 0px;
+        x: root.numeral-centre - 14px;
+        y: root.top;
         width: 28px;
         height: 28px;
         border-radius: 14px;
         background: data.is-today ? Theme.sindoor : transparent;
     }
 
-    // Event dot, top-left, in the corner the disc leaves free (WR-03 AC4).
-    Rectangle {
-        x: 1px;
-        y: 1px;
+    // The BS day. The box is as wide as the digits, centred on `numeral-centre`, so the event dot
+    // and the AD day can be placed from its edges. The two numbers share one baseline: each box
+    // starts one ascent above it.
+    numeral := Text {
+        x: root.numeral-centre - self.preferred-width / 2;
+        y: root.baseline - self.font-metrics.ascent;
+        width: self.preferred-width;
+        height: self.preferred-height;
+        text: data.bs-day;
+        color: data.is-today
+            ? Theme.surface-raised
+            : data.is-holiday ? Theme.sindoor : data.is-saturday ? Theme.saturday : Theme.ink;
+        font-size: 16px;
+        accessible-role: none;
+    }
+
+    // Event dot (WR-03 AC4): a fixed 1 px after the numeral's last digit and level with its top,
+    // so it stays the same distance from the number whether the day has one digit or two. Today's
+    // disc is wider than the digits, so there the dot clears the disc's edge instead.
+    event-dot := Rectangle {
+        x: max(numeral.x + numeral.width + 1px,
+            data.is-today ? root.numeral-centre + 14px : 0px);
+        y: root.baseline - 17px;
         width: 4px;
         height: 4px;
         border-radius: 2px;
@@ -98,47 +127,35 @@ component DayCell inherits Rectangle {
         visible: data.has-events;
     }
 
-    // Line 1: the BS day on the disc at the left (16 px) and the AD day at the right (13 px
-    // Latin, 12 px Devanagari). On an AD 1st the short AD month replaces the day (WR-03 AC2).
-    Text {
-        x: 2px;
-        y: 0px;
-        width: 28px;
-        height: 28px;
-        text: data.bs-day;
-        color: data.is-today
-            ? Theme.surface-raised
-            : data.is-holiday ? Theme.sindoor : data.is-saturday ? Theme.saturday : Theme.ink;
-        font-size: 16px;
-        horizontal-alignment: center;
-        vertical-alignment: center;
-        accessible-role: none;
-    }
-    Text {
-        x: 4px;
-        y: 4px;
-        width: parent.width - 8px;
-        height: 20px;
-        text: data.ad-month != "" ? data.ad-month : data.ad-day;
+    // The AD day, right-aligned 1.5 px in from the edge, on the numeral's baseline. On an AD 1st
+    // the short AD month replaces the day (WR-03 AC2). It is a little tighter so "May", the widest
+    // one, keeps a gap after a two-digit numeral. Today's cell keeps the day: the disc is as wide
+    // as the month would need, and the header already gives today's AD date.
+    ad-text := Text {
+        x: parent.width - 1.5px - self.preferred-width;
+        y: root.baseline - self.font-metrics.ascent;
+        width: self.preferred-width;
+        height: self.preferred-height;
+        text: root.month-marker ? data.ad-month : data.ad-day;
         color: Theme.ink-muted;
-        font-size: data.ad-month != "" ? 11px : root.ad-day-size;
-        horizontal-alignment: right;
-        vertical-alignment: center;
+        font-size: root.month-marker ? 11px : root.ad-day-size;
+        letter-spacing: root.month-marker ? -0.5px : 0px;
         accessible-role: none;
     }
 
-    // Line 2: the tithi, 11 px Latin or 12 px Devanagari (widget-design §3/§4), elided when long.
-    // The full cell width is what lets the 11 px Latin caption fit "Saptami" at 1x.
-    Text {
-        y: 30px;
-        width: parent.width;
-        height: 16px;
+    // The tithi, one or two lines under the numeral row (widget-design §6). The text is as wide
+    // as it is, centred, so a name wider than the cell shows as clipped; the layout tests
+    // measure every name.
+    tithi-text := Text {
+        x: (parent.width - self.width) / 2;
+        y: root.top + 28px;
+        width: min(self.preferred-width, parent.width);
+        height: self.preferred-height;
         text: data.tithi;
         color: Theme.ink-muted;
         font-size: root.tithi-size;
+        line-height-factor: 0.78;
         horizontal-alignment: center;
-        vertical-alignment: center;
-        overflow: elide;
         visible: data.tithi != "";
         accessible-role: none;
     }
@@ -379,12 +396,16 @@ export component MonthGrid inherits Rectangle {
             }
 
             VerticalLayout {
-                alignment: start;
+                // The month view's rows share the height the grid is given, so a five-row month
+                // has no empty band above the holiday line; the year and decade cells keep their
+                // own height at the top.
+                alignment: root.zoom-mode == 0 ? stretch : start;
 
                 if root.zoom-mode == 0: GridLayout {
-                    // 2 px, not 4: at 360 px, 4 px padding and a 4 px gap left the 11 px "Nov"
-                    // marker touching the 16 px numeral at 1x. 2 px keeps 2 px clear.
-                    spacing: 2px;
+                    // No gap between columns: the cells are 48 px wide instead of 46, which the
+                    // numeral, the AD day and the longest tithi names use. Rows keep 2 px.
+                    spacing-horizontal: 0px;
+                    spacing-vertical: 2px;
                     for cell[i] in root.cells: DayCell {
                         data: cell;
                         index: i;
