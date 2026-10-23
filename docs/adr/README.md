@@ -16,7 +16,7 @@ Immutable once accepted (ADR-0001). Supersede with a new ADR.
 | [0010](0010-gui-framework-slint.md) | GUI framework for the widget: Slint | Accepted |
 | [0011](0011-time-and-time-zones-jiff.md) | Time and time zones: `jiff` in the widget, nothing in the core | Accepted |
 | [0012](0012-packaging-signing-and-releases.md) | Packaging, signing and releases | Accepted |
-| [0013](0013-licensing.md) | Licensing of this repository (MIT) | Accepted |
+| [0013](0013-licensing.md) | Licensing of this repository (MIT) | Accepted, amended by 0020 |
 | [0014](0014-testing-strategy-and-quality-gates.md) | Testing strategy and quality gates | Accepted |
 | [0015](0015-widget-architecture.md) | Widget internal architecture | Accepted |
 | [0016](0016-windows-taskbar-text.md) | Windows taskbar text (amends 0008 and 0015) | Superseded by 0019 |
