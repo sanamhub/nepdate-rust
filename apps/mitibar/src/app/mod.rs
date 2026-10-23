@@ -18,4 +18,5 @@ pub mod month_view;
 pub mod settings;
 pub mod settings_place;
 pub mod shortcut;
+pub mod tithi_label;
 pub mod zoom;

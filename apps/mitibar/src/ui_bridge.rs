@@ -14,6 +14,7 @@ use crate::app::month_view::{Cell, DayDetail, DayTooltip, MonthView};
 use crate::app::settings::Settings;
 use crate::app::settings_place;
 use crate::app::shortcut::{Key, Pressed};
+use crate::app::tithi_label::cell_tithi;
 use crate::app::zoom::{Zoom, ZoomState};
 use crate::platform::bar::Anchor;
 use crate::platform::frame::{self, Frame, Surface};
@@ -240,7 +241,7 @@ fn cell_data(cell: &Cell, lang: Lang) -> CellData {
         is_today: cell.is_today,
         is_holiday: cell.is_public_holiday,
         is_saturday: cell.is_saturday,
-        tithi: cell.tithi.unwrap_or_default().into(),
+        tithi: cell.tithi.map(cell_tithi).unwrap_or_default().into(),
         has_events: cell.has_events,
         is_padding: cell.date.is_none(),
         accessible_label: cell
