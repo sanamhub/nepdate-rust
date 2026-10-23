@@ -82,6 +82,8 @@ MitiBar keeps today's BS date in the tray, with a month grid, tithi, public holi
 and settings. It opens from the tray or the Windows 11 taskbar and closes when it loses focus. It
 makes no network requests.
 
+<a href="https://slint.dev"><img src="https://raw.githubusercontent.com/slint-ui/slint/v1.18.1/logo/MadeWithSlint-logo-whitebg.png" alt="Made with Slint" width="160"></a>
+
 Download it from the [releases](https://github.com/sanamhub/nepdate-rust/releases): an NSIS
 installer or portable zip for Windows (x64 and ARM64), a universal `.dmg` for macOS, and an
 `.AppImage` or `.deb` for Linux. The beta is not code-signed; the release notes say how to open it

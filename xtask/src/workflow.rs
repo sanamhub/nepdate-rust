@@ -298,6 +298,32 @@ fn check_jobs(root: &Mapping) -> Result<()> {
     if !draft {
         bail!("release job must create a draft");
     }
+    check_slint_badge(release)
+}
+
+/// The badge's image file, as the Slint attribution page names it (ADR-0020).
+const SLINT_BADGE_IMAGE: &str = "MadeWithSlint-logo-whitebg.png";
+
+/// ADR-0020: the notes of every release carry the "Made with Slint" badge, linked to slint.dev,
+/// because the license asks for it on the page the binaries are downloaded from. It is added
+/// whether or not the build is signed, so it comes before the unsigned-build note.
+fn check_slint_badge(release: &Mapping) -> Result<()> {
+    let notes = map(step_named(release, "Build release notes")?)?;
+    let script = get(notes, "run")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("the release notes step has no script"))?;
+    let Some(badge) = script.find(SLINT_BADGE_IMAGE) else {
+        bail!("the release notes do not carry the Made with Slint badge (ADR-0020)");
+    };
+    if !script.contains("<a href=\"https://slint.dev\">") {
+        bail!("the Made with Slint badge in the release notes must link to https://slint.dev");
+    }
+    if script
+        .find("if [[")
+        .is_some_and(|unsigned| badge > unsigned)
+    {
+        bail!("the Made with Slint badge must be added whether or not the build is signed");
+    }
     Ok(())
 }
 
@@ -573,6 +599,55 @@ mod tests {
     #[test]
     fn release_workflow_matches_the_runbook() {
         check(&workspace_root()).expect("release workflow");
+    }
+
+    #[test]
+    fn a_release_without_the_slint_badge_fails() {
+        let text = mutated(SLINT_BADGE_IMAGE, "logo.png");
+        expect_failure(&text, "Made with Slint badge");
+    }
+
+    #[test]
+    fn a_slint_badge_that_does_not_link_to_slint_fails() {
+        let text = mutated(
+            "<a href=\"https://slint.dev\">",
+            "<a href=\"https://example.com\">",
+        );
+        expect_failure(&text, "must link to https://slint.dev");
+    }
+
+    #[test]
+    fn a_slint_badge_only_in_the_unsigned_build_note_fails() {
+        let text = workflow_text();
+        let start = text
+            .find(
+                "          {
+            echo
+            echo '<a href=\"https://slint.dev\">",
+            )
+            .expect("the badge block");
+        let end = start
+            + text[start..]
+                .find(
+                    "} >> notes.md
+",
+                )
+                .expect("its end")
+            + "} >> notes.md
+"
+            .len();
+        let block = text[start..end].to_owned();
+        let without = format!("{}{}", &text[..start], &text[end..]);
+        // Put the block back inside the unsigned-build condition, after its first echo.
+        let anchor = "              echo \"### Unsigned build\"
+";
+        assert_eq!(
+            without.matches(anchor).count(),
+            1,
+            "the unsigned note's heading"
+        );
+        let moved = without.replacen(anchor, &format!("{anchor}{block}"), 1);
+        expect_failure(&moved, "whether or not the build is signed");
     }
 
     #[test]
