@@ -2109,3 +2109,107 @@ fn w8_4a_a_row_centres_its_label_and_its_control() {
         );
     }
 }
+
+// W8-4a: the chip lines scroll with the mouse wheel.
+
+/// The Settings window with eight fields on the top line, which is wider than the window.
+fn opened_with_a_long_top_line() -> (Fixture, SettingsWindow) {
+    let f = fixture();
+    f.state.borrow_mut().settings.bar_top = ids(&[
+        "weekday",
+        "time",
+        "zone_time",
+        "tithi",
+        "holiday",
+        "ad_date",
+        "bs_short",
+        "weekday_long",
+    ]);
+    settings_window::open(&f.state, settings_window::Request::default());
+    let window = settings_of(&f.state);
+    (f, window)
+}
+
+/// One wheel notch of `delta_y` at the height of `element`, in the middle of the window: the
+/// element itself may have scrolled out from under the pointer by then.
+fn wheel_over(window: &SettingsWindow, element: &ElementHandle, delta_y: f32) {
+    window
+        .window()
+        .dispatch_event(slint::platform::WindowEvent::PointerScrolled {
+            position: slint::LogicalPosition::new(210.0, centre_y(element)),
+            delta_x: 0.0,
+            delta_y,
+        });
+    slint::platform::update_timers_and_animations();
+}
+
+#[test]
+fn w8_4a_the_wheel_scrolls_a_chip_line_wider_than_the_window_sideways() {
+    let (_f, window) = opened_with_a_long_top_line();
+    scroll_to_end(&window);
+    // The window's fixed width, in logical px.
+    let window_right = 420.0;
+    // The testing backend leaves out what a clipping item hides, so the last chip is not there
+    // until the row has moved.
+    assert!(
+        !exists(&window, "Weekday, long"),
+        "the last chip starts out of view"
+    );
+    let first = element(&window, "Weekday");
+    let row = first.clone();
+    let before = first.absolute_position().x;
+    let page_before = window.get_scroll_y();
+
+    wheel_over(&window, &row, -60.0);
+    walk(&window);
+    assert!(
+        (first.absolute_position().x - (before - 60.0)).abs() < 0.01,
+        "one notch moves the row 60 px"
+    );
+    assert!(
+        (window.get_scroll_y() - page_before).abs() < 0.01,
+        "the page stays where it is"
+    );
+
+    // The row is 438 px wider than its window, so eight notches in all bring the last chip into
+    // view and stop at its end; a ninth would pass to the page.
+    for _ in 0..7 {
+        wheel_over(&window, &row, -60.0);
+    }
+    walk(&window);
+    let end = right_edge(&element(&window, "Weekday, long"));
+    // The row's window ends 16 px (the page's padding) plus 14 px (the scroll bar's room) before
+    // the window's edge.
+    assert!(
+        (end - (window_right - 30.0)).abs() < 0.01,
+        "the last chip ends at the row's end: {end}"
+    );
+    assert!(
+        (window.get_scroll_y() - page_before).abs() < 0.01,
+        "the page stays where it is"
+    );
+
+    wheel_over(&window, &row, 60.0);
+    walk(&window);
+    let back = right_edge(&element(&window, "Weekday, long"));
+    assert!(
+        (back - (end + 60.0)).abs() < 0.01,
+        "the other way moves the row back by one notch"
+    );
+}
+
+#[test]
+fn w8_4a_the_wheel_over_a_chip_line_that_fits_scrolls_the_page() {
+    let (_f, window) = opened();
+    scroll_to_end(&window);
+    window.set_scroll_y(window.get_scroll_y() + 40.0);
+    walk(&window);
+    let chip = element(&window, "Weekday");
+    let page_before = window.get_scroll_y();
+    wheel_over(&window, &chip, 30.0);
+    walk(&window);
+    assert!(
+        (window.get_scroll_y() - page_before).abs() > 1.0,
+        "a line that fits leaves the wheel to the page"
+    );
+}
