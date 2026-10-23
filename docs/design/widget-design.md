@@ -40,8 +40,8 @@ Devanagari for Nepali. Both OFL-1.1 (ADR-0010).
 | `caption` | 11 px | event labels, small AD month names |
 | `body` | 13 px | AD day in a cell, secondary text |
 | `base` | 14 px | clock, buttons, input text |
-| `title` | 16 px | month title, day detail heading |
-| `display` | 22 px | header BS day and long date |
+| `title` | 16 px | day detail heading, year and decade cell labels |
+| `display` | 20 px | header BS long date |
 
 Spacing on a 4 px grid: 4, 8, 12, 16, 24. Popup padding 12, grid cell padding 4, gap between
 sections 16.
@@ -101,7 +101,7 @@ shape with the same radius.
 
 ```
 ╭───────────────────────────────────────────────╮
-│ Kartik 5, 2083          (⇄ Convert) (⚙) (⌖)   │  display 22 px; pills right
+│ Kartik 5, 2083          (⇄ Convert) (⚙) (⌖)   │  display 20 px; pills right
 │ Thursday · Oct 22, 2026                        │  ink-muted
 │ 6:31 PM Kathmandu · 8:46 PM Singapore          │  base 14 px
 │───────────────────────────────────────────────│
@@ -114,17 +114,24 @@ shape with the same radius.
 ╰───────────────────────────────────────────────╯
 ```
 
-- Header: left-aligned text, the three pill actions on the right of the first line. Convert has
-  an icon and a label; Settings and Pin are icon-only pills with tooltips and accessible names.
-  A pinned Pin pill is filled with `ink`, its icon in `surface`.
+- Header: left-aligned text, the three pill actions on the right of the first line. The date is
+  `display`, 20 px, the largest size that fits "Baishakh 31, 2081" beside the pills; the Convert
+  label is 13 px for the same reason. A click on the date opens Go to date (WR-14 AC3); on hover
+  it gets the borderless pill of the month title. Convert has an icon and a label; Settings and Pin are
+  icon-only pills with tooltips and accessible names. A pinned Pin pill is filled with `ink`, its
+  icon in `surface`.
 - Pills: 28 px high, `surface-raised` fill, 1 px `hairline` border, `base` text. They are the only
   button style in the popup, so actions are easy to spot.
-- The month title is plain `title` text that turns into a pill on hover and focus. The previous
-  and next arrows are borderless icon buttons. The Today pill shows only away from today.
+- The month title is plain `base` text that turns into a pill on hover and focus. It is 14 px, not
+  the 16 px `title` step, so the longest month title, the two arrows and the Today pill share one
+  336 px row. The previous and next arrows are borderless icon buttons. The Today pill shows only
+  away from today's month in the month view, and always in the year and decade views.
 - Grid: the BS number is the largest text in each cell, the AD day sits top-right in `caption`
   `ink-muted`, the tithi under the number in `caption`. Today's number sits on a filled 28 px
   `sindoor` disc with the numeral in `surface-raised`; the pair must reach 4.5:1 in both themes.
-  Holidays are `sindoor` numerals. The event dot is `marigold`.
+  Holidays are `sindoor` numerals. The event dot is `marigold`. Cells are 48 px high, so a 6-row
+  month is 298 px. The grid is one Tab stop: its cursor, drawn with the 2 px `ink` ring, moves
+  with the arrow keys.
 - Year and decade views use the same cell radius and a 4×3 grid. Today's month or year gets the
   `sindoor` treatment; the viewed one gets a `hairline` ring.
 - Day tooltip: a `surface-raised` card, 6 px radius, `hairline` border, `body` text, placed so

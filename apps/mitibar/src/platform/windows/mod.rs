@@ -5,7 +5,8 @@
 
 mod bar;
 mod foreground;
-mod monitors;
+pub(crate) mod frame;
+pub(crate) mod monitors;
 pub mod render;
 pub(crate) mod theme;
 

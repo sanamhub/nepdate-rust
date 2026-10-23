@@ -1,12 +1,16 @@
-// The month grid (WR-03): title, prev/next/today, month and year pickers, a Sunday-first
-// 7-column grid, and the next-holiday line. Presentation only: `app::MonthView` decides the
-// cells, `ui_bridge.rs` converts them, and this file never calls `nepdate`.
+// The calendar (WR-03): the title row with the previous, title, next and Today controls, and one
+// of three grids: the month's days, the year's 12 months, or 12 years of a decade. Presentation
+// only: `app::ZoomState` decides the level and the cursor, `app::MonthView` the cells,
+// `ui_bridge.rs` converts them, and this file never calls `nepdate`.
+//
+// The grid is one Tab stop with a roving cursor (WR-10 AC2): the arrow keys move the cursor in
+// Rust, and the cell at `cursor-index` draws the focus ring while the grid has focus.
 
 import { FocusFrame } from "focus-frame.slint";
+import { LineIcon, Pill, TooltipTiming } from "controls.slint";
 import { Theme } from "theme.slint";
-import { Button, ComboBox, Palette } from "std-widgets.slint";
 
-/// One cell as the grid draws it. `date` stays in Rust; the label is data built from ISO dates,
+/// One day cell as the grid draws it. `date` stays in Rust; the label is data built from ISO dates,
 /// the weekday name and the tithi name, with no English sentence.
 export struct CellData {
     bs-day: string,
@@ -21,421 +25,317 @@ export struct CellData {
     accessible-label: string,
 }
 
+/// One cell of the year or decade grid. A year outside 1901 to 2199 is not enabled and has no
+/// label, so it cannot be picked (WR-03 AC6).
+export struct ZoomCellData {
+    label: string,
+    is-today: bool,
+    is-viewed: bool,
+    enabled: bool,
+    accessible-label: string,
+}
+
 component DayCell inherits Rectangle {
     in property <CellData> data;
     in property <int> index;
-    in property <bool> interactive: true;
+    /// The roving cursor is here and the grid has focus.
+    in property <bool> cursor: false;
+    /// The snapshot tool shows this day's tooltip as if the pointer had rested here.
+    in property <bool> force-tip: false;
     /// The AD day's size: 13 px for Latin, 12 px for Devanagari (widget-design §3/§4).
     in property <length> ad-day-size: 13px;
     /// The tithi's size: the 11 px Latin caption step, 12 px for Devanagari.
     in property <length> tithi-size: 12px;
     callback clicked(int);
-    callback focused(string);
+    /// The pointer rested on this day: the index and the cell's window position and size.
+    callback tip-requested(int, length, length, length, length);
+    callback tip-dismissed();
+
+    property <bool> tip-shown: false;
 
     horizontal-stretch: 1;
-    // Two lines on the 4 px grid: 4 px padding, a 20 px numeral line and a 16 px tithi line,
-    // 44 px in total. The grid gap is 2 px (see the GridLayout comment), so a 6-row month fits.
-    height: 44px;
-    border-radius: 4px;
-    border-width: data.is-today ? 2px : 0px;
-    border-color: Theme.sindoor;
+    // Two lines on the 4 px grid: the 28 px numeral disc, 2 px of air and a 16 px tithi line,
+    // 48 px in total. The grid gap is 2 px (see the GridLayout comment), so a 6-row month is 298 px
+    // and leaves room for the header and the holiday line in 520 px.
+    height: 48px;
+    border-radius: 6px;
+    background: touch.has-hover && !data.is-padding ? Theme.surface-raised : transparent;
+    accessible-role: button;
+    accessible-label: data.accessible-label;
+    // The same action a screen reader invokes.
+    accessible-action-default => { root.clicked(root.index); }
 
-    fs := FocusScope {
+    touch := TouchArea {
+        enabled: !data.is-padding;
+        clicked => { root.clicked(root.index); }
+        changed has-hover => {
+            if (!touch.has-hover) {
+                root.tip-shown = false;
+                root.tip-dismissed();
+            }
+        }
+    }
+
+    // Today's numeral sits on a filled disc (WR-03 AC3). The numeral is `surface-raised` on
+    // `sindoor`, which reaches 4.5:1 in both themes (checked by `theme.rs`).
+    Rectangle {
+        x: 2px;
+        y: 0px;
+        width: 28px;
+        height: 28px;
+        border-radius: 14px;
+        background: data.is-today ? Theme.sindoor : transparent;
+    }
+
+    // Event dot, top-left, in the corner the disc leaves free (WR-03 AC4).
+    Rectangle {
+        x: 1px;
+        y: 1px;
+        width: 4px;
+        height: 4px;
+        border-radius: 2px;
+        background: Theme.marigold;
+        visible: data.has-events;
+    }
+
+    // Line 1: the BS day on the disc at the left (16 px) and the AD day at the right (13 px
+    // Latin, 12 px Devanagari). On an AD 1st the short AD month replaces the day (WR-03 AC2).
+    Text {
+        x: 2px;
+        y: 0px;
+        width: 28px;
+        height: 28px;
+        text: data.bs-day;
+        color: data.is-today
+            ? Theme.surface-raised
+            : data.is-holiday ? Theme.sindoor : data.is-saturday ? Theme.saturday : Theme.ink;
+        font-size: 16px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
+    Text {
+        x: 4px;
+        y: 4px;
+        width: parent.width - 8px;
+        height: 20px;
+        text: data.ad-month != "" ? data.ad-month : data.ad-day;
+        color: Theme.ink-muted;
+        font-size: data.ad-month != "" ? 11px : root.ad-day-size;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
+
+    // Line 2: the tithi, 11 px Latin or 12 px Devanagari (widget-design §3/§4), elided when long.
+    // The full cell width is what lets the 11 px Latin caption fit "Saptami" at 1x.
+    Text {
+        y: 30px;
+        width: parent.width;
+        height: 16px;
+        text: data.tithi;
+        color: Theme.ink-muted;
+        font-size: root.tithi-size;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+        visible: data.tithi != "";
+        accessible-role: none;
+    }
+
+    // The tooltip waits for the pointer to rest (WR-14 AC2).
+    Timer {
+        interval: TooltipTiming.delay;
+        running: (touch.has-hover || root.force-tip) && !root.tip-shown && !data.is-padding;
+        triggered => {
+            root.tip-shown = true;
+            root.tip-requested(root.index, root.absolute-position.x, root.absolute-position.y,
+                root.width, root.height);
+        }
+    }
+
+    // Inset so the ring stays inside the cell next to its neighbours.
+    FocusFrame {
         width: 100%;
         height: 100%;
-        enabled: root.interactive && !data.is-padding;
-        focus-on-tab-navigation: root.interactive && !data.is-padding;
-        accessible-role: button;
-        accessible-label: data.accessible-label;
-        // The same action a screen reader invokes.
-        accessible-action-default => { root.clicked(root.index); }
+        focused: root.cursor && !data.is-padding;
+        thickness: 2px;
+        radius: 6px;
+    }
+}
 
-        // Enter or Space opens the day detail (WR-10 AC2). Tab order is the repeater order.
-        key-pressed(event) => {
-            if (event.text == Key.Return || event.text == " ") {
-                root.clicked(root.index);
-                return accept;
-            }
-            reject
-        }
-        changed has-focus => {
-            if (fs.has-focus) {
-                root.focused(data.bs-day);
-            }
-        }
+component ZoomCell inherits Rectangle {
+    in property <ZoomCellData> data;
+    in property <int> index;
+    in property <bool> cursor: false;
+    callback clicked(int);
 
-        TouchArea {
-            clicked => { root.clicked(root.index); }
-        }
+    horizontal-stretch: 1;
+    height: 64px;
+    border-radius: 6px;
+    // Today's month or year takes the `sindoor` treatment; the viewed one gets a `hairline` ring
+    // (widget-design §7).
+    background: data.is-today
+        ? Theme.sindoor
+        : touch.has-hover && data.enabled ? Theme.surface-raised : transparent;
+    border-width: data.is-viewed && !data.is-today ? 1px : 0px;
+    border-color: Theme.hairline;
+    accessible-role: button;
+    accessible-label: data.accessible-label;
+    accessible-action-default => { root.clicked(root.index); }
 
-        // Event dot, top-left, above the numeral's ink (WR-03 AC4). One logical pixel down from
-        // the ring's inner edge keeps it off the 2 px today ring.
-        Rectangle {
-            x: 4px;
-            y: 3px;
-            width: 4px;
-            height: 4px;
-            border-radius: 2px;
-            background: Theme.marigold;
-            visible: data.has-events;
-        }
+    touch := TouchArea {
+        enabled: data.enabled;
+        clicked => { root.clicked(root.index); }
+    }
 
-        // Line 1: the BS day at the left (16 px) and the AD day at the right (13 px Latin,
-        // 12 px Devanagari). On an AD 1st the short AD month replaces the day (WR-03 AC2).
-        Text {
-            x: 4px;
-            y: 4px;
-            width: parent.width - 8px;
-            height: 20px;
-            text: data.bs-day;
-            color: data.is-holiday ? Theme.sindoor : data.is-saturday ? Theme.saturday : Theme.ink;
-            font-size: 16px;
-            horizontal-alignment: left;
-            vertical-alignment: center;
-        }
-        Text {
-            x: 4px;
-            y: 4px;
-            width: parent.width - 8px;
-            height: 20px;
-            text: data.ad-month != "" ? data.ad-month : data.ad-day;
-            color: Theme.ink-muted;
-            font-size: data.ad-month != "" ? 11px : root.ad-day-size;
-            horizontal-alignment: right;
-            vertical-alignment: center;
-        }
+    Text {
+        text: data.label;
+        color: data.is-today ? Theme.surface-raised : Theme.ink;
+        font-size: 16px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
 
-        // Line 2: the tithi, 11 px Latin or 12 px Devanagari (widget-design §3/§4), elided when
-        // long. The full cell width is what lets the 11 px Latin caption fit "Saptami" at 1x
-        // Today keeps the 4 px inset so its 2 px ring stays clear of the glyphs.
-        Text {
-            x: data.is-today ? 4px : 0px;
-            y: 24px;
-            width: parent.width - (data.is-today ? 8px : 0px);
-            height: 16px;
-            text: data.tithi;
-            color: Theme.ink-muted;
-            font-size: root.tithi-size;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-            overflow: elide;
-            visible: data.tithi != "";
-        }
-
-        // Inset so the 2 px today ring outside it stays visible when a day is focused.
-        FocusFrame {
-            x: 3px;
-            y: 3px;
-            width: parent.width - 6px;
-            height: parent.height - 6px;
-            focused: fs.has-focus;
-            thickness: 2px;
-            radius: 3px;
-        }
+    FocusFrame {
+        width: 100%;
+        height: 100%;
+        focused: root.cursor && data.enabled;
+        thickness: 2px;
+        radius: 6px;
     }
 }
 
 export component MonthGrid inherits Rectangle {
     /// False while an overlay covers the popup; every control leaves the Tab cycle.
     in property <bool> interactive: true;
+    /// 0 is the month view, 1 the year view, 2 the decade view.
+    in property <int> zoom-mode: 0;
     in property <[CellData]> cells;
+    in property <[ZoomCellData]> zoom-cells;
     in property <[string]> weekday-headers;
-    in property <[string]> month-names;
-    in-out property <int> month-index: 0;
-    in-out property <int> year: 1901;
-    /// The year in the active language's digits. Slint's `SpinBox` cannot format its
-    /// value, so this control shows Rust's `Lang::digits(year)` string.
-    in property <string> year-text: "";
+    /// The title in the active language's digits: the month and years, the year, or the decade.
     in property <string> title: "";
+    /// The roving cursor's cell, or -1 when none.
+    in property <int> cursor-index: -1;
     in property <bool> can-prev: false;
     in property <bool> can-next: false;
-    in property <string> holiday-name: "";
-    in property <int> holiday-days: -1;
+    in property <bool> today-shown: false;
+    /// The snapshot tool shows this day's tooltip without a pointer; -1 in the app.
+    in property <int> forced-tip-index: -1;
     /// 13 px for Latin, 12 px for Devanagari, set once from the language (WR-03 AC2).
     in property <length> ad-day-size: 13px;
     /// 11 px for Latin, 12 px for Devanagari, set once from the language.
     in property <length> tithi-size: 12px;
 
-    callback day-clicked(int);
-    callback prev-month();
-    callback next-month();
+    callback step(int);
+    callback title-clicked();
     callback today();
-    callback month-picked(int);
-    callback year-picked(int);
-    callback wheel(int);
-
-    /// Used by the snapshot tool and the keyboard tests to put focus on a known control.
-    public function focus-next-year() {
-        year-next.focus();
-    }
+    callback cell-clicked(int);
+    callback zoom-cell-clicked(int);
+    /// 0 left, 1 right, 2 up, 3 down.
+    callback arrow(int);
+    callback activate();
+    callback day-tip-requested(int, length, length, length, length);
+    callback tip-dismissed();
 
     /// The focused control's stable name. Read by the interaction test; draws nothing.
-    out property <string> focused-control: root.active-control;
-    /// Set by the control that gains focus inside the grid.
-    in-out property <string> active-control: "";
+    out property <string> focused-control:
+        prev-button.has-focus ? "previous"
+        : title-button.has-focus ? "title"
+        : next-button.has-focus ? "next"
+        : today-button.has-focus ? "today"
+        : grid-scope.has-focus ? "grid"
+        : "";
 
     VerticalLayout {
         spacing: 4px;
 
-        // Title with the previous and next buttons (WR-03 AC5, AC6).
+        // Previous, the title that zooms, next, and Today at the right edge (widget-design §7).
         HorizontalLayout {
             spacing: 4px;
-            FocusFrame {
-                width: month-prev.width;
-                height: month-prev.height;
-                focused: month-prev.has-focus;
-                month-prev := Button {
-                    text: "<";
-                    accessible-label: @tr("Previous month");
-                    enabled: root.interactive && root.can-prev;
-                    clicked => { root.prev-month(); }
-                    changed has-focus => {
-                        if (month-prev.has-focus) { root.active-control = "previous month"; }
+            prev-button := Pill {
+                width: 28px;
+                bordered: false;
+                has-icon: true;
+                label: root.zoom-mode == 0 ? @tr("Previous month")
+                    : root.zoom-mode == 1 ? @tr("Previous year") : @tr("Previous decade");
+                enabled: root.interactive && root.can-prev;
+                activated => {
+                    // A control disabled while it has focus keeps its ring for good, so the
+                    // grid takes the focus before the step, as for the title, and it comes back
+                    // here unless the step reached the end of the range.
+                    let had-focus = prev-button.has-focus;
+                    if (had-focus) {
+                        grid-scope.focus();
+                    }
+                    root.step(-1);
+                    if (had-focus && root.can-prev) {
+                        prev-button.focus();
                     }
                 }
+                LineIcon {
+                    commands: "M 10 3 L 5 8 L 10 13";
+                    color: prev-button.foreground;
+                }
             }
-            Text {
+            title-button := Pill {
+                bordered: false;
                 text: root.title;
-                color: Theme.ink;
-                font-size: 16px;
-                horizontal-stretch: 1;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
-            FocusFrame {
-                width: month-next.width;
-                height: month-next.height;
-                focused: month-next.has-focus;
-                month-next := Button {
-                    text: ">";
-                    accessible-label: @tr("Next month");
-                    enabled: root.interactive && root.can-next;
-                    clicked => { root.next-month(); }
-                    changed has-focus => {
-                        if (month-next.has-focus) { root.active-control = "next month"; }
+                // 14 px, not the 16 px title step: the longest month title, the arrows and the
+                // Today pill must share one 336 px row.
+                font-size: 14px;
+                label: @tr("Change view");
+                fade-when-disabled: false;
+                enabled: root.interactive && root.zoom-mode != 2;
+                activated => {
+                    // The decade title does nothing, so it is disabled there. A control that is
+                    // disabled while it has focus keeps its focus ring for good, so the grid takes
+                    // the focus first, before the view that disables the title opens.
+                    if (root.zoom-mode == 1) {
+                        grid-scope.focus();
                     }
+                    root.title-clicked();
                 }
             }
-        }
-
-        // Month and year pickers plus Today (WR-03 AC6, WR-10 AC2). The pickers keep their range;
-        // the prev/next buttons are the controls that disable at the range edges. The pickers have
-        // fixed widths so Today stays inside the 24 px margins at 360 px in both languages;
-        // the spacer keeps Today at the right edge.
-        HorizontalLayout {
-            spacing: 4px;
-            FocusFrame {
-                width: month-picker.width;
-                height: month-picker.height;
-                focused: month-picker.has-focus;
-                month-picker := ComboBox {
-                    model: root.month-names;
-                    current-index <=> root.month-index;
-                    accessible-label: @tr("Month");
-                    enabled: root.interactive;
-                    width: 128px;
-                    selected(_value) => { root.month-picked(root.month-index); }
-                    changed has-focus => {
-                        if (month-picker.has-focus) { root.active-control = "month"; }
+            next-button := Pill {
+                width: 28px;
+                bordered: false;
+                has-icon: true;
+                label: root.zoom-mode == 0 ? @tr("Next month")
+                    : root.zoom-mode == 1 ? @tr("Next year") : @tr("Next decade");
+                enabled: root.interactive && root.can-next;
+                activated => {
+                    // A control disabled while it has focus keeps its ring for good, so the
+                    // grid takes the focus before the step, as for the title, and it comes back
+                    // here unless the step reached the end of the range.
+                    let had-focus = next-button.has-focus;
+                    if (had-focus) {
+                        grid-scope.focus();
+                    }
+                    root.step(1);
+                    if (had-focus && root.can-next) {
+                        next-button.focus();
                     }
                 }
-            }
-            // The standard `SpinBox` shows ASCII digits in Nepali. This control shows
-            // `root.year-text` from Rust, keeps the 1901 to 2199 range, and steps by keyboard,
-            // mouse wheel or the accessibility increment/decrement actions. The range edges
-            // disable those actions instead of wrapping.
-            // Visible 24 px buttons give pointer and touch users the same steps.
-            year-scope := FocusScope {
-                width: 112px;
-                height: 32px;
-                enabled: root.interactive;
-                accessible-role: spinbox;
-                accessible-label: @tr("Year");
-                accessible-value: root.year-text;
-                accessible-value-minimum: 1901;
-                accessible-value-maximum: 2199;
-                accessible-value-step: 1;
-                accessible-action-set-value(v) => {
-                    if (v.is-float()) {
-                        root.year-picked(round(v.to-float()));
-                    }
-                }
-                accessible-action-increment => {
-                    if (root.year < 2199) { root.year-picked(root.year + 1); }
-                }
-                accessible-action-decrement => {
-                    if (root.year > 1901) { root.year-picked(root.year - 1); }
-                }
-                key-pressed(event) => {
-                    if (event.text == Key.UpArrow) {
-                        if (root.year < 2199) { root.year-picked(root.year + 1); }
-                        return accept;
-                    }
-                    if (event.text == Key.DownArrow) {
-                        if (root.year > 1901) { root.year-picked(root.year - 1); }
-                        return accept;
-                    }
-                    reject
-                }
-                focus-gained(_) => { root.active-control = "year"; }
-
-                Rectangle {
-                    border-radius: 4px;
-                    background: Palette.control-background;
-                    // The focus ring is the design token's ink, drawn over this box below.
-                    border-width: 1px;
-                    border-color: Palette.border;
-
-                    Text {
-                        x: 26px;
-                        width: parent.width - 52px;
-                        height: 100%;
-                        text: root.year-text;
-                        color: Palette.control-foreground;
-                        font-size: 14px;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                        accessible-role: none;
-                    }
-
-                    TouchArea {
-                        clicked => { year-scope.focus(); }
-                        scroll-event(event) => {
-                            if (event.delta-y != 0) {
-                                if (event.delta-y > 0) {
-                                    if (root.year < 2199) { root.year-picked(root.year + 1); }
-                                } else {
-                                    if (root.year > 1901) { root.year-picked(root.year - 1); }
-                                }
-                                return accept;
-                            }
-                            reject
-                        }
-                    }
-                }
-
-                // 24 by 28 px inside the 112 by 32 px box: a pointer target at the 24 px
-                // minimum, with the year text keeping 60 px between the two buttons.
-                year-prev := FocusScope {
-                    x: 2px;
-                    y: 2px;
-                    width: 24px;
-                    height: 28px;
-                    accessible-role: button;
-                    accessible-label: @tr("Previous year");
-                    accessible-enabled: root.interactive && root.year > 1901;
-                    enabled: root.interactive && root.year > 1901;
-                    focus-on-tab-navigation: true;
-                    accessible-action-default => {
-                        if (root.year > 1901) { root.year-picked(root.year - 1); }
-                    }
-                    key-pressed(event) => {
-                        if (event.text == Key.Return || event.text == " ") {
-                            if (root.year > 1901) { root.year-picked(root.year - 1); }
-                            return accept;
-                        }
-                        reject
-                    }
-                    focus-gained(_) => { root.active-control = "previous year"; }
-
-                    Rectangle {
-                        border-radius: 3px;
-                        background: transparent;
-                        border-width: year-prev.has-focus ? 2px : 0px;
-                        border-color: Theme.ink;
-                    }
-
-                    Text {
-                        text: "‹";
-                        color: root.year > 1901 ? Palette.control-foreground : Palette.border;
-                        font-size: 18px;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                        accessible-role: none;
-                    }
-
-                    TouchArea {
-                        clicked => {
-                            year-prev.focus();
-                            if (root.year > 1901) { root.year-picked(root.year - 1); }
-                        }
-                    }
-                }
-
-                year-next := FocusScope {
-                    x: 86px;
-                    y: 2px;
-                    width: 24px;
-                    height: 28px;
-                    accessible-role: button;
-                    accessible-label: @tr("Next year");
-                    accessible-enabled: root.interactive && root.year < 2199;
-                    enabled: root.interactive && root.year < 2199;
-                    focus-on-tab-navigation: true;
-                    accessible-action-default => {
-                        if (root.year < 2199) { root.year-picked(root.year + 1); }
-                    }
-                    key-pressed(event) => {
-                        if (event.text == Key.Return || event.text == " ") {
-                            if (root.year < 2199) { root.year-picked(root.year + 1); }
-                            return accept;
-                        }
-                        reject
-                    }
-                    focus-gained(_) => { root.active-control = "next year"; }
-
-                    Rectangle {
-                        border-radius: 3px;
-                        background: transparent;
-                        border-width: year-next.has-focus ? 2px : 0px;
-                        border-color: Theme.ink;
-                    }
-
-                    Text {
-                        text: "›";
-                        color: root.year < 2199 ? Palette.control-foreground : Palette.border;
-                        font-size: 18px;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                        accessible-role: none;
-                    }
-
-                    TouchArea {
-                        clicked => {
-                            year-next.focus();
-                            if (root.year < 2199) { root.year-picked(root.year + 1); }
-                        }
-                    }
-                }
-
-                FocusFrame {
-                    x: 0;
-                    y: 0;
-                    width: 100%;
-                    height: 100%;
-                    focused: year-scope.has-focus;
-                    thickness: 2px;
+                LineIcon {
+                    commands: "M 6 3 L 11 8 L 6 13";
+                    color: next-button.foreground;
                 }
             }
             Rectangle { horizontal-stretch: 1; }
-            FocusFrame {
-                width: today-button.width;
-                height: today-button.height;
-                focused: today-button.has-focus;
-                today-button := Button {
-                    text: @tr("Today");
-                    accessible-label: @tr("Today");
-                    enabled: root.interactive;
-                    clicked => { root.today(); }
-                    changed has-focus => {
-                        if (today-button.has-focus) { root.active-control = "today"; }
-                    }
-                }
+            today-button := Pill {
+                text: @tr("Today");
+                label: @tr("Today");
+                visible: root.today-shown;
+                enabled: root.interactive && root.today-shown;
+                activated => { root.today(); }
             }
         }
 
-        // Weekday header, Sunday first (WR-03 AC1).
-        HorizontalLayout {
+        // Weekday header, Sunday first (WR-03 AC1). Only the month view has one.
+        if root.zoom-mode == 0: HorizontalLayout {
             for header in root.weekday-headers: Text {
                 text: header;
                 color: Theme.ink-muted;
@@ -445,51 +345,79 @@ export component MonthGrid inherits Rectangle {
             }
         }
 
-        // The grid. One notch scrolls one month (WR-03 AC6); the parent TouchArea receives the
-        // scroll because the cells do not handle it.
-        TouchArea {
-            scroll-event(event) => {
-                if (event.delta-y != 0) {
-                    root.wheel(event.delta-y > 0 ? 1 : -1);
+        // The grid. One notch scrolls one month, year or decade (WR-03 AC6); the TouchArea behind
+        // the cells receives the scroll because the cells do not handle it. The scope is the grid's
+        // one Tab stop.
+        grid-scope := FocusScope {
+            enabled: root.interactive;
+            focus-on-tab-navigation: root.interactive;
+            accessible-role: none;
+            // Arrow keys move the cursor and Enter or Space acts on it (WR-10 AC2); Rust owns the
+            // cursor, so a month change carries it into the next month.
+            key-pressed(event) => {
+                if (event.text == Key.LeftArrow) { root.arrow(0); return accept; }
+                if (event.text == Key.RightArrow) { root.arrow(1); return accept; }
+                if (event.text == Key.UpArrow) { root.arrow(2); return accept; }
+                if (event.text == Key.DownArrow) { root.arrow(3); return accept; }
+                if (event.text == Key.Return || event.text == " ") {
+                    root.activate();
                     return accept;
                 }
                 reject
             }
-            GridLayout {
-                // 2 px, not 4: at 360 px, 4 px padding and a 4 px gap left the 11 px "Nov"
-                // marker touching the 16 px numeral at 1x. 2 px keeps 2 px clear.
-                spacing: 2px;
-                for cell[i] in root.cells: DayCell {
-                    data: cell;
-                    index: i;
-                    interactive: root.interactive;
-                    ad-day-size: root.ad-day-size;
-                    tithi-size: root.tithi-size;
-                    row: i / 7;
-                    col: mod(i, 7);
-                    clicked(index) => { root.day-clicked(index); }
-                    focused(day) => { root.active-control = "day " + day; }
+
+            TouchArea {
+                scroll-event(event) => {
+                    if (event.delta-y != 0) {
+                        root.step(event.delta-y > 0 ? 1 : -1);
+                        return accept;
+                    }
+                    reject
                 }
             }
-        }
 
-        // WR-03 AC8. The sentence is built here with @tr, never in Rust.
-        Text {
-            visible: root.holiday-days >= 0;
-            color: Theme.ink-muted;
-            font-size: 12px;
-            horizontal-alignment: center;
-            text: root.holiday-name == ""
-                ? (root.holiday-days == 0
-                    ? @tr("Public holiday today")
-                    : root.holiday-days == 1
-                        ? @tr("Public holiday tomorrow")
-                        : @tr("Public holiday in {0} days", root.holiday-days))
-                : (root.holiday-days == 0
-                    ? @tr("Next holiday: {0} today", root.holiday-name)
-                    : root.holiday-days == 1
-                        ? @tr("Next holiday: {0} tomorrow", root.holiday-name)
-                        : @tr("Next holiday: {0} in {1} days", root.holiday-name, root.holiday-days));
+            VerticalLayout {
+                alignment: start;
+
+                if root.zoom-mode == 0: GridLayout {
+                    // 2 px, not 4: at 360 px, 4 px padding and a 4 px gap left the 11 px "Nov"
+                    // marker touching the 16 px numeral at 1x. 2 px keeps 2 px clear.
+                    spacing: 2px;
+                    for cell[i] in root.cells: DayCell {
+                        data: cell;
+                        index: i;
+                        cursor: grid-scope.has-focus && root.cursor-index == i;
+                        force-tip: root.forced-tip-index == i;
+                        ad-day-size: root.ad-day-size;
+                        tithi-size: root.tithi-size;
+                        row: i / 7;
+                        col: mod(i, 7);
+                        clicked(index) => {
+                            grid-scope.focus();
+                            root.cell-clicked(index);
+                        }
+                        tip-requested(index, x, y, w, h) => { root.day-tip-requested(index, x, y, w, h); }
+                        tip-dismissed => { root.tip-dismissed(); }
+                    }
+                }
+
+                // The year and decade views: 4 columns by 3 rows.
+                if root.zoom-mode != 0: GridLayout {
+                    spacing: 8px;
+                    padding-top: 8px;
+                    for cell[i] in root.zoom-cells: ZoomCell {
+                        data: cell;
+                        index: i;
+                        cursor: grid-scope.has-focus && root.cursor-index == i;
+                        row: i / 4;
+                        col: mod(i, 4);
+                        clicked(index) => {
+                            grid-scope.focus();
+                            root.zoom-cell-clicked(index);
+                        }
+                    }
+                }
+            }
         }
     }
 }

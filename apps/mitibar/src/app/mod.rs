@@ -11,6 +11,8 @@ pub mod bar_pointer;
 pub mod clock;
 pub mod converter;
 pub mod format;
+pub mod goto;
 pub mod holidays;
 pub mod month_view;
 pub mod settings;
+pub mod zoom;

@@ -12,6 +12,7 @@ use slint::{ComponentHandle, Model};
 use crate::app::bar::BarLines;
 use crate::app::bar_place::{Rect, Saved};
 use crate::app::settings::Settings;
+use crate::app::zoom::Zoom;
 use crate::platform::bar::{Anchor, Bar, BarEvent, MenuItem, MenuLabels};
 use crate::platform::clipboard::Clipboard;
 use crate::{AppState, PopupWindow, update_popup, wire_popup, wire_settings};
@@ -27,6 +28,10 @@ impl Clipboard for FakeClipboard {
         self.texts.borrow_mut().push(text.to_owned());
         Ok(())
     }
+}
+
+fn date(year: u16, month: u8, day: u8) -> NepaliDate {
+    NepaliDate::new(year, month, day).expect("valid BS date")
 }
 
 /// A popup wired exactly like `main`, on a pinned date.
@@ -61,10 +66,18 @@ fn element(popup: &PopupWindow, label: &str) -> ElementHandle {
     found.into_iter().next().expect("one element")
 }
 
-/// Sets the month without going through the UI, then repaints.
+/// Whether any element carries this accessible label.
+fn exists(popup: &PopupWindow, label: &str) -> bool {
+    ElementHandle::find_by_accessible_label(popup, label).count() > 0
+}
+
+/// Opens `year`/`month` in the month view without going through the UI, then repaints.
 fn show_month(state: &Rc<RefCell<AppState>>, year: u16, month: Month) {
-    state.borrow_mut().viewed_month = (year, month);
-    state.borrow_mut().detail = None;
+    {
+        let mut s = state.borrow_mut();
+        s.zoom.jump_to(date(year, month.number(), 1));
+        s.detail = None;
+    }
     update_popup(state);
 }
 
@@ -93,6 +106,32 @@ fn press(popup: &PopupWindow, key: slint::platform::Key) {
     slint::platform::update_timers_and_animations();
 }
 
+/// Types `text` one character at a time, as the keyboard would.
+fn type_text(popup: &PopupWindow, text: &str) {
+    for character in text.chars() {
+        let text: slint::SharedString = character.to_string().into();
+        for event in [
+            slint::platform::WindowEvent::KeyPressed { text: text.clone() },
+            slint::platform::WindowEvent::KeyReleased { text },
+        ] {
+            popup.window().dispatch_event(event);
+        }
+    }
+    slint::platform::update_timers_and_animations();
+}
+
+/// A key with Ctrl held: press Control, tap the key, release Control.
+fn press_ctrl(popup: &PopupWindow, text: &str) {
+    use slint::platform::{Key, WindowEvent};
+    popup.window().dispatch_event(WindowEvent::KeyPressed {
+        text: Key::Control.into(),
+    });
+    type_text(popup, text);
+    popup.window().dispatch_event(WindowEvent::KeyReleased {
+        text: Key::Control.into(),
+    });
+}
+
 /// Shift+Tab: press Shift, tap Tab, release Shift, so Slint sees the modifier.
 fn press_shift_tab(popup: &PopupWindow) {
     use slint::platform::{Key, WindowEvent};
@@ -109,29 +148,80 @@ fn focused(popup: &PopupWindow) -> String {
     popup.get_focused_control().to_string()
 }
 
-/// The base order in visual order, with the real day labels from the populated cells.
-fn base_order(popup: &PopupWindow) -> Vec<String> {
-    let mut order = [
-        "convert",
-        "previous month",
-        "next month",
-        "month",
-        "year",
-        "previous year",
-        "next year",
-        "today",
-    ]
-    .map(str::to_owned)
-    .to_vec();
-    for cell in popup.get_cells().iter().filter(|cell| !cell.is_padding) {
-        order.push(format!("day {}", cell.bs_day));
+/// Tabs until `name` has focus, with a bound so a missing stop fails and does not hang.
+fn tab_to(popup: &PopupWindow, name: &str) {
+    for _ in 0..30 {
+        press(popup, slint::platform::Key::Tab);
+        if focused(popup) == name {
+            return;
+        }
+    }
+    panic!(
+        "Tab never reached {name:?}; the last stop was {:?}",
+        focused(popup)
+    );
+}
+
+/// Moves the pointer to the middle of `element`.
+fn hover(popup: &PopupWindow, element: &ElementHandle) {
+    let position = element.absolute_position();
+    let size = element.size();
+    popup
+        .window()
+        .dispatch_event(slint::platform::WindowEvent::PointerMoved {
+            position: slint::LogicalPosition::new(
+                position.x + size.width / 2.0,
+                position.y + size.height / 2.0,
+            ),
+        });
+}
+
+/// Moves the pointer to a corner of the window, off every control.
+fn leave(popup: &PopupWindow) {
+    popup
+        .window()
+        .dispatch_event(slint::platform::WindowEvent::PointerMoved {
+            position: slint::LogicalPosition::new(2.0, 515.0),
+        });
+}
+
+/// Lets `millis` of the mocked clock pass and runs the timers due in it.
+fn elapse(millis: u64) {
+    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(millis));
+    slint::platform::update_timers_and_animations();
+}
+
+/// The popup's title row in the month view: `Ashoj 2083 · Sep/Oct 2026`.
+fn nav_title(popup: &PopupWindow) -> String {
+    popup.get_nav_title().to_string()
+}
+
+/// The labels of the year or decade grid's cells.
+fn zoom_labels(popup: &PopupWindow) -> Vec<String> {
+    popup
+        .get_zoom_cells()
+        .iter()
+        .map(|cell| cell.accessible_label.to_string())
+        .collect()
+}
+
+/// The base order in visual order. `away` adds the Today pill, which shows only away from today's
+/// month; `holiday` adds the holiday line, which needs patro data for the day.
+fn base_order(away: bool, holiday: bool) -> Vec<&'static str> {
+    let mut order = vec!["convert", "settings", "pin", "previous", "title", "next"];
+    if away {
+        order.push("today");
+    }
+    order.push("grid");
+    if holiday {
+        order.push("upcoming");
     }
     order
 }
 
 #[test]
 fn previous_next_and_today_follow_the_range_edges() {
-    let (popup, state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+    let (popup, state, _) = app(date(2081, 1, 1));
     assert!(popup.get_month_title().starts_with("Baishakh 2081"));
     assert_eq!(
         element(&popup, "Previous month").accessible_enabled(),
@@ -141,9 +231,11 @@ fn previous_next_and_today_follow_the_range_edges() {
         element(&popup, "Next month").accessible_enabled(),
         Some(true)
     );
+    assert!(!popup.get_today_shown(), "today's month has no Today pill");
 
     click(&popup, "Next month");
     assert!(popup.get_month_title().starts_with("Jestha 2081"));
+    assert!(popup.get_today_shown());
     click(&popup, "Previous month");
     assert!(popup.get_month_title().starts_with("Baishakh 2081"));
 
@@ -171,30 +263,29 @@ fn previous_next_and_today_follow_the_range_edges() {
 
     click(&popup, "Today");
     assert!(popup.get_month_title().starts_with("Baishakh 2081"));
+    assert!(!popup.get_today_shown());
 }
 
 #[test]
-fn month_and_year_pickers_jump() {
-    let (popup, _state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+fn a_step_that_reaches_the_edge_moves_the_focus_to_the_grid() {
+    // A control disabled while it has focus keeps its ring, so the focus must leave it.
+    let (popup, state, _) = app(date(2081, 1, 1));
+    show_month(&state, 1901, Month::Jestha);
+    tab_to(&popup, "previous");
+    press(&popup, slint::platform::Key::Return);
+    assert!(popup.get_month_title().starts_with("Baishakh 1901"));
+    assert_eq!(focused(&popup), "grid");
 
-    let month = element(&popup, "Month");
-    assert_eq!(month.accessible_role(), Some(AccessibleRole::Combobox));
-    month.invoke_accessible_expand_action();
-    let ashoj = element(&popup, "Ashoj");
-    assert_eq!(ashoj.accessible_role(), Some(AccessibleRole::ListItem));
-    // The list item has no accessible default action; a real pointer click drives it.
-    ashoj.mock_single_click(slint::platform::PointerEventButton::Left);
-    assert!(popup.get_month_title().starts_with("Ashoj 2081"));
-
-    let year = element(&popup, "Year");
-    assert_eq!(year.accessible_role(), Some(AccessibleRole::Spinbox));
-    year.set_accessible_value("2082");
-    assert!(popup.get_month_title().starts_with("Ashoj 2082"));
+    show_month(&state, 2199, Month::Falgun);
+    tab_to(&popup, "next");
+    press(&popup, slint::platform::Key::Return);
+    assert!(popup.get_month_title().starts_with("Chaitra 2199"));
+    assert_eq!(focused(&popup), "grid");
 }
 
 #[test]
 fn one_wheel_notch_changes_one_month() {
-    let (popup, _state, _) = app(NepaliDate::new(2081, 2, 1).expect("date"));
+    let (popup, _state, _) = app(date(2081, 2, 1));
     assert!(popup.get_month_title().starts_with("Jestha 2081"));
 
     let cell = element(&popup, &day_label(&popup, "1"));
@@ -208,7 +299,7 @@ fn one_wheel_notch_changes_one_month() {
 
 #[test]
 fn a_day_click_opens_the_detail_and_escape_closes_detail_then_popup() {
-    let (popup, _state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+    let (popup, _state, _) = app(date(2081, 1, 1));
     let label = day_label(&popup, "1");
     assert_eq!(
         label, "2081/01/01 2024-04-13 Saturday Panchami",
@@ -218,22 +309,14 @@ fn a_day_click_opens_the_detail_and_escape_closes_detail_then_popup() {
     assert!(popup.get_detail_visible());
     assert_eq!(popup.get_detail().bs_long.as_str(), "Baishakh 1, 2081");
 
-    popup
-        .window()
-        .dispatch_event(slint::platform::WindowEvent::KeyPressed {
-            text: slint::platform::Key::Escape.into(),
-        });
+    press(&popup, slint::platform::Key::Escape);
     assert!(
         !popup.get_detail_visible(),
         "Escape closes the detail first"
     );
     assert!(popup.window().is_visible(), "the popup stays open");
 
-    popup
-        .window()
-        .dispatch_event(slint::platform::WindowEvent::KeyPressed {
-            text: slint::platform::Key::Escape.into(),
-        });
+    press(&popup, slint::platform::Key::Escape);
     assert!(
         !popup.window().is_visible(),
         "the second Escape hides the popup"
@@ -242,7 +325,7 @@ fn a_day_click_opens_the_detail_and_escape_closes_detail_then_popup() {
 
 #[test]
 fn copy_buttons_write_the_exact_strings_to_the_injected_clipboard() {
-    let (popup, state, clipboard) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+    let (popup, state, clipboard) = app(date(2081, 1, 1));
     let label = day_label(&popup, "1");
     click(&popup, &label);
     click(&popup, "Copy BS");
@@ -269,11 +352,12 @@ fn copy_buttons_write_the_exact_strings_to_the_injected_clipboard() {
         clipboard.texts.borrow()[4..],
         ["२०८१/०१/०१".to_owned(), "२०२४-०४-१३".to_owned()]
     );
+    let _ = slint::select_bundled_translation("en");
 }
 
 #[test]
 fn the_nine_event_list_moves_when_scrolled() {
-    let (popup, _state, _) = app(NepaliDate::new(2081, 6, 1).expect("date"));
+    let (popup, _state, _) = app(date(2081, 6, 1));
     let label = day_label(&popup, "1");
     click(&popup, &label);
     assert_eq!(popup.get_detail().events.row_count(), 9);
@@ -292,33 +376,37 @@ fn the_nine_event_list_moves_when_scrolled() {
 
 #[test]
 fn every_control_has_a_label_and_a_role() {
-    let (popup, _state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
-    for (label, role) in [
-        ("Previous month", AccessibleRole::Button),
-        ("Next month", AccessibleRole::Button),
-        ("Today", AccessibleRole::Button),
-        ("Month", AccessibleRole::Combobox),
-        ("Year", AccessibleRole::Spinbox),
+    let (popup, state, _) = app(date(2081, 1, 1));
+    // Today's pill shows only away from today's month, so look at the month after.
+    show_month(&state, 2081, Month::Jestha);
+    for label in [
+        "Convert",
+        "Settings",
+        "Pin, not pinned",
+        "Previous month",
+        "Change view",
+        "Next month",
+        "Today",
+        "Upcoming holidays",
     ] {
         let control = element(&popup, label);
-        assert_eq!(control.accessible_role(), Some(role), "{label}");
+        assert_eq!(
+            control.accessible_role(),
+            Some(AccessibleRole::Button),
+            "{label}"
+        );
     }
     let cell = element(&popup, &day_label(&popup, "1"));
     assert_eq!(cell.accessible_role(), Some(AccessibleRole::Button));
 
     click(&popup, &day_label(&popup, "1"));
-    assert_eq!(
-        element(&popup, "Copy BS").accessible_role(),
-        Some(AccessibleRole::Button)
-    );
-    assert_eq!(
-        element(&popup, "Copy AD").accessible_role(),
-        Some(AccessibleRole::Button)
-    );
-    assert_eq!(
-        element(&popup, "Close day detail").accessible_role(),
-        Some(AccessibleRole::Button)
-    );
+    for label in ["Copy BS", "Copy AD", "Close day detail"] {
+        assert_eq!(
+            element(&popup, label).accessible_role(),
+            Some(AccessibleRole::Button),
+            "{label}"
+        );
+    }
     assert_eq!(
         element(&popup, "Event list").accessible_role(),
         Some(AccessibleRole::List)
@@ -337,19 +425,9 @@ fn bundled_translation_switches_to_nepali_and_back() {
     assert_eq!(menu(&popup), "Settings");
 }
 
-/// Keep the month name model in step with the language helper used above.
-#[test]
-fn month_names_come_from_the_library() {
-    let (popup, _state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
-    let months = popup.get_month_names();
-    assert_eq!(months.row_count(), 12);
-    assert_eq!(months.row_data(0).expect("Baishakh").as_str(), "Baishakh");
-    assert_eq!(Month::Baishakh.name(Lang::En), "Baishakh");
-}
-
 #[test]
 fn converter_converts_typed_input_both_ways() {
-    let (popup, _state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+    let (popup, _state, _) = app(date(2081, 1, 1));
     element(&popup, "Convert").invoke_accessible_default_action();
     assert!(popup.get_converter_visible());
 
@@ -373,7 +451,7 @@ fn converter_converts_typed_input_both_ways() {
 
 #[test]
 fn a_settings_switch_applies_at_once_and_saves_after_300_ms() {
-    let (popup, state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+    let (popup, state, _) = app(date(2081, 1, 1));
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("settings.toml");
     state.borrow_mut().settings_path = Some(path.clone());
@@ -387,140 +465,880 @@ fn a_settings_switch_applies_at_once_and_saves_after_300_ms() {
     assert!(state.borrow().settings.clock_24h, "applied at once");
     assert!(!path.exists(), "not saved before the debounce");
 
-    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(350));
-    slint::platform::update_timers_and_animations();
+    elapse(350);
     let (saved, warnings) = crate::platform::settings_store::load(&path);
     assert!(warnings.is_empty(), "{warnings:?}");
     assert!(saved.clock_24h, "saved after 300 ms");
 }
 
+// WR-03 AC6: the three zoom levels.
+
 #[test]
-fn the_year_control_shows_language_digits_and_stops_at_the_edges() {
-    let (popup, state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
-    let year = element(&popup, "Year");
-    assert_eq!(year.accessible_role(), Some(AccessibleRole::Spinbox));
-    assert_eq!(year.accessible_value().as_deref(), Some("2081"));
-    assert_eq!(popup.get_year_text().as_str(), "2081");
+fn wr03_ac6_the_title_zooms_to_the_year_view_and_the_decade_view() {
+    let (popup, state, _) = app(date(2083, 7, 5));
+    assert_eq!(popup.get_zoom_mode(), 0);
+    assert_eq!(nav_title(&popup), "Kartik 2083 · Oct/Nov 2026");
 
-    state.borrow_mut().settings.language = "ne".to_owned();
-    let _ = slint::select_bundled_translation("ne");
-    update_popup(&state);
-    assert_eq!(popup.get_year_text().as_str(), "२०८१");
+    click(&popup, "Change view");
+    assert_eq!(popup.get_zoom_mode(), 1, "the year view");
+    assert_eq!(nav_title(&popup), "2083");
+    let labels = zoom_labels(&popup);
+    assert_eq!(labels.len(), 12, "a 4 by 3 grid of the year's months");
+    assert_eq!(labels[0], "Baishakh 2083");
+    assert_eq!(labels[11], "Chaitra 2083");
+    let cells = popup.get_zoom_cells();
+    let today_cell = cells.row_data(6).expect("Kartik");
+    assert!(today_cell.is_today, "today's month is marked");
+    assert!(today_cell.is_viewed);
+    assert!(!cells.row_data(5).expect("Ashoj").is_today);
+
+    click(&popup, "Change view");
+    assert_eq!(popup.get_zoom_mode(), 2, "the decade view");
+    assert_eq!(nav_title(&popup), "2080–2089");
+    let labels = zoom_labels(&popup);
+    assert_eq!(labels.len(), 12);
+    assert_eq!(labels[0], "2079", "one year before the decade");
+    assert_eq!(labels[11], "2090", "one year after the decade");
+    assert!(popup.get_zoom_cells().row_data(4).expect("2083").is_today);
     assert_eq!(
-        element(&popup, "वर्ष").accessible_value().as_deref(),
-        Some("२०८१")
+        element(&popup, "Change view").accessible_enabled(),
+        Some(false),
+        "the decade title does nothing"
     );
-
-    state.borrow_mut().settings.language = "en".to_owned();
-    let _ = slint::select_bundled_translation("en");
-    update_popup(&state);
-
-    show_month(&state, 1901, Month::Baishakh);
-    element(&popup, "Year").invoke_accessible_decrement_action();
-    assert_eq!(popup.get_year(), 1901, "1901 is the lower edge");
-    element(&popup, "Year").invoke_accessible_increment_action();
-    assert_eq!(popup.get_year(), 1902);
-
-    show_month(&state, 2199, Month::Chaitra);
-    element(&popup, "Year").invoke_accessible_increment_action();
-    assert_eq!(popup.get_year(), 2199, "2199 is the upper edge");
-    element(&popup, "Year").invoke_accessible_decrement_action();
-    assert_eq!(popup.get_year(), 2198);
+    assert_eq!(state.borrow().zoom.zoom(), Zoom::Decade);
 }
 
 #[test]
-fn the_visible_year_buttons_step_and_stop_at_the_edges() {
-    let (popup, state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+fn wr03_ac6_a_decade_year_opens_its_year_view_and_a_month_opens_the_month_view() {
+    let (popup, state, _) = app(date(2083, 7, 5));
+    click(&popup, "Change view");
+    click(&popup, "Change view");
 
-    let prev = element(&popup, "Previous year");
-    let next = element(&popup, "Next year");
-    assert_eq!(prev.accessible_role(), Some(AccessibleRole::Button));
-    assert_eq!(next.accessible_role(), Some(AccessibleRole::Button));
-    assert!(
-        prev.size().width >= 24.0 && prev.size().height >= 24.0,
-        "previous-year hit target is {}x{}",
-        prev.size().width,
-        prev.size().height
-    );
-    assert!(
-        next.size().width >= 24.0 && next.size().height >= 24.0,
-        "next-year hit target is {}x{}",
-        next.size().width,
-        next.size().height
+    click(&popup, "2085");
+    assert_eq!(popup.get_zoom_mode(), 1);
+    assert_eq!(nav_title(&popup), "2085");
+    assert_eq!(
+        state.borrow().zoom.viewed(),
+        (2085, Month::Kartik),
+        "the month stays"
     );
 
-    next.invoke_accessible_default_action();
-    assert_eq!(popup.get_year(), 2082);
-    prev.invoke_accessible_default_action();
-    assert_eq!(popup.get_year(), 2081);
+    click(&popup, "Baishakh 2085");
+    assert_eq!(popup.get_zoom_mode(), 0);
+    assert!(popup.get_month_title().starts_with("Baishakh 2085"));
+    assert!(popup.get_today_shown(), "away from today's month");
+}
 
-    // A pointer click steps exactly one year (the TouchArea path, not only the accessible
-    // action).
-    next.mock_single_click(slint::platform::PointerEventButton::Left);
-    assert_eq!(popup.get_year(), 2082, "one click is one year");
+#[test]
+fn wr03_ac6_previous_and_next_follow_the_level() {
+    let (popup, state, _) = app(date(2083, 7, 5));
+    click(&popup, "Change view");
+    assert!(exists(&popup, "Previous year"), "named for the year view");
+    assert!(!exists(&popup, "Previous month"));
+    click(&popup, "Next year");
+    assert_eq!(nav_title(&popup), "2084");
+    click(&popup, "Previous year");
+    click(&popup, "Previous year");
+    assert_eq!(nav_title(&popup), "2082");
+
+    click(&popup, "Change view");
+    assert!(exists(&popup, "Next decade"), "named for the decade view");
+    click(&popup, "Next decade");
+    assert_eq!(nav_title(&popup), "2090–2099");
+    click(&popup, "Previous decade");
+    click(&popup, "Previous decade");
+    assert_eq!(nav_title(&popup), "2070–2079");
+    assert_eq!(
+        state.borrow().zoom.year(),
+        2082,
+        "paging the decade does not change the year"
+    );
+}
+
+#[test]
+fn wr03_ac6_the_wheel_pages_by_the_level() {
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    click(&popup, "Change view");
+    let cell = element(&popup, "Kartik 2083");
+    cell.scroll(0.0, 1.0);
+    assert_eq!(nav_title(&popup), "2084", "one notch is one year");
+    click(&popup, "Change view");
+    let cell = element(&popup, "2084");
+    cell.scroll(0.0, 1.0);
+    assert_eq!(nav_title(&popup), "2090–2099", "one notch is ten years");
+}
+
+#[test]
+fn wr03_ac6_the_edges_disable_the_control_at_every_level() {
+    // 1901: nothing before it.
+    let (popup, _state, _) = app(date(1901, 1, 1));
+    assert_eq!(
+        element(&popup, "Previous month").accessible_enabled(),
+        Some(false)
+    );
+    click(&popup, "Change view");
+    assert_eq!(
+        element(&popup, "Previous year").accessible_enabled(),
+        Some(false)
+    );
+    assert_eq!(
+        element(&popup, "Next year").accessible_enabled(),
+        Some(true)
+    );
+    click(&popup, "Previous year");
+    assert_eq!(nav_title(&popup), "1901", "a disabled control does nothing");
+    click(&popup, "Change view");
+    assert_eq!(nav_title(&popup), "1900–1909");
+    assert_eq!(
+        element(&popup, "Previous decade").accessible_enabled(),
+        Some(false)
+    );
+    let cells = popup.get_zoom_cells();
+    assert!(
+        !cells.row_data(0).expect("1899").enabled,
+        "1899 is no choice"
+    );
+    assert!(
+        !cells.row_data(1).expect("1900").enabled,
+        "1900 is no choice"
+    );
+    assert_eq!(cells.row_data(0).expect("1899").label.as_str(), "");
+    assert!(cells.row_data(2).expect("1901").enabled);
+    assert!(!exists(&popup, "1899"));
+    assert!(!exists(&popup, "1900"));
+    assert!(exists(&popup, "1901"));
+
+    // 2199: nothing after it.
+    let (popup, _state, _) = app(date(2199, 12, 30));
+    assert_eq!(
+        element(&popup, "Next month").accessible_enabled(),
+        Some(false)
+    );
+    click(&popup, "Change view");
+    assert_eq!(
+        element(&popup, "Next year").accessible_enabled(),
+        Some(false)
+    );
+    click(&popup, "Change view");
+    assert_eq!(nav_title(&popup), "2190–2199");
+    assert_eq!(
+        element(&popup, "Next decade").accessible_enabled(),
+        Some(false)
+    );
+    let cells = popup.get_zoom_cells();
+    assert!(
+        !cells.row_data(11).expect("2200").enabled,
+        "2200 is no choice"
+    );
+    assert!(!exists(&popup, "2200"));
+    assert!(exists(&popup, "2199"));
+}
+
+#[test]
+fn wr03_ac6_today_returns_to_todays_month_from_every_level() {
+    let (popup, state, _) = app(date(2083, 7, 5));
+    for clicks in 0..3 {
+        show_month(&state, 2150, Month::Chaitra);
+        for _ in 0..clicks {
+            click(&popup, "Change view");
+        }
+        assert_eq!(popup.get_zoom_mode(), clicks);
+        assert!(popup.get_today_shown(), "away from today at level {clicks}");
+        click(&popup, "Today");
+        assert_eq!(popup.get_zoom_mode(), 0, "level {clicks}");
+        assert!(popup.get_month_title().starts_with("Kartik 2083"));
+        assert!(!popup.get_today_shown());
+    }
+
+    // In today's year view the pill still shows: the view is not today's month.
+    click(&popup, "Change view");
+    assert!(popup.get_today_shown());
+}
+
+#[test]
+fn wr02_ac2_a_reopen_shows_the_month_view_of_the_last_viewed_month() {
+    let (popup, state, _) = app(date(2083, 7, 5));
+    click(&popup, "Next month");
+    click(&popup, "Change view");
+    click(&popup, "Change view");
+    assert_eq!(popup.get_zoom_mode(), 2);
+
+    state.borrow_mut().hidden_on = crate::today_local();
+    state.borrow_mut().zoom.reopened(crate::today_local());
+    update_popup(&state);
+    assert_eq!(
+        popup.get_zoom_mode(),
+        0,
+        "a reopen starts in the month view"
+    );
+    assert_eq!(state.borrow().zoom.viewed(), (2083, Month::Mangsir));
+}
+
+// WR-10 AC2: the keys.
+
+#[test]
+fn wr10_ac2_the_grid_is_one_tab_stop_and_arrows_move_between_days() {
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    tab_to(&popup, "grid");
+    let cursor = |popup: &PopupWindow| {
+        let index = usize::try_from(popup.get_cursor_index()).expect("a cursor");
+        popup
+            .get_cells()
+            .row_data(index)
+            .expect("cell")
+            .bs_day
+            .to_string()
+    };
+    assert_eq!(cursor(&popup), "5", "the cursor starts on today");
+
+    press(&popup, slint::platform::Key::RightArrow);
+    assert_eq!(cursor(&popup), "6");
+    assert_eq!(focused(&popup), "grid", "the grid keeps the one stop");
+    press(&popup, slint::platform::Key::DownArrow);
+    assert_eq!(cursor(&popup), "13");
+    press(&popup, slint::platform::Key::UpArrow);
+    press(&popup, slint::platform::Key::LeftArrow);
+    assert_eq!(cursor(&popup), "5");
+
+    // Past the first day the cursor carries into the previous month.
+    for _ in 0..5 {
+        press(&popup, slint::platform::Key::LeftArrow);
+    }
+    assert!(
+        popup.get_month_title().starts_with("Ashoj 2083"),
+        "carried back"
+    );
+    assert_eq!(cursor(&popup), "31", "the last day of Ashoj");
+
+    // Tab leaves the grid and Shift+Tab comes back to the same place.
+    press(&popup, slint::platform::Key::Tab);
+    assert_eq!(focused(&popup), "upcoming");
+    press_shift_tab(&popup);
+    assert_eq!(focused(&popup), "grid");
+    assert_eq!(cursor(&popup), "31");
+}
+
+#[test]
+fn wr10_ac2_enter_and_space_open_the_focused_days_detail() {
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    tab_to(&popup, "grid");
+    press(&popup, slint::platform::Key::RightArrow);
+    press(&popup, slint::platform::Key::Return);
+    assert!(popup.get_detail_visible());
+    assert_eq!(popup.get_detail().bs_long.as_str(), "Kartik 6, 2083");
+
+    press(&popup, slint::platform::Key::Escape);
+    assert!(!popup.get_detail_visible());
+    tab_to(&popup, "grid");
+    press(&popup, slint::platform::Key::Space);
+    assert!(popup.get_detail_visible());
+    assert_eq!(
+        popup.get_detail().bs_long.as_str(),
+        "Kartik 6, 2083",
+        "the cursor stayed on the same day"
+    );
+}
+
+#[test]
+fn wr10_ac2_arrows_and_enter_move_between_months_and_years_in_the_zoom_views() {
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    click(&popup, "Change view");
+    tab_to(&popup, "grid");
+    assert_eq!(popup.get_cursor_index(), 6, "the cursor starts on Kartik");
+    press(&popup, slint::platform::Key::RightArrow);
+    press(&popup, slint::platform::Key::DownArrow);
+    assert_eq!(popup.get_cursor_index(), 11, "Chaitra");
+    press(&popup, slint::platform::Key::RightArrow);
+    assert_eq!(nav_title(&popup), "2084", "past Chaitra is the next year");
+    assert_eq!(popup.get_cursor_index(), 0);
+    press(&popup, slint::platform::Key::Return);
+    assert_eq!(popup.get_zoom_mode(), 0, "Enter picks the month");
+    assert!(popup.get_month_title().starts_with("Baishakh 2084"));
+
+    click(&popup, "Change view");
+    click(&popup, "Change view");
+    tab_to(&popup, "grid");
+    press(&popup, slint::platform::Key::RightArrow);
+    press(&popup, slint::platform::Key::Space);
+    assert_eq!(popup.get_zoom_mode(), 1, "Space picks the year");
+    assert_eq!(nav_title(&popup), "2085");
+}
+
+#[test]
+fn wr10_ac2_page_up_and_page_down_page_by_the_level() {
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    press(&popup, slint::platform::Key::PageDown);
+    assert!(popup.get_month_title().starts_with("Mangsir 2083"));
+    press(&popup, slint::platform::Key::PageUp);
+    press(&popup, slint::platform::Key::PageUp);
+    assert!(popup.get_month_title().starts_with("Ashoj 2083"));
+
+    click(&popup, "Change view");
+    press(&popup, slint::platform::Key::PageDown);
+    assert_eq!(nav_title(&popup), "2084", "a year in the year view");
+    click(&popup, "Change view");
+    press(&popup, slint::platform::Key::PageDown);
+    assert_eq!(
+        nav_title(&popup),
+        "2090–2099",
+        "ten years in the decade view"
+    );
+    press(&popup, slint::platform::Key::PageUp);
+    press(&popup, slint::platform::Key::PageUp);
+    assert_eq!(nav_title(&popup), "2070–2079");
+}
+
+#[test]
+fn wr10_ac2_home_and_t_go_to_today() {
+    for key in ["Home", "t", "T"] {
+        let (popup, state, _) = app(date(2083, 7, 5));
+        show_month(&state, 2090, Month::Jestha);
+        click(&popup, "Change view");
+        assert_eq!(popup.get_zoom_mode(), 1);
+        match key {
+            "Home" => press(&popup, slint::platform::Key::Home),
+            letter => type_text(&popup, letter),
+        }
+        assert_eq!(popup.get_zoom_mode(), 0, "{key} returns to the month view");
+        assert!(
+            popup.get_month_title().starts_with("Kartik 2083"),
+            "{key} goes to today"
+        );
+    }
+}
+
+#[test]
+fn wr10_ac2_c_opens_the_converter() {
+    for key in ["c", "C"] {
+        let (popup, _state, _) = app(date(2083, 7, 5));
+        type_text(&popup, key);
+        assert!(popup.get_converter_visible(), "{key}");
+    }
+}
+
+#[test]
+fn wr10_ac2_ctrl_comma_opens_settings() {
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    press_ctrl(&popup, ",");
+    assert!(popup.get_settings_visible());
+    assert_eq!(
+        popup.get_settings_data().version.as_str(),
+        env!("CARGO_PKG_VERSION")
+    );
+}
+
+#[test]
+fn wr10_ac2_single_letter_keys_do_nothing_in_a_text_field_or_under_an_overlay() {
+    // The Go to date field takes its own typing: p, c and t are letters there.
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    press_ctrl(&popup, "g");
+    elapse(5);
+    assert_eq!(focused(&popup), "goto");
+    type_text(&popup, "pct");
+    assert_eq!(popup.get_goto_text().as_str(), "pct");
+    assert!(!popup.get_pinned(), "p typed in the field did not pin");
+    assert!(
+        !popup.get_converter_visible(),
+        "c typed in the field did not convert"
+    );
+
+    // Under an overlay the base is inert, so the letters and Ctrl+G do nothing.
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    click(&popup, "Convert");
+    popup.invoke_focus();
+    type_text(&popup, "p");
+    assert!(!popup.get_pinned());
+    press_ctrl(&popup, "g");
+    assert!(!popup.get_goto_visible());
+}
+
+#[test]
+fn wr10_ac2_escape_closes_the_open_panel_then_steps_out_of_a_zoom_view_then_closes_the_popup() {
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    click(&popup, "Change view");
+    click(&popup, "Change view");
+    assert_eq!(popup.get_zoom_mode(), 2);
+
+    // A panel open over a zoom view closes first: the upcoming list, then the zoom steps.
+    click(&popup, "Upcoming holidays");
+    assert!(popup.get_upcoming_visible());
+    press(&popup, slint::platform::Key::Escape);
+    assert!(!popup.get_upcoming_visible(), "the panel closes first");
+    assert_eq!(popup.get_zoom_mode(), 2, "the zoom view stays");
+
+    press(&popup, slint::platform::Key::Escape);
+    assert_eq!(popup.get_zoom_mode(), 1, "decade to year");
+    press(&popup, slint::platform::Key::Escape);
+    assert_eq!(popup.get_zoom_mode(), 0, "year to month");
+    assert!(popup.window().is_visible());
+    press(&popup, slint::platform::Key::Escape);
+    assert!(!popup.window().is_visible(), "then the popup closes");
+}
+
+#[test]
+fn wr10_ac2_every_panel_closes_on_escape_before_the_popup() {
+    // Settings, the converter, the day detail and the Go to date field each take one Escape.
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    popup.set_settings_visible(true);
+    popup.invoke_focus();
+    press(&popup, slint::platform::Key::Escape);
+    assert!(!popup.get_settings_visible());
+    assert!(popup.window().is_visible());
+
+    click(&popup, "Convert");
+    popup.invoke_focus();
+    press(&popup, slint::platform::Key::Escape);
+    assert!(!popup.get_converter_visible());
+    assert!(popup.window().is_visible());
+
+    press_ctrl(&popup, "g");
+    assert!(popup.get_goto_visible());
+    press(&popup, slint::platform::Key::Escape);
+    assert!(!popup.get_goto_visible(), "the field closes on Escape");
+    assert!(popup.window().is_visible());
+}
+
+// WR-14 AC1: Pin.
+
+#[test]
+fn wr14_ac1_pin_keeps_the_popup_open_on_focus_loss_until_it_is_unpinned() {
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    assert!(!popup.get_pinned(), "the popup opens unpinned");
+    assert!(exists(&popup, "Pin, not pinned"));
+    click(&popup, "Pin, not pinned");
+    assert!(popup.get_pinned());
+    assert!(exists(&popup, "Pin, pinned"), "the name says it is pinned");
+    assert!(!exists(&popup, "Pin, not pinned"));
+
+    popup.invoke_window_deactivated();
+    assert!(
+        popup.window().is_visible(),
+        "a pinned popup survives focus loss"
+    );
+    popup
+        .window()
+        .dispatch_event(slint::platform::WindowEvent::WindowActiveChanged(false));
+    assert!(popup.window().is_visible());
+
+    click(&popup, "Pin, pinned");
+    assert!(!popup.get_pinned());
+    popup.invoke_window_deactivated();
+    assert!(
+        !popup.window().is_visible(),
+        "unpinned, focus loss hides it"
+    );
+}
+
+#[test]
+fn wr14_ac1_the_p_key_toggles_the_pin() {
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    type_text(&popup, "p");
+    assert!(popup.get_pinned());
+    type_text(&popup, "P");
+    assert!(!popup.get_pinned());
+}
+
+#[test]
+fn wr14_ac1_escape_and_a_toggle_close_a_pinned_popup_and_it_reopens_unpinned() {
+    let (popup, state, _) = app(date(2083, 7, 5));
+    type_text(&popup, "p");
+    press(&popup, slint::platform::Key::Escape);
+    assert!(!popup.window().is_visible(), "Escape closes a pinned popup");
+    assert!(!popup.get_pinned(), "closing unpins it");
+
+    popup.show().expect("show");
+    popup.invoke_focus();
+    type_text(&popup, "p");
+    assert!(popup.get_pinned());
+    crate::hide_popup(&state);
+    assert!(
+        !popup.window().is_visible(),
+        "a toggle closes a pinned popup"
+    );
+    assert!(!popup.get_pinned(), "the toggle unpins it too");
+}
+
+// WR-14 AC2: the day tooltip.
+
+#[test]
+fn wr14_ac2_a_day_shows_its_tooltip_after_500_ms_and_hides_on_leave() {
+    let (popup, _state, _) = app(date(2081, 1, 1));
+    let cell = element(&popup, &day_label(&popup, "1"));
+    hover(&popup, &cell);
+    elapse(499);
+    assert!(!popup.get_tip_visible(), "not yet at 499 ms");
+    elapse(2);
+    assert!(popup.get_tip_visible(), "shown after 500 ms");
+
+    let tip = popup.get_tip();
+    assert_eq!(tip.bs_long.as_str(), "Baishakh 1, 2081");
+    assert_eq!(tip.ad_long.as_str(), "April 13, 2024");
+    assert_eq!(tip.weekday.as_str(), "Saturday");
+    assert_eq!(tip.tithi.as_str(), "Panchami");
+    assert_eq!(tip.holiday.as_str(), "New Year");
+    assert_eq!(tip.events, 3);
+
+    leave(&popup);
+    assert!(
+        !popup.get_tip_visible(),
+        "hidden when the pointer leaves the day"
+    );
+}
+
+#[test]
+fn wr14_ac2_a_key_hides_the_tooltip() {
+    let (popup, _state, _) = app(date(2081, 1, 1));
+    let cell = element(&popup, &day_label(&popup, "1"));
+    hover(&popup, &cell);
+    elapse(600);
+    assert!(popup.get_tip_visible());
+    press(&popup, slint::platform::Key::Shift);
+    assert!(!popup.get_tip_visible(), "a key press hides it");
+
+    // It stays hidden while the pointer rests on the same day, and a new visit shows it again.
+    elapse(1_000);
+    assert!(!popup.get_tip_visible());
+    leave(&popup);
+    let cell = element(&popup, &day_label(&popup, "2"));
+    hover(&popup, &cell);
+    elapse(600);
+    assert!(popup.get_tip_visible(), "another day shows its own tooltip");
+    assert_eq!(popup.get_tip().bs_long.as_str(), "Baishakh 2, 2081");
+}
+
+#[test]
+fn wr14_ac2_an_ordinary_day_has_no_holiday_or_event_line() {
+    let (popup, _state, _) = app(date(2081, 1, 1));
+    let cell = element(&popup, &day_label(&popup, "2"));
+    hover(&popup, &cell);
+    elapse(600);
+    let tip = popup.get_tip();
+    assert_eq!(tip.holiday.as_str(), "", "no holiday line");
+    assert!(
+        !tip.tithi.is_empty(),
+        "the tithi shows where there is patro data"
+    );
+}
+
+#[test]
+fn wr14_ac2_a_day_outside_the_patro_data_leaves_out_the_tithi_holiday_and_events() {
+    let (popup, _state, _) = app(date(2090, 1, 1));
+    let cell = element(&popup, &day_label(&popup, "5"));
+    hover(&popup, &cell);
+    elapse(600);
+    let tip = popup.get_tip();
+    assert!(!tip.bs_long.is_empty());
+    assert!(!tip.weekday.is_empty());
+    assert_eq!(tip.tithi.as_str(), "");
+    assert_eq!(tip.holiday.as_str(), "");
+    assert_eq!(tip.events, 0);
+}
+
+#[test]
+fn wr14_ac2_the_tooltip_never_covers_the_hovered_day_and_stays_inside_the_popup() {
+    let (popup, _state, _) = app(date(2081, 1, 1));
+    // Days in the first row, the last row, the left column and the right column.
+    for day in ["1", "2", "7", "14", "21", "28", "31"] {
+        let label = day_label(&popup, day);
+        let cell = element(&popup, &label);
+        let (cell_pos, cell_size) = (cell.absolute_position(), cell.size());
+        hover(&popup, &cell);
+        elapse(600);
+        assert!(popup.get_tip_visible(), "day {day}");
+        let card = ElementHandle::find_by_element_id(&popup, "PopupWindow::tip-card")
+            .next()
+            .expect("the tooltip card");
+        let (pos, size) = (card.absolute_position(), card.size());
+        let overlaps = pos.x < cell_pos.x + cell_size.width
+            && cell_pos.x < pos.x + size.width
+            && pos.y < cell_pos.y + cell_size.height
+            && cell_pos.y < pos.y + size.height;
+        assert!(
+            !overlaps,
+            "day {day}: the card {pos:?} {size:?} covers the cell {cell_pos:?}"
+        );
+        assert!(
+            pos.x >= 0.0
+                && pos.y >= 0.0
+                && pos.x + size.width <= 360.0
+                && pos.y + size.height <= 520.0,
+            "day {day}: the card {pos:?} {size:?} leaves the popup"
+        );
+        leave(&popup);
+    }
+}
+
+#[test]
+fn wr10_ac2_each_header_pills_tooltip_names_its_key() {
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    for (label, tip) in [
+        ("Convert", "Convert (C)"),
+        ("Settings", "Settings (Ctrl+,)"),
+        ("Pin, not pinned", "Pin (P)"),
+    ] {
+        hover(&popup, &element(&popup, label));
+        elapse(600);
+        assert_eq!(popup.get_pill_tip().as_str(), tip, "{label}");
+        leave(&popup);
+        assert_eq!(popup.get_pill_tip().as_str(), "", "{label} hides on leave");
+    }
+    click(&popup, "Pin, not pinned");
+    leave(&popup);
+    hover(&popup, &element(&popup, "Pin, pinned"));
+    elapse(600);
+    assert_eq!(popup.get_pill_tip().as_str(), "Unpin (P)");
+}
+
+// WR-14 AC3: Go to date.
+
+/// Opens the field with Ctrl+G, puts `text` in it and presses Enter.
+fn go_to(popup: &PopupWindow, text: &str) {
+    press_ctrl(popup, "g");
+    elapse(5);
+    assert!(popup.get_goto_visible(), "Ctrl+G opens the field");
+    element(popup, "Go to date").set_accessible_value(text);
+    press(popup, slint::platform::Key::Return);
+}
+
+#[test]
+fn wr14_ac3_ctrl_g_opens_one_field_in_the_header_with_focus() {
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    assert!(!popup.get_goto_visible());
+    press_ctrl(&popup, "g");
+    assert!(popup.get_goto_visible());
+    elapse(5);
     assert_eq!(
         focused(&popup),
-        "next year",
-        "a click moves focus to the button"
+        "goto",
+        "typing goes straight into the field"
     );
-    let prev = element(&popup, "Previous year");
-    prev.mock_single_click(slint::platform::PointerEventButton::Left);
-    assert_eq!(popup.get_year(), 2081, "one click is one year");
     assert_eq!(
-        focused(&popup),
-        "previous year",
-        "a click moves focus to the button"
+        element(&popup, "Go to date").accessible_role(),
+        Some(AccessibleRole::TextInput)
     );
+}
 
-    // The buttons carry the Devanagari year text and translated labels.
-    state.borrow_mut().settings.language = "ne".to_owned();
-    let _ = slint::select_bundled_translation("ne");
-    update_popup(&state);
-    assert_eq!(popup.get_year_text().as_str(), "२०८१");
-    element(&popup, "अर्को वर्ष").invoke_accessible_default_action();
-    assert_eq!(popup.get_year(), 2082);
-    assert_eq!(popup.get_year_text().as_str(), "२०८२");
-    element(&popup, "अघिल्लो वर्ष").invoke_accessible_default_action();
-    assert_eq!(popup.get_year(), 2081);
+#[test]
+fn wr14_ac3_clicking_the_header_date_opens_the_field() {
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    click(&popup, "Go to date (Ctrl+G)");
+    assert!(
+        popup.get_goto_visible(),
+        "the date is the mouse way to the field"
+    );
+    // No key event runs the change trackers here, so the first tick starts the focus timer and
+    // the second runs it.
+    elapse(5);
+    elapse(5);
+    assert_eq!(focused(&popup), "goto");
+}
 
-    state.borrow_mut().settings.language = "en".to_owned();
-    let _ = slint::select_bundled_translation("en");
-    update_popup(&state);
+#[test]
+fn wr14_ac3_the_header_date_names_its_key_after_the_pointer_rests() {
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    hover(&popup, &element(&popup, "Go to date (Ctrl+G)"));
+    elapse(400);
+    assert_eq!(popup.get_pill_tip().as_str(), "", "not before 500 ms");
+    elapse(200);
+    assert_eq!(popup.get_pill_tip().as_str(), "Go to date (Ctrl+G)");
+    leave(&popup);
+    assert_eq!(popup.get_pill_tip().as_str(), "", "leaving hides it");
+}
 
-    show_month(&state, 1901, Month::Baishakh);
-    let prev = element(&popup, "Previous year");
-    assert_eq!(prev.accessible_enabled(), Some(false));
-    prev.invoke_accessible_default_action();
-    assert_eq!(popup.get_year(), 1901, "1901 is the lower edge");
+#[test]
+fn wr14_ac3_an_ad_marker_opens_the_bs_date_the_ad_date_falls_on() {
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    go_to(&popup, "2024-04-13 AD");
+    assert_eq!(popup.get_detail().bs_long.as_str(), "Baishakh 1, 2081");
+}
 
-    show_month(&state, 2199, Month::Chaitra);
-    let next = element(&popup, "Next year");
-    assert_eq!(next.accessible_enabled(), Some(false));
-    next.invoke_accessible_default_action();
-    assert_eq!(popup.get_year(), 2199, "2199 is the upper edge");
+#[test]
+fn wr14_ac3_a_bs_date_opens_its_month_and_detail() {
+    let (popup, state, _) = app(date(2083, 7, 5));
+    go_to(&popup, "2081/01/05");
+    assert!(!popup.get_goto_visible(), "the field closes on success");
+    assert!(popup.get_month_title().starts_with("Baishakh 2081"));
+    assert!(popup.get_detail_visible());
+    assert_eq!(popup.get_detail().bs_long.as_str(), "Baishakh 5, 2081");
+    assert_eq!(state.borrow().zoom.zoom(), Zoom::Month);
+}
 
-    // Keyboard and wheel still reach the same control.
-    show_month(&state, 2081, Month::Baishakh);
-    let year = element(&popup, "Year");
-    year.mock_single_click(slint::platform::PointerEventButton::Left);
+#[test]
+fn wr14_ac3_a_bs_date_with_a_month_name_and_devanagari_digits_opens() {
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    go_to(&popup, "5 Baishakh 2081");
+    assert_eq!(popup.get_detail().bs_long.as_str(), "Baishakh 5, 2081");
+
+    popup.invoke_focus();
     popup
         .window()
         .dispatch_event(slint::platform::WindowEvent::KeyPressed {
-            text: slint::platform::Key::UpArrow.into(),
+            text: slint::platform::Key::Escape.into(),
         });
-    assert_eq!(popup.get_year(), 2082);
-    let year = element(&popup, "Year");
-    year.scroll(0.0, 1.0);
-    assert_eq!(popup.get_year(), 2083);
-    let year = element(&popup, "Year");
-    year.scroll(0.0, -1.0);
-    assert_eq!(popup.get_year(), 2082);
+    go_to(&popup, "२०८२/०२/१५");
+    assert_eq!(popup.get_detail().bs_long.as_str(), "Jestha 15, 2082");
 }
 
 #[test]
+fn wr14_ac3_an_ad_date_opens_the_bs_day_it_falls_on() {
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    // 1850 is not a BS year, so the text is read as AD.
+    let expected = NepaliDate::from_gregorian(1850, 5, 5).expect("AD 1850-05-05");
+    go_to(&popup, "1850-05-05");
+    assert_eq!(
+        popup.get_detail().ad_long.as_str(),
+        "May 5, 1850",
+        "the opened day is the AD date typed"
+    );
+    assert!(popup.get_month_title().starts_with(&format!(
+        "{} {}",
+        expected.month().name(Lang::En),
+        expected.year()
+    )));
+}
+
+#[test]
+fn wr14_ac3_the_ambiguous_year_rule_reads_a_valid_bs_date_as_bs() {
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    // 2026 is a BS year and an AD year; a valid BS date wins.
+    go_to(&popup, "2026-10-22");
+    assert_eq!(popup.get_detail().bs_long.as_str(), "Magh 22, 2026");
+}
+
+#[test]
+fn wr14_ac3_errors_follow_the_converter_and_the_field_stays_open() {
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    press_ctrl(&popup, "g");
+
+    let field = element(&popup, "Go to date");
+    field.set_accessible_value("20");
+    assert_eq!(popup.get_goto_error().as_str(), "", "too short to judge");
+    element(&popup, "Go to date").set_accessible_value("2083/13/45");
+    assert_eq!(popup.get_goto_error().as_str(), "Invalid date");
+    element(&popup, "Go to date").set_accessible_value("1700-01-01");
+    assert_eq!(
+        popup.get_goto_error().as_str(),
+        "Supported range: 1901–2199 BS (1844–2143 AD)"
+    );
+    press(&popup, slint::platform::Key::Return);
+    assert!(
+        popup.get_goto_visible(),
+        "Enter on a bad date keeps the field"
+    );
+    assert!(!popup.get_detail_visible());
+
+    element(&popup, "Go to date").set_accessible_value("2083/07/05");
+    assert_eq!(
+        popup.get_goto_error().as_str(),
+        "",
+        "a good date clears the error"
+    );
+
+    press(&popup, slint::platform::Key::Escape);
+    assert!(!popup.get_goto_visible(), "Escape closes the field");
+    assert_eq!(popup.get_goto_error().as_str(), "");
+    assert!(popup.window().is_visible(), "and not the popup");
+}
+
+#[test]
+fn wr14_ac3_the_edges_of_the_range_open() {
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    go_to(&popup, "1901/01/01");
+    assert_eq!(popup.get_detail().bs_long.as_str(), "Baishakh 1, 1901");
+    assert_eq!(
+        popup.get_cursor_index(),
+        i32::from(date(1901, 1, 1).weekday().index_from_sunday())
+    );
+}
+
+// WR-14 AC4: upcoming holidays.
+
+#[test]
+fn wr14_ac4_the_holiday_line_expands_to_the_next_five_holidays() {
+    let (popup, _state, _) = app(date(2081, 1, 1));
+    assert!(!popup.get_upcoming_visible());
+    let line = element(&popup, "Upcoming holidays");
+    assert_eq!(line.accessible_expandable(), Some(true));
+    assert_eq!(line.accessible_expanded(), Some(false));
+
+    click(&popup, "Upcoming holidays");
+    assert!(popup.get_upcoming_visible());
+    assert_eq!(
+        element(&popup, "Upcoming holidays").accessible_expanded(),
+        Some(true)
+    );
+    let upcoming = popup.get_upcoming();
+    assert_eq!(upcoming.row_count(), 5, "five holidays");
+    let first = upcoming.row_data(0).expect("first");
+    assert_eq!(first.name.as_str(), "New Year");
+    assert_eq!(first.date.as_str(), "Baishakh 1, 2081");
+    assert_eq!(first.days, 0);
+    let second = upcoming.row_data(1).expect("second");
+    assert_eq!(second.days, 4);
+    assert!(exists(&popup, "New Year, Baishakh 1, 2081, today"));
+    assert!(exists(
+        &popup,
+        &format!("{}, {}, in 4 days", second.name, second.date)
+    ));
+
+    click(&popup, "Upcoming holidays");
+    assert!(!popup.get_upcoming_visible(), "a second click collapses it");
+}
+
+#[test]
+fn wr14_ac4_clicking_a_holiday_opens_its_month_and_detail() {
+    let (popup, _state, _) = app(date(2081, 1, 1));
+    click(&popup, "Upcoming holidays");
+    let target = popup.get_upcoming().row_data(4).expect("fifth");
+    let label = format!("{}, {}, in {} days", target.name, target.date, target.days);
+    click(&popup, &label);
+    assert!(!popup.get_upcoming_visible(), "the list collapses");
+    assert!(popup.get_detail_visible());
+    assert_eq!(popup.get_detail().bs_long.as_str(), target.date.as_str());
+    assert_eq!(popup.get_zoom_mode(), 0);
+}
+
+#[test]
+fn wr14_ac4_escape_collapses_the_list_before_anything_else() {
+    let (popup, _state, _) = app(date(2081, 1, 1));
+    click(&popup, "Upcoming holidays");
+    popup.invoke_focus();
+    press(&popup, slint::platform::Key::Escape);
+    assert!(!popup.get_upcoming_visible());
+    assert!(popup.window().is_visible(), "the popup stays");
+}
+
+#[test]
+fn wr14_ac4_the_line_and_its_rows_are_keyboard_reachable() {
+    let (popup, _state, _) = app(date(2081, 1, 1));
+    tab_to(&popup, "upcoming");
+    press(&popup, slint::platform::Key::Return);
+    assert!(popup.get_upcoming_visible(), "Enter expands");
+    press(&popup, slint::platform::Key::Tab);
+    assert_eq!(focused(&popup), "upcoming 1", "the rows follow the line");
+    press(&popup, slint::platform::Key::Tab);
+    assert_eq!(focused(&popup), "upcoming 2");
+    press(&popup, slint::platform::Key::Return);
+    assert!(popup.get_detail_visible(), "Enter on a row opens its day");
+    assert!(!popup.get_upcoming_visible());
+}
+
+#[test]
+fn wr14_ac4_nothing_shows_outside_the_patro_data() {
+    let (popup, _state, _) = app(date(2090, 1, 1));
+    assert!(
+        !exists(&popup, "Upcoming holidays"),
+        "no holiday within the data, so no line to expand"
+    );
+    assert_eq!(popup.get_upcoming().row_count(), 0);
+}
+
+// WR-10 AC2 and W7: the focus order, stop by stop.
+
+#[test]
 fn tab_and_shift_tab_follow_the_focus_order() {
-    let (popup, _state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
-    let order = base_order(&popup);
+    let (popup, _state, _) = app(date(2081, 1, 1));
+    let order = base_order(false, true);
     assert_eq!(focused(&popup), "", "the root, not a control");
 
     let mut forward = Vec::new();
@@ -533,53 +1351,48 @@ fn tab_and_shift_tab_follow_the_focus_order() {
         popup.window().is_visible(),
         "moving focus between controls never hides the popup"
     );
+    // The cycle wraps from the last stop to the first.
+    press(&popup, slint::platform::Key::Tab);
+    assert_eq!(focused(&popup), "convert", "Tab wraps");
 
-    // From the last day, Shift+Tab retraces the order and wraps from the first control to the
-    // last. The root is not a stop, so there is no empty step.
+    // Shift+Tab retraces the order from there.
     let mut reverse = Vec::new();
     for _ in 0..order.len() {
         press_shift_tab(&popup);
         reverse.push(focused(&popup));
     }
-    assert_eq!(
-        reverse,
-        order[..order.len() - 1]
-            .iter()
-            .rev()
-            .chain(order[order.len() - 1..].iter())
-            .cloned()
-            .collect::<Vec<_>>(),
-        "Shift+Tab order from the last day"
-    );
+    let mut expected: Vec<&str> = order.iter().rev().copied().collect();
+    expected.rotate_left(0);
+    assert_eq!(reverse, expected, "Shift+Tab order");
+}
+
+#[test]
+fn the_today_pill_is_a_stop_only_away_from_todays_month() {
+    let (popup, state, _) = app(date(2081, 1, 1));
+    show_month(&state, 2081, Month::Jestha);
+    let order = base_order(true, true);
+    let mut forward = Vec::new();
+    for _ in 0..order.len() {
+        press(&popup, slint::platform::Key::Tab);
+        forward.push(focused(&popup));
+    }
+    assert_eq!(forward, order, "Today sits between Next and the grid");
+
+    // The year and decade views keep the pill and the grid as one stop each.
+    click(&popup, "Change view");
+    popup.invoke_focus();
+    let mut year = Vec::new();
+    for _ in 0..order.len() {
+        press(&popup, slint::platform::Key::Tab);
+        year.push(focused(&popup));
+    }
+    assert_eq!(year, order, "the year view has the same stops");
 }
 
 #[test]
 fn disabled_and_hidden_controls_are_not_focus_stops() {
-    let (popup, state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
-
-    // 1901 Baishakh: Previous month and Previous year are disabled.
-    show_month(&state, 1901, Month::Baishakh);
-    let mut order = Vec::new();
-    for _ in 0..6 {
-        press(&popup, slint::platform::Key::Tab);
-        order.push(focused(&popup));
-    }
-    assert_eq!(
-        order,
-        [
-            "convert",
-            "next month",
-            "month",
-            "year",
-            "next year",
-            "today"
-        ],
-        "1901 skips both previous controls"
-    );
-
-    // 2199 Chaitra: Next month and Next year are disabled.
-    show_month(&state, 2199, Month::Chaitra);
-    popup.invoke_focus();
+    // 1901 Baishakh: Previous is disabled, and there is no patro data for a holiday line.
+    let (popup, _state, _) = app(date(1901, 1, 1));
     let mut order = Vec::new();
     for _ in 0..5 {
         press(&popup, slint::platform::Key::Tab);
@@ -587,30 +1400,73 @@ fn disabled_and_hidden_controls_are_not_focus_stops() {
     }
     assert_eq!(
         order,
-        [
-            "convert",
-            "previous month",
-            "month",
-            "year",
-            "previous year"
-        ],
-        "2199 skips both next controls"
+        ["convert", "settings", "pin", "title", "next"],
+        "1901 skips Previous"
+    );
+    press(&popup, slint::platform::Key::Tab);
+    assert_eq!(focused(&popup), "grid");
+    press(&popup, slint::platform::Key::Tab);
+    assert_eq!(
+        focused(&popup),
+        "convert",
+        "the disabled holiday line is not a stop"
     );
 
-    // A closed overlay is not in the tree at all.
+    // 2199 Chaitra: Next is disabled.
+    let (popup, _state, _) = app(date(2199, 12, 30));
+    let mut order = Vec::new();
+    for _ in 0..5 {
+        press(&popup, slint::platform::Key::Tab);
+        order.push(focused(&popup));
+    }
     assert_eq!(
-        ElementHandle::find_by_accessible_label(&popup, "Close converter").count(),
-        0
+        order,
+        ["convert", "settings", "pin", "previous", "title"],
+        "2199 skips Next"
     );
+
+    // The decade view's title does nothing, so it is not a stop either, and zooming there with
+    // the keyboard moves focus on to the grid.
+    let (popup, _state, _) = app(date(2083, 7, 5));
+    tab_to(&popup, "title");
+    press(&popup, slint::platform::Key::Return);
+    assert_eq!(popup.get_zoom_mode(), 1);
     assert_eq!(
-        ElementHandle::find_by_accessible_label(&popup, "Close settings").count(),
-        0
+        focused(&popup),
+        "title",
+        "the year view keeps the title focused"
     );
+    press(&popup, slint::platform::Key::Return);
+    assert_eq!(popup.get_zoom_mode(), 2);
+    assert_eq!(
+        focused(&popup),
+        "grid",
+        "the disabled title gives focus to the grid"
+    );
+    popup.invoke_focus();
+    let mut order = Vec::new();
+    for _ in 0..4 {
+        press(&popup, slint::platform::Key::Tab);
+        order.push(focused(&popup));
+    }
+    assert_eq!(order, ["convert", "settings", "pin", "previous"]);
+    press(&popup, slint::platform::Key::Tab);
+    assert_eq!(focused(&popup), "next", "the title is skipped");
+
+    // A closed overlay is not in the tree at all, and neither is the closed field and list.
+    for label in [
+        "Close converter",
+        "Close settings",
+        "Go to date",
+        "Close day detail",
+    ] {
+        assert!(!exists(&popup, label), "{label} is absent while closed");
+    }
 }
 
 #[test]
 fn overlays_take_and_return_focus() {
-    let (popup, state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+    let (popup, state, _) = app(date(2081, 1, 1));
 
     // The base is inert while the converter is open, so the first Tab enters the overlay.
     click(&popup, "Convert");
@@ -644,13 +1500,10 @@ fn overlays_take_and_return_focus() {
     assert!(!popup.get_converter_visible());
     assert_eq!(focused(&popup), "convert", "the base resumes at Convert");
     press(&popup, slint::platform::Key::Tab);
-    assert_eq!(
-        focused(&popup),
-        "previous month",
-        "the base order continues"
-    );
+    assert_eq!(focused(&popup), "settings", "the base order continues");
 
-    // Settings is opened by the tray menu, so the test sets the flag and refreshes the model.
+    // Settings is opened from the header, the tray menu or Ctrl+Comma; the test sets the flag and
+    // refreshes the model.
     popup.set_settings_visible(true);
     crate::refresh_settings(&popup, &state);
     popup.invoke_focus();
@@ -715,86 +1568,99 @@ fn overlays_take_and_return_focus() {
 }
 
 #[test]
+fn the_settings_pill_opens_settings_and_its_panel_closes_back_to_convert() {
+    let (popup, _state, _) = app(date(2081, 1, 1));
+    click(&popup, "Settings");
+    assert!(popup.get_settings_visible());
+    press(&popup, slint::platform::Key::Escape);
+    assert!(!popup.get_settings_visible());
+    assert_eq!(focused(&popup), "convert");
+}
+
+#[test]
 fn return_and_space_step_once_per_press() {
-    let (popup, state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+    let (popup, _state, _) = app(date(2081, 1, 1));
 
-    // Year: one press is one year, the release adds nothing.
-    popup.invoke_focus_next_year();
-    assert_eq!(focused(&popup), "next year");
-    press(&popup, slint::platform::Key::Return);
-    assert_eq!(popup.get_year(), 2082, "Return adds one year");
-    press(&popup, slint::platform::Key::Space);
-    assert_eq!(popup.get_year(), 2083, "Space adds one year");
-    popup
-        .window()
-        .dispatch_event(slint::platform::WindowEvent::KeyReleased {
-            text: slint::platform::Key::Space.into(),
-        });
-    assert_eq!(popup.get_year(), 2083, "the release adds nothing");
-
-    // Month: the same two keys on a standard arrow button.
-    show_month(&state, 2081, Month::Baishakh);
-    popup.invoke_focus();
-    press(&popup, slint::platform::Key::Tab);
-    press(&popup, slint::platform::Key::Tab);
-    assert_eq!(focused(&popup), "previous month");
+    // Month: Return and Space on Previous move one month, and the key release adds nothing.
+    tab_to(&popup, "previous");
     press(&popup, slint::platform::Key::Return);
     assert!(
         popup.get_month_title().starts_with("Chaitra 2080"),
         "Return moves one month back: {}",
         popup.get_month_title()
     );
+    assert_eq!(focused(&popup), "previous", "the pill keeps focus");
     press(&popup, slint::platform::Key::Space);
     assert!(
         popup.get_month_title().starts_with("Falgun 2080"),
         "Space moves one month back: {}",
         popup.get_month_title()
     );
+    popup
+        .window()
+        .dispatch_event(slint::platform::WindowEvent::KeyReleased {
+            text: slint::platform::Key::Space.into(),
+        });
+    assert!(
+        popup.get_month_title().starts_with("Falgun 2080"),
+        "the release adds nothing"
+    );
+
+    // Year: the same keys on Next.
+    click(&popup, "Change view");
+    popup.invoke_focus();
+    tab_to(&popup, "next");
+    press(&popup, slint::platform::Key::Return);
+    assert_eq!(nav_title(&popup), "2081", "Return adds one year");
+    press(&popup, slint::platform::Key::Space);
+    assert_eq!(nav_title(&popup), "2082", "Space adds one year");
+}
+
+#[test]
+fn return_and_space_activate_the_title_and_the_header_pills() {
+    let (popup, _state, _) = app(date(2081, 1, 1));
+    tab_to(&popup, "title");
+    press(&popup, slint::platform::Key::Return);
+    assert_eq!(popup.get_zoom_mode(), 1, "Return zooms out");
+    press(&popup, slint::platform::Key::Space);
+    assert_eq!(popup.get_zoom_mode(), 2, "Space zooms out again");
+
+    let (popup, _state, _) = app(date(2081, 1, 1));
+    tab_to(&popup, "pin");
+    press(&popup, slint::platform::Key::Space);
+    assert!(popup.get_pinned());
+    press(&popup, slint::platform::Key::Return);
+    assert!(!popup.get_pinned());
 }
 
 #[test]
 fn return_and_space_skip_disabled_edges() {
-    // 1901: Previous month and Previous year are skipped.
-    let (popup, _state, _) = app(NepaliDate::new(1901, 1, 1).expect("date"));
-    press(&popup, slint::platform::Key::Tab);
-    press(&popup, slint::platform::Key::Tab);
-    assert_eq!(focused(&popup), "next month", "Previous month is skipped");
+    // 1901: Previous is skipped, so Tab from Next's side never lands on it.
+    let (popup, _state, _) = app(date(1901, 1, 1));
+    tab_to(&popup, "next");
     press(&popup, slint::platform::Key::Return);
     assert!(popup.get_month_title().starts_with("Jestha 1901"));
+    assert_eq!(
+        element(&popup, "Previous month").accessible_enabled(),
+        Some(true),
+        "away from the edge it works again"
+    );
 
-    popup.invoke_focus();
-    for _ in 0..6 {
-        press(&popup, slint::platform::Key::Tab);
-    }
-    assert_eq!(focused(&popup), "next year");
-    press(&popup, slint::platform::Key::Space);
-    assert_eq!(popup.get_year(), 1902);
-
-    // 2199: Next month and Next year are skipped.
-    let (popup, _state, _) = app(NepaliDate::new(2199, 12, 30).expect("date"));
-    press(&popup, slint::platform::Key::Tab);
-    press(&popup, slint::platform::Key::Tab);
-    assert_eq!(focused(&popup), "previous month");
+    // 2199: Next is skipped.
+    let (popup, _state, _) = app(date(2199, 12, 30));
+    tab_to(&popup, "previous");
     press(&popup, slint::platform::Key::Space);
     assert!(popup.get_month_title().starts_with("Falgun 2199"));
-
-    popup.invoke_focus();
-    for _ in 0..6 {
-        press(&popup, slint::platform::Key::Tab);
-    }
-    assert_eq!(focused(&popup), "previous year");
-    press(&popup, slint::platform::Key::Return);
-    assert_eq!(popup.get_year(), 2198);
 }
 
 #[test]
 fn window_deactivation_hides_the_popup_while_a_control_has_focus() {
-    let (popup, _state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
-    popup.invoke_focus_next_year();
-    assert_eq!(focused(&popup), "next year");
+    let (popup, _state, _) = app(date(2081, 1, 1));
+    tab_to(&popup, "next");
+    assert_eq!(focused(&popup), "next");
 
     // The winit filter calls this when Focused(false) arrives. A FocusScope focus-lost would
-    // reach only the focused button, not the popup root.
+    // reach only the focused pill, not the popup root.
     popup.invoke_window_deactivated();
     assert!(
         !popup.window().is_visible(),
@@ -807,7 +1673,7 @@ fn a_toggle_hides_an_open_popup_without_panicking() {
     // The bar never takes focus, so a click on it while the popup is open reaches
     // `hide_popup` instead of the focus-loss path. The beta panicked here with "RefCell already
     // borrowed" on every such click.
-    let (popup, state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+    let (popup, state, _) = app(date(2081, 1, 1));
     let label = day_label(&popup, "5");
     click(&popup, &label);
     assert!(state.borrow().detail.is_some(), "the detail is open");
@@ -822,7 +1688,7 @@ fn a_toggle_hides_an_open_popup_without_panicking() {
 
 #[test]
 fn window_active_changed_hides_the_popup_when_the_root_has_focus() {
-    let (popup, _state, _) = app(NepaliDate::new(2081, 1, 1).expect("date"));
+    let (popup, _state, _) = app(date(2081, 1, 1));
     assert_eq!(focused(&popup), "", "the root holds focus");
 
     popup
@@ -832,6 +1698,14 @@ fn window_active_changed_hides_the_popup_when_the_root_has_focus() {
         !popup.window().is_visible(),
         "the root FocusScope sees the activation loss"
     );
+}
+
+#[test]
+fn wr02_ac5_a_headless_window_keeps_the_square_hairline_frame() {
+    // No OS window exists in the testing backend, so nothing rounds it: the markup default is
+    // the square frame with its hairline.
+    let (popup, _state, _) = app(date(2081, 1, 1));
+    assert_eq!(popup.get_frame_style(), crate::FrameStyle::Square);
 }
 
 #[test]

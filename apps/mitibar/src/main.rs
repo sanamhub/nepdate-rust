@@ -27,13 +27,15 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use nepdate::{DateOrder, Lang, LongDate, Month, NepaliDate, Separator};
+use nepdate::{DateOrder, Lang, LongDate, NepaliDate, Separator};
 use slint::{ComponentHandle, Weak};
 
 use crate::app::bar::bar_lines;
 use crate::app::bar_place::Saved;
 use crate::app::converter::{self, Direction};
+use crate::app::goto::{self, GotoOutcome};
 use crate::app::settings::Settings;
+use crate::app::zoom::{Arrow, Zoom, ZoomState};
 use crate::app::{APP_NAME, clock, holidays, month_view};
 use crate::platform::bar::{Anchor, Bar, BarEvent, MenuItem};
 use crate::platform::clipboard::{Clipboard, SystemClipboard};
@@ -46,8 +48,8 @@ struct AppState {
     settings: Settings,
     /// When focus loss last hid the popup; see `handle_tray_event`.
     popup_hidden_at: Option<std::time::Instant>,
-    /// The month the grid shows (WR-03 AC6).
-    viewed_month: (u16, Month),
+    /// The calendar's zoom level, viewed month and cursor (WR-03 AC6).
+    zoom: ZoomState,
     /// The local BS date when the popup last hid; a different date on reopen resets the month
     /// (WR-02 AC2).
     hidden_on: NepaliDate,
@@ -90,7 +92,7 @@ impl AppState {
         Self {
             settings,
             popup_hidden_at: None,
-            viewed_month: (today.year(), today.month()),
+            zoom: ZoomState::new(today),
             hidden_on: today,
             detail: None,
             today_override,
@@ -218,6 +220,8 @@ fn hide_popup(state: &Rc<RefCell<AppState>>) {
     let popup = state.borrow().popup.upgrade();
     if let Some(popup) = popup {
         record_hidden(state);
+        // The popup always opens unpinned (WR-14 AC1), whichever way it closed.
+        popup.set_pinned(false);
         let _ = popup.hide();
     }
 }
@@ -243,9 +247,18 @@ struct Cli {
     /// Opens the settings panel in a snapshot.
     #[cfg(feature = "snapshot")]
     settings_panel: bool,
-    /// Focuses Next year for a focus-ring snapshot.
+    /// Shows the year or decade view in a snapshot.
     #[cfg(feature = "snapshot")]
-    focus_year_next: bool,
+    zoom: Option<Zoom>,
+    /// A BS date whose day tooltip the snapshot shows, as if the pointer had rested on it.
+    #[cfg(feature = "snapshot")]
+    tooltip: Option<NepaliDate>,
+    /// Pins the popup in a snapshot.
+    #[cfg(feature = "snapshot")]
+    pinned: bool,
+    /// Opens the upcoming-holidays list in a snapshot.
+    #[cfg(feature = "snapshot")]
+    upcoming: bool,
     /// Run for this many seconds, then write the UI-wake count and quit. A test tool,
     /// available only with the `snapshot` feature.
     #[cfg(feature = "snapshot")]
@@ -268,7 +281,8 @@ struct Cli {
     bar_scale: Option<f32>,
 }
 
-/// Reads one `--today` or `--detail` value. Both flags are snapshot tools, so this helper is too.
+/// Reads one `--today`, `--detail` or `--tooltip` value. All three are snapshot tools, so this
+/// helper is too.
 #[cfg(feature = "snapshot")]
 fn parse_bs_date(
     args: &mut impl Iterator<Item = String>,
@@ -315,7 +329,23 @@ impl Cli {
                 #[cfg(feature = "snapshot")]
                 "--settings" => cli.settings_panel = true,
                 #[cfg(feature = "snapshot")]
-                "--focus-year-next" => cli.focus_year_next = true,
+                "--zoom" => {
+                    let value = args
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("--zoom needs month, year or decade"))?;
+                    cli.zoom = Some(match value.as_str() {
+                        "month" => Zoom::Month,
+                        "year" => Zoom::Year,
+                        "decade" => Zoom::Decade,
+                        other => anyhow::bail!("--zoom must be month, year or decade, got {other}"),
+                    });
+                }
+                #[cfg(feature = "snapshot")]
+                "--tooltip" => cli.tooltip = Some(parse_bs_date(&mut args, "--tooltip")?),
+                #[cfg(feature = "snapshot")]
+                "--pinned" => cli.pinned = true,
+                #[cfg(feature = "snapshot")]
+                "--upcoming" => cli.upcoming = true,
                 #[cfg(feature = "snapshot")]
                 "--wake-probe" => {
                     let value = args
@@ -413,8 +443,17 @@ impl Cli {
             if cli.settings_panel && !cli.popup {
                 anyhow::bail!("--settings needs --popup --snapshot");
             }
-            if cli.focus_year_next && !cli.popup {
-                anyhow::bail!("--focus-year-next needs --popup --snapshot");
+            if cli.zoom.is_some() && !cli.popup {
+                anyhow::bail!("--zoom needs --popup --snapshot");
+            }
+            if cli.tooltip.is_some() && !cli.popup {
+                anyhow::bail!("--tooltip needs --popup --snapshot");
+            }
+            if cli.pinned && !cli.popup {
+                anyhow::bail!("--pinned needs --popup --snapshot");
+            }
+            if cli.upcoming && !cli.popup {
+                anyhow::bail!("--upcoming needs --popup --snapshot");
             }
         }
         #[cfg(feature = "snapshot")]
@@ -593,7 +632,10 @@ fn main() -> anyhow::Result<()> {
             cli.theme
                 .unwrap_or_else(|| ui_bridge::theme_choice(&state.borrow().settings.theme)),
         );
-        state.borrow_mut().popup = popup.as_weak();
+        let weak = popup.as_weak();
+        state.borrow_mut().popup = weak.clone();
+        // The tooltip snapshot goes through the same callbacks as the app.
+        wire_popup(&popup, &state, &weak);
         if lang == Lang::Ne {
             slint::select_bundled_translation("ne")?;
         }
@@ -701,7 +743,32 @@ fn snapshot_popup(
     if let Some(detail) = cli.detail {
         state.borrow_mut().detail = Some(month_view::day_detail(detail, lang));
     }
+    match cli.zoom {
+        Some(Zoom::Year) => state.borrow_mut().zoom.title_clicked(),
+        Some(Zoom::Decade) => {
+            state.borrow_mut().zoom.title_clicked();
+            state.borrow_mut().zoom.title_clicked();
+        }
+        Some(Zoom::Month) | None => {}
+    }
+    // The tooltip belongs to a day of the month view: open that month first.
+    if let Some(date) = cli.tooltip {
+        state.borrow_mut().zoom.jump_to(date);
+    }
     update_popup(state);
+    if cli.pinned {
+        popup.set_pinned(true);
+    }
+    if cli.upcoming {
+        popup.set_upcoming_visible(true);
+    }
+    let mut waits = 1;
+    if let Some(date) = cli.tooltip {
+        let lead = i32::from(date.first_day_of_month().weekday().index_from_sunday());
+        popup.set_forced_tip_index(lead + i32::from(date.day()) - 1);
+        // The tooltip waits for the same half second a pointer would, then the card is placed.
+        waits = TOOLTIP_SNAPSHOT_TICKS;
+    }
     if cli.converter {
         let today = today_of(&state.borrow());
         ui_bridge::reset_converter(popup, today, lang);
@@ -709,9 +776,6 @@ fn snapshot_popup(
         let outcome = converter::convert("2081/01/01", Direction::BsToAd, lang);
         ui_bridge::set_converter(popup, &outcome);
         popup.set_converter_visible(true);
-    }
-    if cli.focus_year_next {
-        popup.invoke_focus_next_year();
     }
     if cli.settings_panel {
         if let Some(theme) = cli.theme {
@@ -725,8 +789,12 @@ fn snapshot_popup(
         refresh_settings(popup, state);
         popup.set_settings_visible(true);
     }
-    snapshot(popup, &path)
+    snapshot_after(popup, &path, waits)
 }
+
+/// The snapshot timer ticks every 50 ms; 16 ticks is 800 ms, past the 500 ms tooltip delay.
+#[cfg(feature = "snapshot")]
+const TOOLTIP_SNAPSHOT_TICKS: u32 = 16;
 
 /// Handles a WR-01 tray event.
 fn handle_tray_event(event: TrayEvent, state: &Rc<RefCell<AppState>>, slot: &PopupSlot) {
@@ -892,14 +960,21 @@ fn update_popup(state: &Rc<RefCell<AppState>>) {
     ui_bridge::set_clocks(&popup, &lines);
 
     let today = NepaliDate::try_from(now.date()).unwrap_or(NepaliDate::MIN);
-    let (year, month) = s.viewed_month;
+    let zoom = s.zoom;
     let started = std::time::Instant::now();
-    let view = month_view::month_view(year, month, today, lang);
-    log::debug!("month view {} built in {:?}", view.title, started.elapsed());
-    ui_bridge::set_month(&popup, &view, lang);
+    // The day cells are built only for the month view; the other two levels are 12 labels.
+    let view = (zoom.zoom() == Zoom::Month).then(|| {
+        let (year, month) = zoom.viewed();
+        month_view::month_view(year, month, today, lang)
+    });
+    log::debug!("calendar built in {:?}", started.elapsed());
+    ui_bridge::set_calendar(&popup, zoom, view.as_ref(), today, lang);
     let holiday = holidays::next_holiday(today, lang);
     ui_bridge::set_next_holiday(&popup, holiday.as_ref());
+    ui_bridge::set_upcoming(&popup, &holidays::upcoming_holidays(today, lang, 5), lang);
     ui_bridge::set_detail(&popup, s.detail.as_ref());
+    // A tooltip belongs to the cells it was shown over.
+    popup.set_tip_visible(false);
 }
 
 /// The date the app calls today: the pinned date in a snapshot or test, otherwise the local date.
@@ -936,29 +1011,29 @@ fn record_hidden(state: &Rc<RefCell<AppState>>) {
 }
 
 /// Prepares the popup for a show: keep the viewed month while the date is unchanged, otherwise
-/// jump to today's month (WR-02 AC2), and start with the detail closed.
+/// jump to today's month (WR-02 AC2), always in the month view, and start with the detail closed.
 fn prepare_show(state: &Rc<RefCell<AppState>>) {
     let today = today_local();
     let mut state = state.borrow_mut();
-    state.viewed_month = month_view::month_on_show(state.viewed_month, state.hidden_on, today);
+    let viewed = month_view::month_on_show(state.zoom.viewed(), state.hidden_on, today);
+    if viewed == state.zoom.viewed() {
+        state.zoom.reopened(today);
+    } else {
+        state.zoom.jump_to(today);
+    }
     state.hidden_on = today;
     state.detail = None;
 }
 
-/// Sets the viewed month and repaints the popup.
-fn set_month(state: &Rc<RefCell<AppState>>, year: u16, month: Month) {
-    state.borrow_mut().viewed_month = (year, month);
-    state.borrow_mut().detail = None;
+/// Changes the calendar state and repaints the popup. The borrow ends before the repaint, which
+/// borrows the state again. Any change closes the open day detail.
+fn zoom_apply(state: &Rc<RefCell<AppState>>, change: impl FnOnce(&mut ZoomState)) {
+    {
+        let mut s = state.borrow_mut();
+        change(&mut s.zoom);
+        s.detail = None;
+    }
     update_popup(state);
-}
-
-/// Moves the viewed month by `delta`, stopping at the range edges (WR-03 AC6).
-fn change_month(state: &Rc<RefCell<AppState>>, delta: i32) {
-    let (year, month) = state.borrow().viewed_month;
-    let Some((year, month)) = month_view::step_month(year, month, delta) else {
-        return;
-    };
-    set_month(state, year, month);
 }
 
 /// Wires the popup's hide notification (WR-02 AC2) and month navigation. Kept out of
@@ -971,6 +1046,12 @@ fn wire_popup(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, popup_weak: &W
             if let Some(popup) = popup_weak.upgrade() {
                 popup.set_converter_visible(false);
                 popup.set_settings_visible(false);
+                popup.set_goto_visible(false);
+                popup.set_goto_text("".into());
+                popup.set_goto_error("".into());
+                popup.set_upcoming_visible(false);
+                popup.set_pinned(false);
+                popup.set_tip_visible(false);
             }
             let mut state = state.borrow_mut();
             state.popup_hidden_at = Some(std::time::Instant::now());
@@ -1000,56 +1081,191 @@ fn wire_popup(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, popup_weak: &W
 
     wire_converter(popup, state, popup_weak);
 
-    popup.on_prev_month({
+    wire_calendar(popup, state, popup_weak);
+}
+
+/// The calendar: the zoom levels, the roving cursor, the day tooltip, Go to date, the upcoming
+/// holidays and the Settings request (WR-03 AC6, WR-10 AC2, WR-14).
+fn wire_calendar(
+    popup: &PopupWindow,
+    state: &Rc<RefCell<AppState>>,
+    popup_weak: &Weak<PopupWindow>,
+) {
+    popup.on_step({
         let state = state.clone();
-        move || change_month(&state, -1)
-    });
-    popup.on_next_month({
-        let state = state.clone();
-        move || change_month(&state, 1)
+        move |delta| {
+            zoom_apply(&state, |zoom| {
+                zoom.step(delta);
+            });
+        }
     });
     popup.on_today({
         let state = state.clone();
         move || {
             let today = today_of(&state.borrow());
-            set_month(&state, today.year(), today.month());
+            zoom_apply(&state, |zoom| zoom.today(today));
         }
     });
-    popup.on_month_picked({
+    popup.on_title_clicked({
+        let state = state.clone();
+        move || zoom_apply(&state, ZoomState::title_clicked)
+    });
+    popup.on_zoom_cell_clicked({
         let state = state.clone();
         move |index| {
-            let Some(month) = u8::try_from(index + 1)
-                .ok()
-                .and_then(|number| Month::try_from(number).ok())
-            else {
+            let Ok(index) = u8::try_from(index) else {
                 return;
             };
-            let year = state.borrow().viewed_month.0;
-            set_month(&state, year, month);
+            zoom_apply(&state, |zoom| {
+                zoom.pick_cell(index);
+            });
         }
     });
-    popup.on_year_picked({
+    popup.on_arrow({
         let state = state.clone();
-        move |year| {
-            let Ok(year) = u16::try_from(year) else {
+        move |direction| {
+            let arrow = match direction {
+                0 => Arrow::Left,
+                1 => Arrow::Right,
+                2 => Arrow::Up,
+                _ => Arrow::Down,
+            };
+            zoom_apply(&state, |zoom| zoom.move_cursor(arrow));
+        }
+    });
+    popup.on_activate_cursor({
+        let state = state.clone();
+        move || activate_cursor(&state)
+    });
+    popup.on_escape_zoom({
+        let state = state.clone();
+        move || {
+            let stepped = state.borrow_mut().zoom.escape();
+            if stepped {
+                update_popup(&state);
+            }
+            stepped
+        }
+    });
+    popup.on_day_tip({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move |index| day_tip(&state, &popup_weak, index)
+    });
+    wire_goto(popup, state, popup_weak);
+    popup.on_upcoming_picked({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move |index| {
+            let (today, lang) = {
+                let s = state.borrow();
+                (today_of(&s), s.settings.lang())
+            };
+            let holiday = usize::try_from(index).ok().and_then(|index| {
+                holidays::upcoming_holidays(today, lang, 5)
+                    .get(index)
+                    .copied()
+            });
+            let Some(holiday) = holiday else {
                 return;
             };
-            if !(1901..=2199).contains(&year) {
-                return;
+            if let Some(popup) = popup_weak.upgrade() {
+                popup.set_upcoming_visible(false);
             }
-            let month = state.borrow().viewed_month.1;
-            set_month(&state, year, month);
+            open_detail_for(&state, holiday.date);
         }
     });
-    popup.on_wheel({
+    popup.on_settings_requested({
         let state = state.clone();
-        move |delta| {
-            if delta == 0 {
-                return;
+        let popup_weak = popup_weak.clone();
+        move || {
+            if let Some(popup) = popup_weak.upgrade() {
+                show_settings_panel(&popup, &state);
             }
-            change_month(&state, if delta > 0 { 1 } else { -1 });
         }
     });
+}
+
+/// The Go to date field (WR-14 AC3): the text is judged as it is typed, Enter opens the date's
+/// month with its detail, and a bad date says why in the field.
+fn wire_goto(popup: &PopupWindow, state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>) {
+    popup.on_goto_edited({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move |text| {
+            let lang = state.borrow().settings.lang();
+            if let Some(popup) = popup_weak.upgrade() {
+                popup.set_goto_error(goto_error(&goto::parse(text.as_str(), lang)).into());
+            }
+        }
+    });
+    popup.on_goto_submitted({
+        let state = state.clone();
+        let popup_weak = popup_weak.clone();
+        move |text| {
+            let lang = state.borrow().settings.lang();
+            let outcome = goto::parse(text.as_str(), lang);
+            let Some(popup) = popup_weak.upgrade() else {
+                return;
+            };
+            popup.set_goto_error(goto_error(&outcome).into());
+            if let GotoOutcome::Date(date) = outcome {
+                popup.set_goto_visible(false);
+                popup.set_goto_text("".into());
+                open_detail_for(&state, date);
+                popup.invoke_focus();
+            }
+        }
+    });
+    popup.on_goto_closed({
+        let popup_weak = popup_weak.clone();
+        move || {
+            if let Some(popup) = popup_weak.upgrade() {
+                popup.set_goto_error("".into());
+            }
+        }
+    });
+}
+
+/// The field's message for an outcome: the error text, or nothing.
+fn goto_error(outcome: &GotoOutcome) -> &str {
+    match outcome {
+        GotoOutcome::Error(message) => message,
+        GotoOutcome::Empty | GotoOutcome::Date(_) => "",
+    }
+}
+
+/// Fills the day tooltip for grid cell `index` and says whether there is one (WR-14 AC2).
+fn day_tip(state: &Rc<RefCell<AppState>>, popup_weak: &Weak<PopupWindow>, index: i32) -> bool {
+    let (year, month, lang) = {
+        let s = state.borrow();
+        let (year, month) = s.zoom.viewed();
+        (year, month, s.settings.lang())
+    };
+    let Some(date) = month_view::date_at(year, month, index) else {
+        return false;
+    };
+    let Some(popup) = popup_weak.upgrade() else {
+        return false;
+    };
+    ui_bridge::set_tip(&popup, &month_view::day_tooltip(date, lang));
+    true
+}
+
+/// Enter or Space on the grid's cursor: the day's detail in the month view, the picked month or
+/// year in the other two (WR-10 AC2).
+fn activate_cursor(state: &Rc<RefCell<AppState>>) {
+    let zoom = state.borrow().zoom;
+    match zoom.zoom() {
+        Zoom::Month => {
+            if let Some(date) = zoom.cursor_date() {
+                open_detail_for(state, date);
+            }
+        }
+        Zoom::Year | Zoom::Decade => zoom_apply(state, |zoom| {
+            zoom.pick_cursor();
+        }),
+    }
 }
 
 /// The converter overlay. Opening it closes the day detail, and the Days tab starts with
@@ -1268,26 +1484,35 @@ fn open_settings(state: &Rc<RefCell<AppState>>, slot: &PopupSlot, anchor: ui_bri
         update_popup(state);
         let _ = ui_bridge::show_popup_at(&popup, anchor);
     }
+    show_settings_panel(&popup, state);
+}
+
+/// Shows the settings panel with a fresh zone filter.
+fn show_settings_panel(popup: &PopupWindow, state: &Rc<RefCell<AppState>>) {
     popup.set_settings_filter("".into());
-    refresh_settings(&popup, state);
+    refresh_settings(popup, state);
     popup.set_settings_visible(true);
     popup.invoke_focus();
 }
 
 /// Opens the detail for a grid cell, if it is a real day.
 fn open_detail(state: &Rc<RefCell<AppState>>, index: i32) {
-    let (year, month, lang) = {
-        let state = state.borrow();
-        (
-            state.viewed_month.0,
-            state.viewed_month.1,
-            state.settings.lang(),
-        )
-    };
+    let (year, month) = state.borrow().zoom.viewed();
     let Some(date) = month_view::date_at(year, month, index) else {
         return;
     };
-    state.borrow_mut().detail = Some(month_view::day_detail(date, lang));
+    open_detail_for(state, date);
+}
+
+/// Opens `date`'s month in the month view with its day detail: a day click, Enter on the cursor,
+/// Go to date and an upcoming holiday all land here.
+fn open_detail_for(state: &Rc<RefCell<AppState>>, date: NepaliDate) {
+    let lang = state.borrow().settings.lang();
+    {
+        let mut s = state.borrow_mut();
+        s.zoom.jump_to(date);
+        s.detail = Some(month_view::day_detail(date, lang));
+    }
     update_popup(state);
 }
 
@@ -1372,6 +1597,17 @@ fn arm_timer(state: Rc<RefCell<AppState>>, tray: Rc<SlintTray>, bar: Rc<dyn Bar>
 /// turn, so the snapshot runs from a timer once `Window::size()` is non-zero.
 #[cfg(feature = "snapshot")]
 fn snapshot<C: ComponentHandle + 'static>(ui: &C, path: &std::path::Path) -> anyhow::Result<()> {
+    snapshot_after(ui, path, 1)
+}
+
+/// Like `snapshot`, but writes the image only from timer tick `ticks` on (50 ms each), for a view
+/// that needs time to settle, such as a tooltip.
+#[cfg(feature = "snapshot")]
+fn snapshot_after<C: ComponentHandle + 'static>(
+    ui: &C,
+    path: &std::path::Path,
+    ticks: u32,
+) -> anyhow::Result<()> {
     use std::cell::Cell;
 
     ui.show()?;
@@ -1403,6 +1639,9 @@ fn snapshot<C: ComponentHandle + 'static>(ui: &C, path: &std::path::Path) -> any
                             Some(Err(anyhow::anyhow!("window never got a size")));
                         let _ = slint::quit_event_loop();
                     }
+                    return;
+                }
+                if attempt < ticks {
                     return;
                 }
                 *result.borrow_mut() = Some(write_snapshot(&ui, &path));
@@ -1526,19 +1765,63 @@ mod tests {
 
     #[cfg(feature = "snapshot")]
     #[test]
-    fn focus_year_flag_needs_a_popup_snapshot() {
-        let cli = Cli::parse(
-            ["--popup", "--snapshot", "focus.png", "--focus-year-next"]
-                .into_iter()
-                .map(str::to_owned),
-        )
-        .expect("parse");
-        assert!(cli.focus_year_next);
-
-        assert!(Cli::parse(["--focus-year-next"].into_iter().map(str::to_owned)).is_err());
+    fn the_popup_snapshot_flags_need_a_popup_snapshot() {
+        for flags in [
+            vec!["--zoom", "year"],
+            vec!["--tooltip", "2083-07-12"],
+            vec!["--pinned"],
+            vec!["--upcoming"],
+        ] {
+            let mut with_popup = vec!["--popup", "--snapshot", "popup.png"];
+            with_popup.extend(&flags);
+            assert!(
+                Cli::parse(with_popup.into_iter().map(str::to_owned)).is_ok(),
+                "{flags:?} is accepted with --popup --snapshot"
+            );
+            assert!(
+                Cli::parse(flags.iter().map(|flag| (*flag).to_owned())).is_err(),
+                "{flags:?} is rejected without them"
+            );
+            let mut without_popup = vec!["--snapshot", "popup.png"];
+            without_popup.extend(&flags);
+            assert!(
+                Cli::parse(without_popup.into_iter().map(str::to_owned)).is_err(),
+                "{flags:?} is rejected without --popup"
+            );
+        }
         assert!(
             Cli::parse(
-                ["--snapshot", "focus.png", "--focus-year-next"]
+                ["--popup", "--snapshot", "popup.png", "--zoom", "week"]
+                    .into_iter()
+                    .map(str::to_owned)
+            )
+            .is_err(),
+            "an unknown level is an error"
+        );
+        let cli = Cli::parse(
+            [
+                "--popup",
+                "--snapshot",
+                "popup.png",
+                "--zoom",
+                "decade",
+                "--pinned",
+            ]
+            .into_iter()
+            .map(str::to_owned),
+        )
+        .expect("parse");
+        assert_eq!(cli.zoom, Some(Zoom::Decade));
+        assert!(cli.pinned);
+    }
+
+    #[cfg(feature = "snapshot")]
+    #[test]
+    fn the_old_year_focus_flag_is_gone() {
+        // The year buttons it focused were removed with the zoom views (WR-03 AC6).
+        assert!(
+            Cli::parse(
+                ["--popup", "--snapshot", "focus.png", "--focus-year-next"]
                     .into_iter()
                     .map(str::to_owned)
             )

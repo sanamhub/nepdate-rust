@@ -1,0 +1,145 @@
+// The popup's own controls (widget-design §6, §7): the pill button and the line icons. They are
+// monochrome, `ink` on `surface`, so any colour in the window means calendar data. The standard
+// Slint widgets draw their own Fluent frame, so the popup's header and navigation use these.
+
+import { FocusFrame } from "focus-frame.slint";
+import { Theme } from "theme.slint";
+
+/// A line icon drawn as a path in a 16 by 16 box. The caller sets `commands`.
+export component LineIcon inherits Path {
+    in property <color> color: Theme.ink;
+    width: 16px;
+    height: 16px;
+    viewbox-width: 16;
+    viewbox-height: 16;
+    stroke: root.color;
+    stroke-width: 1.5px;
+    fill: transparent;
+}
+
+/// How long the pointer rests before a tooltip shows (WR-14 AC2).
+export global TooltipTiming {
+    out property <duration> delay: 500ms;
+}
+
+/// A 28 px pill: the one button style in the popup. With `bordered: false` it is the borderless
+/// icon button of the month title row. The focus ring is the W7 `ink` ring, drawn outside the
+/// shape with the same radius.
+export component Pill inherits Rectangle {
+    in property <string> text;
+    /// The accessible name, for screen readers and the interaction tests.
+    in property <string> label;
+    /// The tooltip: the action and its key, shown after the pointer rests (WR-10 AC2).
+    in property <string> tooltip;
+    /// A pinned Pin pill is filled with `ink`, its icon in `surface` (widget-design §7).
+    in property <bool> filled: false;
+    in property <bool> bordered: true;
+    in property <bool> enabled: true;
+    /// A disabled pill fades, except the title in the decade view, which is plain text there.
+    in property <bool> fade-when-disabled: true;
+    in property <length> pill-size: 28px;
+    in property <length> font-size: 14px;
+    /// The colour a child icon should use, so it follows the filled state.
+    out property <color> foreground: root.filled ? Theme.surface : Theme.ink;
+    out property <bool> has-focus: scope.has-focus;
+
+    callback activated();
+    /// `pill.focus()` moves keyboard focus here; the popup returns to Convert when an overlay
+    /// closes.
+    forward-focus: scope;
+    /// Fired once the pointer has rested for the tooltip delay: the text and the pill's window
+    /// position and size, so the popup can place the card without covering the pill.
+    callback tip-requested(string, length, length, length, length);
+    callback tip-dismissed();
+
+    height: root.pill-size;
+    min-width: root.pill-size;
+    preferred-width: root.text == ""
+        ? root.pill-size
+        : caption.preferred-width + 20px + (root.has-icon ? 22px : 0px);
+    border-radius: root.pill-size / 2;
+    background: root.filled
+        ? Theme.ink
+        : root.bordered
+            ? Theme.surface-raised
+            : touch.has-hover && root.enabled ? Theme.surface-raised : transparent;
+    border-width: root.bordered ? 1px : 0px;
+    border-color: touch.has-hover && root.enabled ? Theme.ink-muted : Theme.hairline;
+    opacity: root.enabled || !root.fade-when-disabled ? 1.0 : 0.4;
+
+    /// True when a child icon is placed before the text.
+    in property <bool> has-icon: false;
+    property <bool> tip-shown: false;
+
+    scope := FocusScope {
+        width: 100%;
+        height: 100%;
+        enabled: root.enabled;
+        focus-on-tab-navigation: root.enabled;
+        accessible-role: button;
+        accessible-label: root.label;
+        accessible-enabled: root.enabled;
+        // Assistive technology can invoke a disabled control; it does nothing then.
+        accessible-action-default => {
+            if (root.enabled) {
+                root.activated();
+            }
+        }
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == " ") {
+                root.activated();
+                return accept;
+            }
+            reject
+        }
+
+        HorizontalLayout {
+            alignment: center;
+            spacing: 6px;
+            padding-left: root.text == "" ? 0px : 10px;
+            padding-right: root.text == "" ? 0px : 10px;
+            // The icon is centred in the pill's height; a layout would otherwise top-align it.
+            VerticalLayout {
+                alignment: center;
+                @children
+            }
+            caption := Text {
+                text: root.text;
+                color: root.foreground;
+                font-size: root.font-size;
+                vertical-alignment: center;
+                accessible-role: none;
+            }
+        }
+
+        touch := TouchArea {
+            enabled: root.enabled;
+            clicked => { root.activated(); }
+            changed has-hover => {
+                if (!touch.has-hover) {
+                    root.tip-shown = false;
+                    root.tip-dismissed();
+                }
+            }
+        }
+
+        // The tooltip waits for the pointer to rest (WR-14 AC2 gives the delay).
+        Timer {
+            interval: TooltipTiming.delay;
+            running: touch.has-hover && root.enabled && !root.tip-shown && root.tooltip != "";
+            triggered => {
+                root.tip-shown = true;
+                root.tip-requested(root.tooltip, root.absolute-position.x,
+                    root.absolute-position.y, root.width, root.height);
+            }
+        }
+
+        FocusFrame {
+            width: 100%;
+            height: 100%;
+            focused: scope.has-focus;
+            thickness: 2px;
+            radius: root.pill-size / 2;
+        }
+    }
+}

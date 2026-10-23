@@ -146,7 +146,7 @@ fn parse_days_input(input: &str, lang: Lang) -> Result<NepaliDate, ConvertOutcom
 }
 
 /// WR-07 AC2: 8 characters or 2 separators.
-fn enough_to_judge(input: &str) -> bool {
+pub(crate) fn enough_to_judge(input: &str) -> bool {
     let separators = input
         .chars()
         .filter(|c| matches!(c, '/' | '-' | '.' | '\\' | '_'))
@@ -156,7 +156,7 @@ fn enough_to_judge(input: &str) -> bool {
 
 /// Parses the strict AD form `YYYY-MM-DD` or `YYYY/MM/DD` (PARSING §1), with ASCII or
 /// Devanagari digits. One separator must be used throughout.
-fn parse_ad(input: &str) -> Result<(i32, u8, u8), ()> {
+pub(crate) fn parse_ad(input: &str) -> Result<(i32, u8, u8), ()> {
     let mut ascii = String::with_capacity(input.len());
     for c in input.chars() {
         match c {
@@ -197,7 +197,7 @@ fn parse_ad(input: &str) -> Result<(i32, u8, u8), ()> {
 /// The range sentence of WR-07 AC3, in the current language. The English text is the exact
 /// requirement; the Nepali text uses Devanagari digits for both the BS and AD years
 /// (widget-design §4).
-fn range_message(lang: Lang) -> &'static str {
+pub(crate) fn range_message(lang: Lang) -> &'static str {
     match lang {
         Lang::En => "Supported range: 1901–2199 BS (1844–2143 AD)",
         Lang::Ne => "समर्थित दायरा: १९०१–२१९९ वि.सं. (१८४४–२१४३ ई.सं.)",
@@ -205,7 +205,7 @@ fn range_message(lang: Lang) -> &'static str {
 }
 
 /// The fallback error when the text is neither a date nor out of range.
-fn invalid_message(lang: Lang) -> &'static str {
+pub(crate) fn invalid_message(lang: Lang) -> &'static str {
     match lang {
         Lang::En => "Invalid date",
         Lang::Ne => "अमान्य मिति",
