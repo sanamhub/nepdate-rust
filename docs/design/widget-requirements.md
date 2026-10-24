@@ -21,7 +21,8 @@ ADR-0020).
   and on Linux via StatusNotifierItem (KDE, GNOME with AppIndicator extension, etc.).
 - AC2: Windows/Linux icon image shows today's BS day number (Devanagari digits when
   language = ne, ASCII otherwise), regenerated when the date changes.
-  macOS shows a text title instead, e.g. `८ असोज` / `8 Ashoj`.
+  macOS shows a text title instead: the bar's top line (WR-08 AC2), or its bottom line when the
+  top is empty, or `८ असोज` / `8 Ashoj` when both are empty.
 - AC3: Tooltip (where the OS supports it): `MitiBar` on the first line, then the BS long date and
   AD date on the second, e.g. `Ashoj 8, 2083 · 2026-09-24`.
 - AC4: Left-click (Windows/Linux) toggles the popup. On macOS, clicking opens the menu,

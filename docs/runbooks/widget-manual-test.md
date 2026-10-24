@@ -15,6 +15,7 @@ account or a clean VM, and keep a firewall log or a packet capture open for the 
 
 - [ ] Icon or menu-bar title appears after start.
 - [ ] Windows and Linux show today's BS day; Nepali uses Devanagari digits.
+- [ ] macOS shows the bar's top line as the title and follows a line edit in Settings at once.
 - [ ] Tooltip shows `MitiBar` and the BS and AD dates.
 - [ ] Left click opens the popup; a second click closes it. On macOS, Open is the first menu item.
 - [ ] Menu order is Open, Copy today (BS), Copy today (AD), Settings, Quit, in the current language.
