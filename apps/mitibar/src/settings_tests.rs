@@ -1338,6 +1338,26 @@ fn wr08_ac3_a_line_can_be_left_empty_and_the_bar_shows_the_other_alone() {
         "an empty top line leaves the bottom as the only line"
     );
     assert!(!last.bottom.is_empty());
+    let title = f.tray.titles.borrow().last().cloned().expect("a title");
+    assert_eq!(
+        title, last.bottom,
+        "the menu-bar title follows the bar's only line"
+    );
+}
+
+#[test]
+fn wr08_the_menu_bar_title_follows_the_top_line() {
+    // Only a date on the top line, so the title doesn't depend on the minute.
+    let (f, window) = opened();
+    window.invoke_field_added(0, "bs_short".into());
+    for _ in 0..3 {
+        window.invoke_chip_removed(0, 0);
+    }
+    assert_eq!(top(&f), ids(&["bs_short"]));
+    let last = f.bar.lines.borrow().last().cloned().expect("lines");
+    let title = f.tray.titles.borrow().last().cloned().expect("a title");
+    assert_eq!(title, last.top);
+    assert!(!title.is_empty());
 }
 
 #[test]

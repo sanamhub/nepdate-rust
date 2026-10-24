@@ -85,6 +85,15 @@ impl BarLines {
     pub fn is_empty(&self) -> bool {
         self.top.is_empty() && self.bottom.is_empty()
     }
+
+    /// The macOS menu-bar title (WR-08 intro, WR-01 AC2): the top line, or the bottom line when
+    /// the top is empty (WR-08 AC2). `None` when both are empty.
+    pub fn title(&self) -> Option<&str> {
+        [&self.top, &self.bottom]
+            .into_iter()
+            .find(|line| !line.is_empty())
+            .map(String::as_str)
+    }
 }
 
 /// What a field needs: the clock, the settings and the local BS date. The weekday, the BS date and
@@ -302,6 +311,21 @@ mod tests {
         assert_eq!(lines.top, "");
         assert_eq!(lines.bottom, "Kartik 5, 2083 · Oct 22");
         assert!(!lines.is_empty());
+    }
+
+    #[test]
+    fn wr08_the_menu_bar_title_is_the_top_line_or_else_the_bottom_line() {
+        let now = thursday();
+        let both = bar_lines(&now, &settings("en", DEFAULT_TOP, DEFAULT_BOTTOM));
+        assert_eq!(both.title(), Some("Thu · 6:31 PM · Singapore 8:46 PM"));
+
+        let ne = bar_lines(&now, &settings("ne", &[BarField::BsShort], &[]));
+        assert_eq!(ne.title(), Some("कार्तिक ५"));
+
+        let bottom_only = bar_lines(&now, &settings("en", &[], DEFAULT_BOTTOM));
+        assert_eq!(bottom_only.title(), Some("Kartik 5, 2083 · Oct 22"));
+
+        assert_eq!(BarLines::default().title(), None);
     }
 
     #[test]

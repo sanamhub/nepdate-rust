@@ -1570,11 +1570,19 @@ fn update_tray(state: &Rc<RefCell<AppState>>, tray: &Rc<dyn Tray>) {
     let Ok(bs) = NepaliDate::try_from(now.date()) else {
         return;
     };
-    tray.set_title(&format!(
-        "{} {}",
-        lang.digits(u32::from(bs.day()), 1),
-        bs.month().short_name(lang)
-    ));
+    // macOS shows the bar's top line (WR-08 intro). With both lines empty it falls back to the
+    // day and month, so the menu-bar item never turns blank.
+    let title = bar_lines(&now, &s.settings).title().map_or_else(
+        || {
+            format!(
+                "{} {}",
+                lang.digits(u32::from(bs.day()), 1),
+                bs.month().short_name(lang)
+            )
+        },
+        str::to_owned,
+    );
+    tray.set_title(&title);
     tray.set_icon_day(&bs.day().to_string());
     // Re-read each tick, so a light/dark switch reaches the icon within a minute; the Windows
     // taskbar reacts to WM_SETTINGCHANGE at once. Elsewhere the markup follows Slint's palette.

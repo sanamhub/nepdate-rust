@@ -6,6 +6,12 @@ All notable changes to MitiBar are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- macOS: the menu-bar title is the bar's top line from Settings (the bottom line when the top is
+  empty), not the fixed day and month. The day and month stay as the fallback when both lines are
+  empty.
+
 ## [0.1.0-beta.1] - 2026-10-23
 
 First public pre-release, unsigned on Windows and macOS. Behaviour and settings may still change
