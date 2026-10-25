@@ -120,6 +120,7 @@ docs/                  API, ADRs, design notes, benchmarks and runbooks
 | What changed in each version | [nepdate](https://github.com/sanamhub/nepdate-rust/blob/main/crates/nepdate/CHANGELOG.md), [nepdate-patro](https://github.com/sanamhub/nepdate-rust/blob/main/crates/nepdate-patro/CHANGELOG.md), [MitiBar](https://github.com/sanamhub/nepdate-rust/blob/main/apps/mitibar/CHANGELOG.md) |
 | Building, testing and pull requests | [CONTRIBUTING.md](https://github.com/sanamhub/nepdate-rust/blob/main/CONTRIBUTING.md) |
 | Reporting a vulnerability | [SECURITY.md](https://github.com/sanamhub/nepdate-rust/blob/main/SECURITY.md) |
+| Guides and examples | [nepdate.com/docs/rust](https://nepdate.com/docs/rust/), [MitiBar](https://nepdate.com/docs/apps/mitibar/) |
 | A wrong date, holiday or tithi | the hub's [data error form](https://github.com/sanamhub/nepdate/issues/new/choose) |
 | The algorithm, data and conformance vectors | [shared/spec](https://github.com/sanamhub/nepdate-rust/blob/main/shared/spec/README.md) |
 | The other languages | [sanamhub/nepdate](https://github.com/sanamhub/nepdate#packages) |

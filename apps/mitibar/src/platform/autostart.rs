@@ -307,8 +307,8 @@ mod tests {
         }
     }
 
-    const INSTALLED: &str = r"C:\Users\sam\AppData\Local\Programs\MitiBar\MitiBar.exe";
-    const PORTABLE: &str = r"C:\Users\sam\Downloads\MitiBar\MitiBar.exe";
+    const INSTALLED: &str = r"C:\Users\example\AppData\Local\Programs\MitiBar\MitiBar.exe";
+    const PORTABLE: &str = r"C:\Users\example\Downloads\MitiBar\MitiBar.exe";
 
     fn path(text: &str) -> Target {
         Target::Path(PathBuf::from(text))
