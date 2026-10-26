@@ -48,7 +48,7 @@ interprocess = "2"
 arboard = { version = "3", default-features = false, features = ["wayland-data-control"] }
 # The global shortcut (WR-13, ADR-0019): one API over RegisterHotKey, the macOS hot-key API and
 # X11 grabs. The OS delivers the key, so nothing polls.
-global-hotkey = "0.8"
+global-hotkey = "0.9"
 # Logging (ADR-0015): file logger + panic hook.
 log = "0.4"
 simplelog = "0.12"
