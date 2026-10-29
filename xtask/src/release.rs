@@ -1,6 +1,6 @@
 //! `cargo xtask release-check <package> <version>` and `cargo xtask changelog <package> <version>`
-//! (ADR-0012). `<package>` is `nepdate` (both library crates, released together) or
-//! `mitibar` (ADR-0017). The checks work on file contents, so the tests use small strings.
+//! (ADR-0012). `<package>` is `nepdate` (both library crates, released together). The checks work
+//! on file contents, so the tests use small strings.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -17,9 +17,6 @@ struct Package {
     name: &'static str,
     manifest: String,
     changelog: String,
-    /// The cargo-packager config, for `mitibar` only. Its version must follow the
-    /// manifest's, or an installer would be named for the wrong release.
-    packager: Option<String>,
 }
 
 impl Package {
@@ -33,15 +30,7 @@ impl Package {
             name,
             manifest: read("Cargo.toml")?,
             changelog: read("CHANGELOG.md")?,
-            packager: None,
         })
-    }
-
-    fn with_packager(mut self, root: &Path) -> Result<Self> {
-        let path = root.join("apps/mitibar/Packager.toml");
-        self.packager =
-            Some(fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?);
-        Ok(self)
     }
 }
 
@@ -53,10 +42,7 @@ fn packages(package: &str) -> Result<Vec<Package>> {
             Package::read(&root, "nepdate", "crates/nepdate")?,
             Package::read(&root, "nepdate-patro", "crates/nepdate-patro")?,
         ]),
-        "mitibar" => Ok(vec![
-            Package::read(&root, "mitibar", "apps/mitibar")?.with_packager(&root)?,
-        ]),
-        other => bail!("unknown package `{other}`: expected nepdate or mitibar"),
+        other => bail!("unknown package `{other}`: expected nepdate"),
     }
 }
 
@@ -108,16 +94,6 @@ fn check(packages: &[Package], version: &str) -> Vec<String> {
                 package.name
             ));
         }
-        if let Some(packager) = &package.packager {
-            match top_level_version(packager) {
-                Some(found) if found == version => {}
-                Some(found) => problems.push(format!(
-                    "{}: Packager.toml has version {found}, expected {version}",
-                    package.name
-                )),
-                None => problems.push(format!("{}: Packager.toml has no version", package.name)),
-            }
-        }
     }
     // The patro crate follows the core's minor version (hub ADR-0004 §3, ADR-0002). A
     // pre-release pins the exact core, because `~0.1.0` does not match `0.1.0-beta.1`.
@@ -157,39 +133,29 @@ fn notes(package: &str, packages: &[Package], version: &str) -> Result<String> {
         }
         out.push('\n');
     }
-    // ADR-0012 tag names: `nepdate-vX.Y.Z` and `mitibar-vX.Y.Z` (ADR-0017 §2).
+    // ADR-0012 tag name: `nepdate-vX.Y.Z`.
     let tag = format!("{package}-v{version}");
-    if package == "mitibar" {
-        let _ = write!(
-            out,
-            "### Install\n\nDownload the installer for your system from the assets below.\n\n\
-             ### Verification\n\nCheck the download against `SHA256SUMS`, or its build \
-             provenance with `gh attestation verify <file> --repo sanamhub/nepdate-rust`.\n\n\
-             Full changelog: {REPO}/blob/{tag}/apps/mitibar/CHANGELOG.md\n"
-        );
-    } else {
-        // A pre-release is pinned exactly: cargo never picks one for a plain requirement.
-        let pin = if is_prerelease(version) { "=" } else { "" };
-        let mut install = String::new();
-        let mut links = Vec::new();
-        for p in packages {
-            let _ = writeln!(install, "cargo add {}@{pin}{version}", p.name);
-            links.push(format!(
-                "[{}]({REPO}/blob/{tag}/crates/{}/CHANGELOG.md)",
-                p.name, p.name
-            ));
-        }
-        let _ = write!(
-            out,
-            "### Install\n\n```sh\n{install}```\n\n\
-             ### Verification\n\nPublished to crates.io by the `release-lib.yml` workflow of \
-             {REPO} after the `production` approval. The same run then builds both crates from \
-             crates.io in a new cargo project and checks one conversion and one patro lookup on \
-             Linux, macOS and Windows (`verify-published.yml`). \
-             Full changelogs: {}.\n",
-            links.join(", ")
-        );
+    // A pre-release is pinned exactly: cargo never picks one for a plain requirement.
+    let pin = if is_prerelease(version) { "=" } else { "" };
+    let mut install = String::new();
+    let mut links = Vec::new();
+    for p in packages {
+        let _ = writeln!(install, "cargo add {}@{pin}{version}", p.name);
+        links.push(format!(
+            "[{}]({REPO}/blob/{tag}/crates/{}/CHANGELOG.md)",
+            p.name, p.name
+        ));
     }
+    let _ = write!(
+        out,
+        "### Install\n\n```sh\n{install}```\n\n\
+         ### Verification\n\nPublished to crates.io by the `release-lib.yml` workflow of \
+         {REPO} after the `production` approval. The same run then builds both crates from \
+         crates.io in a new cargo project and checks one conversion and one patro lookup on \
+         Linux, macOS and Windows (`verify-published.yml`). \
+         Full changelogs: {}.\n",
+        links.join(", ")
+    );
     Ok(out)
 }
 
@@ -269,14 +235,6 @@ fn package_version(manifest: &str) -> Option<&str> {
     table(manifest, "package").find_map(|line| string_value(line, "version"))
 }
 
-/// `version` at the top of a TOML file, before its first `[table]` (Packager.toml).
-fn top_level_version(toml: &str) -> Option<&str> {
-    toml.lines()
-        .map(str::trim)
-        .take_while(|line| !line.starts_with('['))
-        .find_map(|line| string_value(line, "version"))
-}
-
 /// `version` inside `name = { ... version = "..." ... }` under `[dependencies]`.
 fn dependency_version<'a>(manifest: &'a str, name: &str) -> Option<&'a str> {
     let line = table(manifest, "dependencies").find(|line| {
@@ -336,13 +294,11 @@ mod tests {
                 name: "nepdate",
                 manifest: manifest(core, None),
                 changelog: changelog.into(),
-                packager: None,
             },
             Package {
                 name: "nepdate-patro",
                 manifest: manifest(patro, Some(dep)),
                 changelog: changelog.into(),
-                packager: None,
             },
         ]
     }
@@ -572,38 +528,6 @@ mod tests {
                 "0.2.0"
             )
             .is_err()
-        );
-    }
-
-    #[test]
-    fn widget_notes_use_the_mitibar_tag() {
-        let packages = [Package {
-            name: "mitibar",
-            manifest: manifest("0.1.0", None),
-            changelog: CHANGELOG.into(),
-            packager: Some("version = \"0.1.0\"\n[nsis]\ninstallMode = \"currentUser\"\n".into()),
-        }];
-        let text = notes("mitibar", &packages, "0.1.0").unwrap_or_default();
-        assert!(text.contains("/blob/mitibar-v0.1.0/apps/mitibar/CHANGELOG.md"));
-        assert!(text.contains("### Install"));
-        assert!(!text.contains("widget-v"));
-    }
-
-    #[test]
-    fn packager_version_must_match_the_manifest() {
-        let packages = |packager: &str| {
-            [Package {
-                name: "mitibar",
-                manifest: manifest("0.1.0", None),
-                changelog: CHANGELOG.into(),
-                packager: Some(packager.into()),
-            }]
-        };
-        assert!(check(&packages("version = \"0.1.0\"\n"), "0.1.0").is_empty());
-        let problems = check(&packages("version = \"0.0.0\"\n"), "0.1.0");
-        assert_eq!(
-            problems,
-            ["mitibar: Packager.toml has version 0.0.0, expected 0.1.0"]
         );
     }
 }

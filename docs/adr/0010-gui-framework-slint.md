@@ -1,3 +1,5 @@
+> Moved to [sanamhub/mitibar](https://github.com/sanamhub/mitibar) as ADR-0002. The text is kept here unchanged.
+
 # ADR-0010: GUI framework for the widget: Slint
 
 - **Status:** accepted (license option: see ADR-0013)

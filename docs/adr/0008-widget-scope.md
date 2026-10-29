@@ -1,3 +1,5 @@
+> Moved to [sanamhub/mitibar](https://github.com/sanamhub/mitibar) as ADR-0001. The text is kept here unchanged.
+
 # ADR-0008: Widget scope (minimal) and use of NepDateWidget
 
 - **Status:** accepted

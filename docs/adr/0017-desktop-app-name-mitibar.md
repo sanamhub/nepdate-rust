@@ -1,3 +1,5 @@
+> Moved to [sanamhub/mitibar](https://github.com/sanamhub/mitibar) as ADR-0006. The text is kept here unchanged.
+
 # ADR-0017: The desktop app is called MitiBar
 
 - **Status:** accepted

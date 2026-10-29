@@ -1,3 +1,5 @@
+> Moved to [sanamhub/mitibar](https://github.com/sanamhub/mitibar) as ADR-0005. The text is kept here unchanged.
+
 # ADR-0016: Windows taskbar text
 
 - **Status:** accepted

@@ -1,3 +1,5 @@
+> Moved to [sanamhub/mitibar](https://github.com/sanamhub/mitibar) as ADR-0003. The text is kept here unchanged.
+
 # ADR-0012: Packaging, signing and releases
 
 - **Status:** accepted

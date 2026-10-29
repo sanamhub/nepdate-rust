@@ -1,3 +1,5 @@
+> Moved to [sanamhub/mitibar](https://github.com/sanamhub/mitibar) as ADR-0007. The text is kept here unchanged.
+
 # ADR-0018: Software renderer by default, idle memory judged on private bytes
 
 - **Status:** accepted, conditional on the Devanagari check in Decision 1

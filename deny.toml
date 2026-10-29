@@ -1,28 +1,14 @@
-# cargo-deny configuration. The widget's Slint license exception follows ADR-0013.
+# cargo-deny configuration.
 
 [graph]
 all-features = true
 # Exclude the benchmark crate and, with it, its GPL competitor dependencies (dev-only, never
-# distributed). The widget stays in the graph, so the Slint license exceptions below
-# actually apply.
+# distributed).
 exclude = ["nepdate-bench"]
 
 [advisories]
 version = 2
 yanked = "deny"
-# These advisories are all Linux-only transitive dependencies of the widget's accessibility
-# bridge (atspi/zbus) and winit's title-bar integration (sctk-adwaita), with no upgrade path in
-# the pinned dependency tree. None of them parses untrusted input: the AT-SPI bridge parses
-# XML from the trusted system accessibility bus, and ttf-parser is only in the Linux window
-# decoration path. On Windows and macOS none of them is compiled.
-ignore = [
-    "RUSTSEC-2026-0192", # ttf-parser unmaintained, no safe upgrade
-    "RUSTSEC-2026-0194", # quick-xml quadratic run time (DoS), fixed in 0.41, pinned to 0.38
-    "RUSTSEC-2026-0195", # quick-xml unbounded namespace allocation, fixed in 0.41
-    "RUSTSEC-2026-0370", # zvariant unmaintained, no safe upgrade
-    "RUSTSEC-2026-0371", # zbus_names unmaintained, no safe upgrade
-    "RUSTSEC-2026-0372", # zvariant_derive unmaintained, no safe upgrade
-]
 
 [licenses]
 version = 2
@@ -33,69 +19,10 @@ allow = [
     "BSD-2-Clause",
     "BSD-3-Clause",
     "ISC",
-    "0BSD",     # recvmsg and doctest-file, via interprocess
     "Zlib",
-    "OFL-1.1",   # bundled Noto fonts (ADR-0010)
-    "Unlicense", # clipboard-win, via arboard (clipboard)
-    "BSL-1.0",   # error-code and ksni, via arboard/muda
-    "MPL-2.0",   # option-ext, via dirs (logging)
 ]
 confidence-threshold = 0.9
 unused-allowed-license = "allow" # the list covers optional dependencies
-
-# Slint is triple-licensed; the widget uses the Royalty-free 2.0 option (ADR-0013), which needs
-# the "Made with Slint" badge on the download pages (ADR-0020). Allow it for Slint crates only.
-[[licenses.exceptions]]
-name = "slint"
-allow = ["LicenseRef-Slint-Royalty-free-2.0"]
-
-[[licenses.exceptions]]
-name = "slint-build"
-allow = ["LicenseRef-Slint-Royalty-free-2.0"]
-
-[[licenses.exceptions]]
-name = "slint-macros"
-allow = ["LicenseRef-Slint-Royalty-free-2.0"]
-
-[[licenses.exceptions]]
-name = "i-slint-backend-linuxkms"
-allow = ["LicenseRef-Slint-Royalty-free-2.0"]
-
-[[licenses.exceptions]]
-name = "i-slint-backend-selector"
-allow = ["LicenseRef-Slint-Royalty-free-2.0"]
-
-[[licenses.exceptions]]
-name = "i-slint-backend-winit"
-allow = ["LicenseRef-Slint-Royalty-free-2.0"]
-
-[[licenses.exceptions]]
-name = "i-slint-common"
-allow = ["LicenseRef-Slint-Royalty-free-2.0"]
-
-[[licenses.exceptions]]
-name = "i-slint-compiler"
-allow = ["LicenseRef-Slint-Royalty-free-2.0"]
-
-[[licenses.exceptions]]
-name = "i-slint-core"
-allow = ["LicenseRef-Slint-Royalty-free-2.0"]
-
-[[licenses.exceptions]]
-name = "i-slint-core-macros"
-allow = ["LicenseRef-Slint-Royalty-free-2.0"]
-
-[[licenses.exceptions]]
-name = "i-slint-renderer-femtovg"
-allow = ["LicenseRef-Slint-Royalty-free-2.0"]
-
-[[licenses.exceptions]]
-name = "i-slint-renderer-skia"
-allow = ["LicenseRef-Slint-Royalty-free-2.0"]
-
-[[licenses.exceptions]]
-name = "i-slint-renderer-software"
-allow = ["LicenseRef-Slint-Royalty-free-2.0"]
 
 [bans]
 multiple-versions = "warn"

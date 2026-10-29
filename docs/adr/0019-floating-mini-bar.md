@@ -1,3 +1,5 @@
+> Moved to [sanamhub/mitibar](https://github.com/sanamhub/mitibar) as ADR-0008. The text is kept here unchanged.
+
 # ADR-0019: A floating mini bar replaces the taskbar text, plus one global shortcut
 
 - **Status:** accepted

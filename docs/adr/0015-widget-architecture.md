@@ -1,3 +1,5 @@
+> Moved to [sanamhub/mitibar](https://github.com/sanamhub/mitibar) as ADR-0004. The text is kept here unchanged.
+
 # ADR-0015: Widget internal architecture
 
 - **Status:** accepted

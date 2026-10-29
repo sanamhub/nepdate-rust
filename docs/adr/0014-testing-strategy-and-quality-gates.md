@@ -1,3 +1,5 @@
+> Amended 2026-10-29: MitiBar moved to [sanamhub/mitibar](https://github.com/sanamhub/mitibar) and is no longer in this workspace or its test plan.
+
 # ADR-0014: Testing strategy and quality gates
 
 - **Status:** accepted

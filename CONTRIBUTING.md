@@ -13,10 +13,8 @@ The calendar data, the specification and the conformance vectors live in the hub
 A wrong date, holiday or tithi is a hub issue, not a fix here. Never edit `shared/` by hand.
 
 The libraries keep to the API in [`docs/API.md`](docs/API.md) and the decisions in
-[`docs/adr/`](docs/adr/README.md). MitiBar's scope is fixed by
-[ADR-0008](docs/adr/0008-widget-scope.md) and
-[`docs/design/widget-requirements.md`](docs/design/widget-requirements.md); a feature outside that
-list needs an ADR first.
+[`docs/adr/`](docs/adr/README.md). MitiBar has its own repository,
+[`sanamhub/mitibar`](https://github.com/sanamhub/mitibar).
 
 ## Setup
 
@@ -28,19 +26,14 @@ cargo install cargo-nextest --locked
 cargo xtask ci
 ```
 
-The last line reads `xtask ci: all 24 steps passed`. `cargo-deny` is optional locally; the CI step
+The last line reads `xtask ci: all 21 steps passed`. `cargo-deny` is optional locally; the CI step
 is skipped with a notice when it is missing.
-
-On Linux, building MitiBar also needs `libxkbcommon-dev`, `libwayland-dev`, `libfontconfig1-dev`
-and `libdbus-1-dev`.
 
 Useful commands:
 
 ```bash
 cargo xtask codegen          # regenerate the calendar and patro tables
 cargo xtask codegen --check  # fail if the generated files are stale
-cargo xtask renderer-check   # fail if the app pulls in a GPU renderer
-cargo xtask widget-idle      # measure MitiBar's idle footprint (Windows)
 ```
 
 ## Pull requests
@@ -62,8 +55,6 @@ cargo xtask widget-idle      # measure MitiBar's idle footprint (Windows)
   generator, not the output.
 - A parity test may skip a C# row only for a deviation listed in `shared/spec/PARITY.md`, with a
   comment naming it.
-- MitiBar uses Slint's software renderer only; `cargo xtask renderer-check` fails on a GPU backend.
-
 ## Commit messages
 
 [Conventional Commits](https://www.conventionalcommits.org/): `type(scope): summary`, imperative,
@@ -79,6 +70,5 @@ A day without a leading digit was read as an empty group.
 ## Releasing
 
 Library releases are described in
-[`docs/runbooks/release-library.md`](docs/runbooks/release-library.md); MitiBar releases in
-[`docs/runbooks/release-mitibar.md`](docs/runbooks/release-mitibar.md). Do not tag or publish
+[`docs/runbooks/release-library.md`](docs/runbooks/release-library.md). Do not tag or publish
 without the maintainer.
