@@ -1,4 +1,4 @@
-# One tag `nepdate-vX.Y.Z` releases `nepdate` then `nepdate-patro` (ADR-0012, ADR-0002).
+# One tag `vX.Y.Z` releases `nepdate` then `nepdate-patro` (ADR-0012, ADR-0002, ADR-0021).
 # preflight -> ci -> publish -> verify-published. Published by crates.io trusted publishing; the
 # first release uses a short-lived CARGO_REGISTRY_TOKEN instead, because crates.io attaches a
 # trusted publisher only to a crate that exists. The `production` environment gates `publish`
@@ -8,7 +8,7 @@ name: release-lib
 
 on:
   push:
-    tags: ["nepdate-v*"]
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
       dry-run:
@@ -42,12 +42,12 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-            version="${GITHUB_REF_NAME#nepdate-v}"
+            version="${GITHUB_REF_NAME#v}"
           else
             version="$(sed -n 's/^version = "\(.*\)"/\1/p' crates/nepdate/Cargo.toml | head -n1)"
           fi
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
-            echo "::error::version must look like X.Y.Z or X.Y.Z-pre.N (tag nepdate-vX.Y.Z)"
+            echo "::error::version must look like X.Y.Z or X.Y.Z-pre.N (tag vX.Y.Z)"
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"

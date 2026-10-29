@@ -1,7 +1,7 @@
 # Runbook: release the `nepdate` and `nepdate-patro` crates
 
-Owner: maintainer. Approver: a second maintainer. Decided in ADR-0012. One tag
-`nepdate-vX.Y.Z` releases both crates with the same version (ADR-0002).
+Owner: maintainer. Approver: a second maintainer. Decided in ADR-0012 and ADR-0021. One tag
+`vX.Y.Z` releases both crates with the same version (ADR-0002).
 
 ## Before tagging
 
@@ -21,8 +21,8 @@ Owner: maintainer. Approver: a second maintainer. Decided in ADR-0012. One tag
 ## Releasing
 
 ```bash
-git tag nepdate-vX.Y.Z
-git push origin nepdate-vX.Y.Z
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
 That runs `release-lib.yml`:
