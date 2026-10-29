@@ -66,7 +66,7 @@ pub(crate) fn run_changelog(package: &str, version: &str) -> Result<()> {
     if !is_version(version) {
         bail!("`{version}` is not a version like 1.2.3 or 1.2.3-beta.1");
     }
-    print!("{}", notes(package, &packages(package)?, version)?);
+    print!("{}", notes(&packages(package)?, version)?);
     Ok(())
 }
 
@@ -111,7 +111,7 @@ fn check(packages: &[Package], version: &str) -> Vec<String> {
 }
 
 /// The release notes: each package's changelog section, then Install and Verification.
-fn notes(package: &str, packages: &[Package], version: &str) -> Result<String> {
+fn notes(packages: &[Package], version: &str) -> Result<String> {
     let mut out = String::new();
     let several = packages.len() > 1;
     for p in packages {
@@ -427,7 +427,6 @@ mod tests {
     #[test]
     fn beta_notes_pin_the_exact_version() {
         let text = notes(
-            "nepdate",
             &pair(
                 "0.1.0-beta.1",
                 "0.1.0-beta.1",
@@ -505,12 +504,7 @@ mod tests {
 
     #[test]
     fn notes_for_the_pair() {
-        let text = notes(
-            "nepdate",
-            &pair("0.1.0", "0.1.0", "~0.1.0", CHANGELOG),
-            "0.1.0",
-        )
-        .unwrap_or_default();
+        let text = notes(&pair("0.1.0", "0.1.0", "~0.1.0", CHANGELOG), "0.1.0").unwrap_or_default();
         assert!(
             text.starts_with("### nepdate\n\n#### Added\n\n- Everything.\n\n### nepdate-patro\n")
         );
@@ -521,13 +515,6 @@ mod tests {
 
     #[test]
     fn notes_need_the_section() {
-        assert!(
-            notes(
-                "nepdate",
-                &pair("0.2.0", "0.2.0", "~0.2.0", CHANGELOG),
-                "0.2.0"
-            )
-            .is_err()
-        );
+        assert!(notes(&pair("0.2.0", "0.2.0", "~0.2.0", CHANGELOG), "0.2.0").is_err());
     }
 }
