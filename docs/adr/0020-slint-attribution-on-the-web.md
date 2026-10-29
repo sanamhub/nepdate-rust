@@ -1,3 +1,5 @@
+> Moved to [sanamhub/mitibar](https://github.com/sanamhub/mitibar) as ADR-0009. The text is kept here unchanged.
+
 # ADR-0020: Slint attribution on the download pages, not inside the app
 
 - **Status:** accepted

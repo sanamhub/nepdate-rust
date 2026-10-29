@@ -2,23 +2,16 @@
 //! coverage gate, `cargo xtask codegen` writes the generated tables (ADR-0006),
 //! `cargo xtask catalog-check <phase>` checks the C# test catalogue, `cargo xtask data-status` reports how far the patro data reaches and
 //! `cargo xtask check-core-has-no-patro` keeps patro data out of the core,
-//! `cargo xtask release-check` and `cargo xtask changelog` prepare a release,
-//! `cargo xtask renderer-check` enforces the software-renderer dependency. Arguments
-//! are read from `std::env::args()` to keep this tiny.
+//! `cargo xtask release-check` and `cargo xtask changelog` prepare a release. Arguments are read
+//! from `std::env::args()` to keep this tiny.
 
 mod bench;
 mod catalog;
 mod codegen;
 mod core_check;
 mod data_status;
-mod icons;
-mod package;
 mod patro;
 mod release;
-mod renderer;
-mod widget_idle;
-#[cfg(test)]
-mod workflow;
 
 use std::process::{Command, ExitCode};
 
@@ -38,20 +31,12 @@ fn main() -> ExitCode {
         ["data-status"] => data_status::run(None),
         ["data-status", "--today", today] => data_status::run(Some(today)),
         ["check-core-has-no-patro"] => core_check::run(),
-        ["icons"] => icons::icons(false),
-        ["icons", "--check"] => icons::icons(true),
-        ["package"] => package::run(),
         ["release-check", package, version] => release::run_check(package, version),
         ["changelog", package, version] => release::run_changelog(package, version),
-        ["renderer-check"] => renderer::run(),
-        ["widget-idle"] => widget_idle::run(None),
-        ["widget-idle", "--minutes", minutes] => widget_idle::run(Some(minutes)),
         _ => {
             eprintln!(
                 "usage: cargo xtask <ci | coverage | bench | codegen [--check] | catalog-check <phase> [--list] | \
-                 data-status [--today YYYY-MM-DD] | check-core-has-no-patro | icons [--check] | \
-                 package | release-check <package> <version> | changelog <package> <version> | \
-                 renderer-check | widget-idle [--minutes N]>"
+                 data-status [--today YYYY-MM-DD] | check-core-has-no-patro | release-check <package> <version> | changelog <package> <version>>"
             );
             return ExitCode::from(2);
         }
@@ -138,14 +123,6 @@ const STEPS: &[Step] = &[
         ],
     ),
     step("cargo", &["xtask", "codegen", "--check"]),
-    step("cargo", &["xtask", "icons", "--check"]),
-    // The snapshot feature stays off by default; this build keeps its code compiling.
-    step(
-        "cargo",
-        &["build", "-p", "mitibar", "--features", "snapshot"],
-    ),
-    // ADR-0018: a later default feature must not bring femtovg back.
-    step("cargo", &["xtask", "renderer-check"]),
     Step {
         program: "cargo",
         args: &["deny", "check"],

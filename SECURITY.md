@@ -2,8 +2,8 @@
 
 ## Supported versions
 
-The latest release of each package: `nepdate`, `nepdate-patro` and `mitibar`. Older
-versions get no fixes.
+The latest release of each package: `nepdate` and `nepdate-patro`. Older versions get no fixes.
+MitiBar has its own [security policy](https://github.com/sanamhub/mitibar/blob/main/SECURITY.md).
 
 ## Reporting a vulnerability
 

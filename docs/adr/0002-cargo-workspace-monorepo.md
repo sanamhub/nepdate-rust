@@ -1,3 +1,5 @@
+> Amended 2026-10-29: MitiBar moved to [sanamhub/mitibar](https://github.com/sanamhub/mitibar) and is no longer in this workspace or its test plan.
+
 # ADR-0002: One Rust repository and Cargo workspace for library and widget
 
 - **Status:** accepted

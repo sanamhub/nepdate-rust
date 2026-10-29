@@ -24,9 +24,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # Clippy covers the whole workspace, widget included, so Linux needs its system libraries.
-      - if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libfontconfig1-dev libdbus-1-dev
       # Same channel, components and targets as rust-toolchain.toml.
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
@@ -38,87 +35,6 @@ jobs:
         with:
           tool: cargo-deny,cargo-nextest
       - run: cargo xtask ci
-
-  # The widget's own gate. Slint's MSRV is 1.92, satisfied by the 1.98 toolchain.
-  # Linux needs winit's system libraries to link.
-  widget:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libfontconfig1-dev libdbus-1-dev
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
-        with:
-          toolchain: "1.98"
-          components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@63fed3e2fecf6f7b51dc6f043341b79ef82a9ae7 # v2.9.2
-      - run: cargo clippy -p mitibar -- -D warnings
-      - run: cargo test -p mitibar
-
-  # Reproducible light and dark font-test screenshots, written by the app itself
-  # (Slint's Window::take_snapshot), uploaded as artifacts. Ubuntu renders under
-  # xvfb with Mesa's software GL; macOS and Windows runners have a desktop session.
-  snapshot:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev libfontconfig1-dev libdbus-1-dev libgl1 libegl1
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
-        with:
-          toolchain: "1.98"
-      - uses: Swatinem/rust-cache@63fed3e2fecf6f7b51dc6f043341b79ef82a9ae7 # v2.9.2
-      - name: Render light snapshot (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        run: xvfb-run -a -s "-screen 0 1280x1024x24" cargo run -p mitibar --features snapshot -- --font-test --snapshot snapshot-light.png --theme light
-        env:
-          LIBGL_ALWAYS_SOFTWARE: "1"
-      - name: Render dark snapshot (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        run: xvfb-run -a -s "-screen 0 1280x1024x24" cargo run -p mitibar --features snapshot -- --font-test --snapshot snapshot-dark.png --theme dark
-        env:
-          LIBGL_ALWAYS_SOFTWARE: "1"
-      - name: Render light snapshot (macOS, Windows)
-        if: matrix.os != 'ubuntu-latest'
-        run: cargo run -p mitibar --features snapshot -- --font-test --snapshot snapshot-light.png --theme light
-      - name: Render dark snapshot (macOS, Windows)
-        if: matrix.os != 'ubuntu-latest'
-        run: cargo run -p mitibar --features snapshot -- --font-test --snapshot snapshot-dark.png --theme dark
-      - name: Render bar snapshots (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          foreach ($theme in @('light','dark')) {
-            foreach ($lang in @('en','ne')) {
-              foreach ($scale in @('1','1.5','2')) {
-                cargo run -p mitibar --features snapshot -- --bar-snapshot "bar-$theme-$lang-$scale.png" --bar-theme $theme --lang $lang --scale $scale
-              }
-            }
-          }
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: snapshot-${{ matrix.os }}
-          path: |
-            snapshot-light.png
-            snapshot-dark.png
-            bar-*.png
-          if-no-files-found: error
 
   # Fails when shared/ differs from the hub at the commit in shared/VERSION (ADR-0003).
   shared-check:
