@@ -133,8 +133,8 @@ fn notes(package: &str, packages: &[Package], version: &str) -> Result<String> {
         }
         out.push('\n');
     }
-    // ADR-0012 tag name: `nepdate-vX.Y.Z`.
-    let tag = format!("{package}-v{version}");
+    // ADR-0021 tag name: `vX.Y.Z`, one tag for both crates.
+    let tag = format!("v{version}");
     // A pre-release is pinned exactly: cargo never picks one for a plain requirement.
     let pin = if is_prerelease(version) { "=" } else { "" };
     let mut install = String::new();
@@ -515,7 +515,7 @@ mod tests {
             text.starts_with("### nepdate\n\n#### Added\n\n- Everything.\n\n### nepdate-patro\n")
         );
         assert!(text.contains("cargo add nepdate@0.1.0\ncargo add nepdate-patro@0.1.0\n"));
-        assert!(text.contains("/blob/nepdate-v0.1.0/crates/nepdate-patro/CHANGELOG.md"));
+        assert!(text.contains("/blob/v0.1.0/crates/nepdate-patro/CHANGELOG.md"));
         assert!(!text.contains("## [0.1.0]"));
     }
 
