@@ -32,7 +32,7 @@ pub(crate) struct Day {
     pub(crate) events: Vec<Name>,
 }
 
-/// Every day of every patro file, in date order, plus the source commit for the header.
+/// Every day of every patro file, in date order, plus the upstream commit for the header.
 pub(crate) struct Patro {
     pub(crate) commit: String,
     pub(crate) days: BTreeMap<Bs, Day>,
@@ -72,7 +72,16 @@ pub(crate) fn read(root: &Path) -> Result<Patro> {
         bail!("no patro files in {}", dir.display());
     }
 
-    let mut commit = String::new();
+    // The hub moves a file's source.commit only when that file's data changes, so the files can
+    // name different commits; data/UPSTREAM is the commit of the whole import.
+    let upstream = root.join("shared/data/UPSTREAM");
+    let commit = fs::read_to_string(&upstream)
+        .with_context(|| format!("reading {}", upstream.display()))?
+        .trim()
+        .to_owned();
+    if commit.len() != 40 || !commit.bytes().all(|b| b.is_ascii_hexdigit()) {
+        bail!("{}: expected a full commit SHA", upstream.display());
+    }
     let mut days = BTreeMap::new();
     for path in &files {
         let json = read_json(path)?;
@@ -80,13 +89,8 @@ pub(crate) fn read(root: &Path) -> Result<Patro> {
         if json["schema"].as_i64() != Some(1) {
             bail!("{shown}: expected schema 1");
         }
-        let file_commit = json["source"]["commit"]
-            .as_str()
-            .with_context(|| format!("{shown}: source.commit missing"))?;
-        if commit.is_empty() {
-            file_commit.clone_into(&mut commit);
-        } else if commit != file_commit {
-            bail!("{shown}: source.commit {file_commit} differs from {commit}");
+        if json["source"]["commit"].as_str().is_none() {
+            bail!("{shown}: source.commit missing");
         }
         let year = json["year"]
             .as_i64()
