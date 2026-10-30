@@ -6,6 +6,11 @@ All notable changes to `nepdate` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- `verify-published.yml` also runs on a schedule: weekly against the newest crates.io version and
+  daily against the registry metadata, reporting a failure as an issue labelled `published-check`.
+
 ## [0.1.0-beta.1] - 2026-10-22
 
 First public pre-release. The API may still change before 0.1.0.
