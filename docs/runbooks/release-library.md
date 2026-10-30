@@ -37,6 +37,14 @@ That runs `release-lib.yml`:
 `verify-published.yml` can also be started by hand with a version, to re-check a release with the
 script on `main`.
 
+The same workflow runs on a schedule. Every Monday one Linux runner installs the newest version
+from crates.io (`latest`, resolved the way `cargo add` resolves it) and checks it; every day a
+metadata-only run confirms that crates.io still lists the version and serves the crate file, with
+no download. A failed scheduled run opens one issue labelled `published-check`, titled
+`Published nepdate <version> does not install or run`, and comments on it only when the failing
+output changed. Create that label once on the repository; nothing else is needed. A green
+scheduled run says nothing and opens nothing.
+
 If `cargo publish -p nepdate-patro` fails after `nepdate` went out, fix the cause and rerun the
 `publish` job; the workflow skips a crate whose version is already on crates.io. Never publish
 `nepdate-patro` without the matching `nepdate`.
