@@ -187,6 +187,11 @@ jobs:
 
   verify-published:
     needs: [preflight, publish]
+    # The called workflow's report job opens an issue when a scheduled check fails. A caller must
+    # grant every permission a called job requests, even though report never runs on a release.
+    permissions:
+      contents: read
+      issues: write
     uses: ./.github/workflows/verify-published.yml
     with:
       version: ${{ needs.preflight.outputs.version }}
