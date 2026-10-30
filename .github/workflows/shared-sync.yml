@@ -18,7 +18,8 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    uses: sanamhub/nepdate/.github/workflows/shared-sync.yml@e2f977849877be6828e6d6ebbb638fcf708638e7
+      actions: write
+    uses: sanamhub/nepdate/.github/workflows/shared-sync.yml@827791325bf9c16258e5619dce5ecbd8e55e63e1 # main 2026-10-30
     with:
       regenerate: cargo xtask codegen
     secrets:
