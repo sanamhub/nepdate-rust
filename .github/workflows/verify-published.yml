@@ -169,7 +169,9 @@ jobs:
         id: check
         env:
           VERSION: ${{ needs.resolve.outputs.version }}
-        run: bash scripts/verify-published.sh "$VERSION" --metadata 2>&1 | tee metadata.log
+        run: |
+          set -o pipefail
+          bash scripts/verify-published.sh "$VERSION" --metadata 2>&1 | tee metadata.log
       - name: Step summary
         if: always()
         env:
