@@ -9,7 +9,7 @@ Immutable once accepted (ADR-0001). Supersede with a new ADR.
 | [0003](0003-shared-data-and-spec.md) | Shared data and spec come from the hub, vendored in `shared/` | Accepted (amended: MitiBar moved) |
 | [0004](0004-date-representation-and-conversion-algorithm.md) | Date representation, tables and lookups (performance design) | Accepted |
 | [0005](0005-no-std-core-with-optional-features.md) | `no_std`, zero-dependency core with opt-in features; the patro in `nepdate-patro` | Accepted |
-| [0006](0006-codegen-via-xtask-checked-in.md) | Generate Rust tables with `cargo xtask`, commit the output | Accepted |
+| [0006](0006-codegen-via-xtask-checked-in.md) | Generate Rust tables with `cargo xtask`, commit the output | Accepted (amended by 0022: codegen also reads the patro summary) |
 | [0007](0007-error-handling-and-api-conventions.md) | Error handling and public API conventions | Accepted |
 | [0008](0008-widget-scope.md) | Widget scope (minimal) and use of NepDateWidget | Moved to [sanamhub/mitibar](https://github.com/sanamhub/mitibar) as ADR-0001 |
 | [0009](0009-csharp-parity-and-deliberate-deviations.md) | Parity with C# NepDate: Rust names for the shared deviations | Accepted |
@@ -25,3 +25,4 @@ Immutable once accepted (ADR-0001). Supersede with a new ADR.
 | [0019](0019-floating-mini-bar.md) | A floating mini bar replaces the taskbar text, plus one global shortcut (supersedes 0016, amends 0008 and 0015) | Moved to [sanamhub/mitibar](https://github.com/sanamhub/mitibar) as ADR-0008 |
 | [0020](0020-slint-attribution-on-the-web.md) | Slint attribution on the download pages, not inside the app (amends 0013) | Moved to [sanamhub/mitibar](https://github.com/sanamhub/mitibar) as ADR-0009 |
 | [0021](0021-plain-version-tags.md) | Release tags are `vX.Y.Z`, without a package prefix (supersedes the tag rule in 0002) | Accepted |
+| [0022](0022-patro-counts-from-the-hub-summary.md) | Read the patro counts from the hub's summary, not from literals (amends 0006) | Accepted |

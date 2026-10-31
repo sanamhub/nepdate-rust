@@ -1,6 +1,6 @@
 # ADR-0006: Generate Rust tables from `shared/data/` with `cargo xtask`, commit the output
 
-- **Status:** accepted
+- **Status:** accepted (amended by ADR-0022)
 - **Date:** 2026-09-24 (revised 2026-10-07: patro tables move to `nepdate-patro`; revised 2026-10-08:
   table layout from ADR-0004)
 - **Approved by:** Sanam
