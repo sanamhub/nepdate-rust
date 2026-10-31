@@ -152,8 +152,9 @@ pub(crate) fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
 fn patro(root: &Path) -> Result<Output> {
     let lengths = crate::patro::read_lengths(root)?;
     let data = crate::patro::read(root)?;
+    let summary = crate::patro::read_summary(root)?;
     Ok(Output {
         path: root.join("crates/nepdate-patro/src/generated/patro.rs"),
-        text: crate::patro::generate(&lengths, &data)?,
+        text: crate::patro::generate(&lengths, &data, &summary)?,
     })
 }

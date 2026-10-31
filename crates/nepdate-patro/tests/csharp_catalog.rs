@@ -13,6 +13,8 @@ use std::collections::BTreeSet;
 use nepdate::{Error, Lang, NepaliDate, NepaliDateRange};
 use nepdate_patro::{coverage, info, public_holidays};
 
+mod summary;
+
 fn bs(year: u16, month: u8, day: u8) -> NepaliDate {
     NepaliDate::new(year, month, day).unwrap()
 }
@@ -63,9 +65,9 @@ fn tithi(date: NepaliDate, lang: Lang) -> &'static str {
 
 #[test]
 fn cs_calendar_data_tests__calendar_strings_pool_is_non_empty() {
-    // NAMES holds 721 distinct event name pairs.
+    // NAMES holds the summary's distinct event name pairs.
     let distinct: BTreeSet<_> = all_event_names().into_iter().collect();
-    assert_eq!(distinct.len(), 721);
+    assert_eq!(distinct.len(), summary::number("event_names"));
 }
 
 #[test]
@@ -83,16 +85,25 @@ fn cs_calendar_data_tests__calendar_strings_pool_all_entries_have_non_empty_np_a
 
 #[test]
 fn cs_calendar_data_tests__calendar_offsets_month_start_has_expected_length() {
-    // The per-day tables span PATRO_DAYS = 2793 days, whole months 2077-01 to 2084-07
-    // plus 20 days of 2084-08.
-    let months = (2077..=2084)
+    // The per-day tables span the summary's coverage: whole months plus the partial first and
+    // last months, the way C#'s month-start offsets are counted.
+    let (first_year, first_month, first_day) = summary::day("first_day");
+    let (last_year, last_month, last_day) = summary::day("last_day");
+    let months = (first_year..=last_year)
         .flat_map(|y| (1..=12).map(move |m| (y, m)))
-        .take_while(|&(y, m)| (y, m) < (2084, 8));
+        .skip_while(|&(y, m)| (y, m) < (first_year, first_month))
+        .take_while(|&(y, m)| (y, m) <= (last_year, last_month));
     let days: u32 = months
         .map(|(y, m)| NepaliDateRange::month(y, m).unwrap().len())
         .sum();
-    assert_eq!(days + 20, 2793);
-    assert_eq!(coverage().len(), 2793);
+    let covered = days
+        - u32::from(first_day - 1)
+        - (NepaliDateRange::month(last_year, last_month).unwrap().len() - u32::from(last_day));
+    assert_eq!(covered, u32::try_from(summary::number("days")).unwrap());
+    assert_eq!(
+        coverage().len(),
+        u32::try_from(summary::number("days")).unwrap()
+    );
 }
 
 #[test]
@@ -104,8 +115,11 @@ fn cs_calendar_data_tests__calendar_offsets_month_start_is_strictly_monotonic() 
 
 #[test]
 fn cs_calendar_data_tests__calendar_offsets_total_days_matches_expected_count() {
-    // PATRO_DAYS is 2793 (C#'s 32509 counts BS 2001 to 2089).
-    assert_eq!(coverage().len(), 2793);
+    // The coverage is the summary's days (C#'s 32509 counts BS 2001 to 2089).
+    assert_eq!(
+        coverage().len(),
+        u32::try_from(summary::number("days")).unwrap()
+    );
     assert_eq!(c_sharp_years().count(), 32509);
 }
 
@@ -118,21 +132,23 @@ fn cs_calendar_data_tests__tithi_data_day_offsets_is_strictly_sorted() {
 
 #[test]
 fn cs_calendar_data_tests__tithi_data_all_pool_ids_are_in_range() {
-    // Every DAY_TITHI entry indexes the 32 TITHI_NAMES.
+    // Every DAY_TITHI entry indexes TITHI_NAMES.
     let names: BTreeSet<&str> = tithi_days()
         .into_iter()
         .map(|d| tithi(d, Lang::En))
         .collect();
-    assert_eq!(names.len(), 32);
+    assert_eq!(names.len(), summary::number("tithi_names"));
     assert!(!names.contains(""));
 }
 
 #[test]
 fn cs_calendar_data_tests__tithi_data_entry_count_matches2190() {
     let days = tithi_days();
-    assert_eq!(days.len(), 2190);
-    assert_eq!(days.first(), Some(&bs(2078, 1, 2)));
-    assert_eq!(days.last(), Some(&bs(2083, 12, 30)));
+    assert_eq!(days.len(), summary::number("tithi_days"));
+    let (first_year, first_month, first_day) = summary::day("tithi_first_day");
+    let (last_year, last_month, last_day) = summary::day("tithi_last_day");
+    assert_eq!(days.first(), Some(&bs(first_year, first_month, first_day)));
+    assert_eq!(days.last(), Some(&bs(last_year, last_month, last_day)));
 }
 
 #[test]
@@ -153,9 +169,9 @@ fn cs_calendar_data_tests__event_data_slice_start_is_non_decreasing() {
 
 #[test]
 fn cs_calendar_data_tests__event_data_slice_start_sentinel_equals_entries_length() {
-    // DAY_EVENTS[PATRO_DAYS] == EVENT_IDS.len() == 3032.
+    // DAY_EVENTS[PATRO_DAYS] and EVENT_IDS.len() are the summary's event total.
     let total: usize = coverage().days().map(|d| info(d).events().len()).sum();
-    assert_eq!(total, 3032);
+    assert_eq!(total, summary::number("events"));
 }
 
 #[test]
@@ -170,7 +186,7 @@ fn cs_calendar_data_tests__event_data_all_entries_are_in_range() {
 
 #[test]
 fn cs_calendar_data_tests__event_data_day_count_matches1671() {
-    assert_eq!(event_days().len(), 1671);
+    assert_eq!(event_days().len(), summary::number("event_days"));
 }
 
 #[test]
@@ -181,7 +197,7 @@ fn cs_calendar_data_tests__holiday_data_day_offsets_is_strictly_sorted() {
 
 #[test]
 fn cs_calendar_data_tests__holiday_data_count_matches294() {
-    assert_eq!(public_holidays().len(), 294);
+    assert_eq!(public_holidays().len(), summary::number("holidays"));
 }
 
 #[test]
@@ -346,7 +362,7 @@ fn cs_calendar_data_tests__holiday_count_via_api_matches294() {
     let count = c_sharp_years()
         .filter(|&d| info(d).is_public_holiday())
         .count();
-    assert_eq!(count, 294);
+    assert_eq!(count, summary::number("holidays"));
 }
 
 #[test]

@@ -4,6 +4,8 @@
 use nepdate::{Lang, NepaliDate};
 use nepdate_patro::{CalendarInfo, Event, Events, Tithi, coverage, info, public_holidays};
 
+mod summary;
+
 fn assert_send_sync<T: Send + Sync>() {}
 
 fn assert_value_send_sync<T: Send + Sync>(_: &T) {}
@@ -45,7 +47,7 @@ fn all_days() -> Vec<Day> {
 #[test]
 fn eight_threads_agree_with_one() {
     let expected = all_days();
-    assert_eq!(expected.len(), 2793);
+    assert_eq!(expected.len(), summary::number("days"));
     std::thread::scope(|scope| {
         for _ in 0..8 {
             scope.spawn(|| assert_eq!(all_days(), expected));

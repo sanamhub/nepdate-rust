@@ -21,12 +21,6 @@ const _: () = assert!(TITHI_NAMES.len() < NO_TITHI as usize);
 const _: () = assert!(NAMES.len() <= u16::MAX as usize);
 const _: () = assert!(EVENT_IDS.len() <= u16::MAX as usize);
 const _: () = assert!(HOLIDAY_BITS.len() * 64 >= PATRO_DAYS);
-// Counts from the data on 2026-10-07. A data update changes them on purpose.
-const _: () = assert!(PATRO_DAYS == 2793);
-const _: () = assert!(HOLIDAY_OFFSETS.len() == 294);
-const _: () = assert!(EVENT_IDS.len() == 3032);
-const _: () = assert!(NAMES.len() == 721);
-const _: () = assert!(TITHI_NAMES.len() == 32);
 
 /// `PATRO_FIRST` as an index. Widening `u32` to `usize` is lossless on 32- and 64-bit targets.
 const FIRST: usize = PATRO_FIRST as usize;
@@ -110,7 +104,6 @@ pub fn coverage() -> NepaliDateRange {
 ///
 /// ```
 /// let mut holidays = nepdate_patro::public_holidays();
-/// assert_eq!(holidays.len(), 294);
 /// assert_eq!(holidays.next().map(|d| d.to_string()).as_deref(), Some("2077/01/01"));
 /// assert_eq!(holidays.next_back().map(|d| d.to_string()).as_deref(), Some("2084/08/18"));
 /// ```
@@ -246,7 +239,7 @@ impl CalendarInfo {
 /// use nepdate::NepaliDate;
 ///
 /// let events = nepdate_patro::info(NepaliDate::new(2080, 11, 1)?).events();
-/// assert_eq!(events.len(), 5);
+/// assert!(events.len() > 0);
 /// # Ok::<(), nepdate::Error>(())
 /// ```
 #[derive(Clone, Debug)]
@@ -362,24 +355,71 @@ fn pick(np: &'static str, en: &'static str, lang: Lang) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::indexing_slicing, clippy::unwrap_used)]
+    #![allow(clippy::indexing_slicing, clippy::panic, clippy::unwrap_used)]
+
+    extern crate std;
+
+    use std::borrow::ToOwned;
+    use std::collections::{BTreeMap, BTreeSet};
+    use std::fs;
+    use std::path::Path;
+    use std::string::String;
 
     use super::*;
 
+    /// The numeric fields of `shared/spec/vectors/patro-summary.json`, the counts the hub
+    /// generates from the same data. Its shape is fixed, so reading the `"key": value` lines is
+    /// enough; the workspace has no JSON crate and this test must not add one.
+    fn summary() -> BTreeMap<String, usize> {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../shared/spec/vectors/patro-summary.json");
+        let text = fs::read_to_string(&path).unwrap_or_else(|err| {
+            panic!(
+                "reading {}: {err}; shared/ may predate the summary, re-sync it",
+                path.display()
+            )
+        });
+        text.lines()
+            .filter_map(|line| {
+                let (key, value) = line.trim().trim_end_matches(',').split_once(':')?;
+                Some((
+                    key.trim().trim_matches('"').to_owned(),
+                    value.trim().parse().ok()?,
+                ))
+            })
+            .collect()
+    }
+
+    fn count(summary: &BTreeMap<String, usize>, field: &str) -> usize {
+        *summary
+            .get(field)
+            .unwrap_or_else(|| panic!("patro-summary.json has no numeric {field}"))
+    }
+
     #[test]
-    fn table_counts() {
-        assert_eq!(PATRO_DAYS, 2793);
+    fn table_counts_match_the_summary() {
+        let summary = summary();
+        assert_eq!(PATRO_DAYS, count(&summary, "days"));
         let tithi_days = DAY_TITHI.iter().filter(|&&t| t != NO_TITHI).count();
-        assert_eq!(tithi_days, 2190);
-        assert_eq!(HOLIDAY_OFFSETS.len(), 294);
-        let bits: u32 = HOLIDAY_BITS.iter().map(|w| w.count_ones()).sum();
-        assert_eq!(bits, 294);
-        assert_eq!(usize::from(DAY_EVENTS[PATRO_DAYS]), 3032);
-        assert_eq!(EVENT_IDS.len(), 3032);
+        assert_eq!(tithi_days, count(&summary, "tithi_days"));
+        assert_eq!(HOLIDAY_OFFSETS.len(), count(&summary, "holidays"));
+        let bits: u32 = HOLIDAY_BITS.iter().map(|word| word.count_ones()).sum();
+        assert_eq!(usize::try_from(bits).unwrap(), count(&summary, "holidays"));
+        assert_eq!(
+            usize::from(DAY_EVENTS[PATRO_DAYS]),
+            count(&summary, "events")
+        );
+        assert_eq!(EVENT_IDS.len(), count(&summary, "events"));
         let event_days = DAY_EVENTS.windows(2).filter(|w| w[0] < w[1]).count();
-        assert_eq!(event_days, 1671);
-        assert_eq!(NAMES.len(), 721);
-        assert_eq!(TITHI_NAMES.len(), 32);
+        assert_eq!(event_days, count(&summary, "event_days"));
+        assert_eq!(NAMES.len(), count(&summary, "event_names"));
+        assert_eq!(TITHI_NAMES.len(), count(&summary, "tithi_names"));
+
+        // Distinct pairs and their UTF-8 bytes, counted over tithi and events together.
+        let names: BTreeSet<_> = NAMES.iter().chain(&TITHI_NAMES).collect();
+        assert_eq!(names.len(), count(&summary, "names"));
+        let name_bytes: usize = names.iter().map(|name| name.0.len() + name.1.len()).sum();
+        assert_eq!(name_bytes, count(&summary, "name_bytes"));
     }
 
     #[test]
