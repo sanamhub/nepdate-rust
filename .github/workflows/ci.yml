@@ -38,11 +38,31 @@ jobs:
           tool: cargo-deny,cargo-nextest
       - run: cargo xtask ci
 
-  # Fails when shared/ differs from the hub at the commit in shared/VERSION (ADR-0003).
+  version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read the crates' version
+        id: version
+        run: |
+          set -euo pipefail
+          echo "version=$(bash scripts/version.sh)" >> "$GITHUB_OUTPUT"
+
+  # Fails when shared/ differs from the hub at the commit in shared/VERSION (ADR-0003), and when
+  # the crates' version is on another MAJOR.MINOR line (ADR-0007).
   shared-check:
+    needs: version
     permissions:
       contents: read
-    uses: sanamhub/nepdate/.github/workflows/shared-check.yml@e2f977849877be6828e6d6ebbb638fcf708638e7
+    uses: sanamhub/nepdate/.github/workflows/shared-check.yml@f636b7d476bc5959eb5689a950b73c8943860eef # main 2026-11-01
+    with:
+      sdk: rust
+      version: ${{ needs.version.outputs.version }}
 
   # Not a `cargo xtask ci` step, because llvm-cov needs the llvm-tools component.
   coverage:
