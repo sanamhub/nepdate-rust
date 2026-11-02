@@ -154,7 +154,7 @@ fn has_mmm(pattern: &str) -> bool {
 #[test]
 fn format_pattern_rows() {
     let rows = common::rows("spec/vectors/csharp-golden/format-pattern.tsv", '\t');
-    assert_eq!(rows.len(), 451);
+    assert_eq!(rows.len(), 452);
     let mut skipped = 0;
     for row in &rows {
         let d = common::bs(&row[0]);

@@ -77,9 +77,7 @@ impl fmt::Display for Error {
     }
 }
 
-#[cfg(feature = "std")]
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-impl std::error::Error for Error {}
+impl core::error::Error for Error {}
 
 #[cfg(test)]
 mod tests {

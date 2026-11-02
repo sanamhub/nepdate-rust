@@ -221,6 +221,17 @@ impl TryFrom<u8> for Month {
     }
 }
 
+impl core::fmt::Display for Month {
+    /// The English full name, for `format!("{}", month)`.
+    ///
+    /// ```
+    /// assert_eq!(nepdate::Month::Shrawan.to_string(), "Shrawan");
+    /// ```
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(self.name(Lang::En))
+    }
+}
+
 /// A day of the week. The discriminant counts from Sunday = 0, as in Nepal's week.
 ///
 /// ```
@@ -328,6 +339,17 @@ impl Weekday {
             Lang::En => WEEKDAY_EN_SHORT[i],
             Lang::Ne => WEEKDAY_NE_SHORT[i],
         }
+    }
+}
+
+impl core::fmt::Display for Weekday {
+    /// The English full name, for `format!("{}", weekday)`.
+    ///
+    /// ```
+    /// assert_eq!(nepdate::Weekday::Tuesday.to_string(), "Tuesday");
+    /// ```
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(self.name(Lang::En))
     }
 }
 

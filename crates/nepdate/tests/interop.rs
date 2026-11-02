@@ -103,10 +103,11 @@ mod jiff_feature {
 
     #[test]
     fn is_today_only_for_today() {
+        let kathmandu = TimeZone::get("Asia/Kathmandu").unwrap();
         let today = NepaliDate::today().unwrap();
         // Midnight may pass between the calls; then the next day is today.
-        assert!(today.is_today() || today.succ().unwrap().is_today());
-        assert!(!today.pred().unwrap().is_today());
-        assert!(!NepaliDate::MIN.is_today());
+        assert!(today.is_today(&kathmandu) || today.succ().unwrap().is_today(&kathmandu));
+        assert!(!today.pred().unwrap().is_today(&kathmandu));
+        assert!(!NepaliDate::MIN.is_today(&kathmandu));
     }
 }

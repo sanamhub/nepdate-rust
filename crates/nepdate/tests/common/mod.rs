@@ -18,12 +18,12 @@ pub(crate) fn read_shared(path: &str) -> String {
     std::fs::read_to_string(&full).unwrap_or_else(|e| panic!("reading {full}: {e}"))
 }
 
-/// Data rows of a delimited file, header skipped, each split on `sep`.
+/// Data rows of a delimited file, comment and header lines skipped, each split on `sep`.
 pub(crate) fn rows(path: &str, sep: char) -> Vec<Vec<String>> {
     read_shared(path)
         .lines()
-        .skip(1)
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .skip(1)
         .map(|l| l.split(sep).map(str::to_owned).collect())
         .collect()
 }

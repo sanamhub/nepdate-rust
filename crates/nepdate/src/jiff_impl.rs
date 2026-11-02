@@ -5,7 +5,7 @@ use jiff::Timestamp;
 use jiff::civil::Date;
 use jiff::tz::{Offset, TimeZone};
 
-use crate::{Error, NepaliDate};
+use crate::{Error, NepaliDate, NepaliDateRange};
 
 /// Nepal Standard Time, UTC+05:45, for when the time zone database lacks `Asia/Kathmandu`.
 const NEPAL_OFFSET_SECONDS: i32 = 5 * 3600 + 45 * 60;
@@ -67,11 +67,12 @@ impl NepaliDate {
     /// 2143-04-15 in Nepal.
     ///
     /// ```
+    /// use jiff::tz::TimeZone;
     /// use nepdate::NepaliDate;
     ///
     /// let today = NepaliDate::today()?;
-    /// // Midnight may pass between the two calls.
-    /// assert!(today.is_today() || today.succ().is_some_and(NepaliDate::is_today));
+    /// let nepal = TimeZone::get("Asia/Kathmandu").unwrap_or(TimeZone::UTC);
+    /// assert!(today.is_today(&nepal));
     /// # Ok::<(), nepdate::Error>(())
     /// ```
     #[must_use = "the clock may be out of range"]
@@ -101,22 +102,109 @@ impl NepaliDate {
         date_at(Timestamp::now(), tz)
     }
 
-    /// Whether `self` is [`NepaliDate::today`]. `false` when the clock is out of range. Needs
+    /// Whether `self` is today's date in `tz`. `false` when the clock is out of range. Needs
     /// the `jiff` feature.
     ///
     /// ```
+    /// use jiff::tz::TimeZone;
     /// use nepdate::NepaliDate;
     ///
-    /// assert!(!NepaliDate::MIN.is_today());
+    /// assert!(!NepaliDate::MIN.is_today(&TimeZone::UTC));
     /// ```
     #[must_use]
-    pub fn is_today(self) -> bool {
-        Self::today() == Ok(self)
+    pub fn is_today(self, tz: &TimeZone) -> bool {
+        relative_at(self, Timestamp::now(), tz, 0)
+    }
+
+    /// Whether `self` is yesterday's date in `tz`. `false` when the clock is out of range.
+    /// Needs the `jiff` feature.
+    ///
+    /// ```
+    /// use jiff::tz::TimeZone;
+    /// use nepdate::NepaliDate;
+    ///
+    /// assert!(!NepaliDate::MIN.is_yesterday(&TimeZone::UTC));
+    /// ```
+    #[must_use]
+    pub fn is_yesterday(self, tz: &TimeZone) -> bool {
+        relative_at(self, Timestamp::now(), tz, -1)
+    }
+
+    /// Whether `self` is tomorrow's date in `tz`. `false` when the clock is out of range.
+    /// Needs the `jiff` feature.
+    ///
+    /// ```
+    /// use jiff::tz::TimeZone;
+    /// use nepdate::NepaliDate;
+    ///
+    /// assert!(!NepaliDate::MAX.is_tomorrow(&TimeZone::UTC));
+    /// ```
+    #[must_use]
+    pub fn is_tomorrow(self, tz: &TimeZone) -> bool {
+        relative_at(self, Timestamp::now(), tz, 1)
+    }
+}
+
+/// Whether `date` is `offset` days from the date of `now` in `tz`.
+fn relative_at(date: NepaliDate, now: Timestamp, tz: &TimeZone, offset: i32) -> bool {
+    let Ok(today) = date_at(now, tz) else {
+        return false;
+    };
+    today.checked_add_days(offset) == Ok(date)
+}
+
+#[cfg_attr(docsrs, doc(cfg(feature = "jiff")))]
+impl NepaliDateRange {
+    /// The current BS month in `tz`. Needs the `jiff` feature.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::OutOfRange`] when the clock is outside the supported range or the month cannot
+    /// be built.
+    #[must_use = "the clock may be out of range"]
+    pub fn current_month(tz: &TimeZone) -> Result<Self, Error> {
+        Self::current_month_at(Timestamp::now(), tz)
+    }
+
+    fn current_month_at(now: Timestamp, tz: &TimeZone) -> Result<Self, Error> {
+        let today = date_at(now, tz)?;
+        Self::month(today.year(), today.month_number())
+    }
+
+    /// The current fiscal year in `tz`. Needs the `jiff` feature.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::OutOfRange`] when the clock or the fiscal year is outside the supported range.
+    #[must_use = "the clock may be out of range"]
+    pub fn current_fiscal_year(tz: &TimeZone) -> Result<Self, Error> {
+        Self::current_fiscal_year_at(Timestamp::now(), tz)
+    }
+
+    fn current_fiscal_year_at(now: Timestamp, tz: &TimeZone) -> Result<Self, Error> {
+        date_at(now, tz)?.fiscal_year().range()
+    }
+
+    /// The current calendar year in `tz`. Needs the `jiff` feature.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::OutOfRange`] when the clock is outside the supported range.
+    #[must_use = "the clock may be out of range"]
+    pub fn current_calendar_year(tz: &TimeZone) -> Result<Self, Error> {
+        Self::current_calendar_year_at(Timestamp::now(), tz)
+    }
+
+    fn current_calendar_year_at(now: Timestamp, tz: &TimeZone) -> Result<Self, Error> {
+        let today = date_at(now, tz)?;
+        Self::year(today.year())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::string::ToString;
+
     use super::*;
 
     fn at(text: &str) -> Timestamp {
@@ -155,5 +243,41 @@ mod tests {
         assert_eq!(date_at(early, &TimeZone::UTC), Err(Error::OutOfRange));
         let late = at("2143-04-16T12:00:00Z");
         assert_eq!(date_at(late, &TimeZone::UTC), Err(Error::OutOfRange));
+    }
+
+    #[test]
+    fn relative_days_use_the_injected_instant_and_zone() {
+        // 18:30 UTC is 00:15 on 2081-04-16 in Nepal.
+        let now = at("2024-07-30T18:30:00Z");
+        let tz = nepal();
+        let today = date_at(now, &tz).unwrap_or(NepaliDate::MIN);
+        assert_eq!(today.to_string(), "2081/04/16");
+        assert!(relative_at(today, now, &tz, 0));
+        assert!(relative_at(
+            today.pred().unwrap_or(NepaliDate::MIN),
+            now,
+            &tz,
+            -1
+        ));
+        assert!(relative_at(
+            today.succ().unwrap_or(NepaliDate::MIN),
+            now,
+            &tz,
+            1
+        ));
+        assert!(!relative_at(today, now, &TimeZone::UTC, 0));
+    }
+
+    #[test]
+    fn current_factories_use_the_injected_instant_and_zone() {
+        let now = at("2024-07-30T18:30:00Z");
+        let tz = nepal();
+        let month = NepaliDateRange::current_month_at(now, &tz)
+            .unwrap_or(NepaliDateRange::single(NepaliDate::MIN));
+        assert_eq!(month.start().to_string(), "2081/04/01");
+        let year = NepaliDateRange::current_calendar_year_at(now, &tz).unwrap_or(month);
+        assert_eq!(year.start().to_string(), "2081/01/01");
+        let fy = NepaliDateRange::current_fiscal_year_at(now, &tz).unwrap_or(month);
+        assert_eq!(fy.start().to_string(), "2081/04/01");
     }
 }

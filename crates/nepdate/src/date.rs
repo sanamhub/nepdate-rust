@@ -1,13 +1,14 @@
 //! `NepaliDate`, a valid BS date in the supported range (ADR-0004 §2).
 
 use core::fmt;
+use core::ops::Sub;
 
 use crate::calendar::{
     AD_MONTH_START, AD_MONTHS, BS_MONTH_AD, MAX_SERIAL, MAX_YEAR, MIN_YEAR, MONTH_INFO,
     month_length,
 };
 use crate::civil::greg_month_length;
-use crate::{DateOrder, Error, GregorianDate, Lang, Month, Separator, Weekday};
+use crate::{DateDiff, DateOrder, Error, GregorianDate, Lang, Month, Separator, Weekday};
 
 /// `round(2^22 / (109_212 / 3_588))`: multiplying a serial by this and shifting right by 22
 /// estimates its month index to within one (ADR-0004 §4, tested below).
@@ -159,6 +160,64 @@ impl NepaliDate {
     #[must_use]
     pub fn month_length(self) -> u8 {
         month_length(self.year, self.month.number())
+    }
+
+    /// The length of this date's BS year, 364 to 367 days (D-12).
+    ///
+    /// This is the sum of the twelve month lengths. It is not the Gregorian leap year of the AD
+    /// date, which changes in the middle of a BS year.
+    ///
+    /// ```
+    /// use nepdate::NepaliDate;
+    ///
+    /// assert_eq!(NepaliDate::new(2081, 4, 15)?.year_length(), 366);
+    /// assert_eq!(NepaliDate::new(2087, 1, 1)?.year_length(), 367);
+    /// # Ok::<(), nepdate::Error>(())
+    /// ```
+    #[must_use]
+    // SAFETY-OF-INDEX: the date is at most 2199, so `i + 12` is at most MONTHS and both loads
+    // are inside MONTH_INFO (which has MONTHS + 1 entries).
+    #[allow(clippy::indexing_slicing, clippy::cast_possible_truncation)] // a year is at most 367 days
+    pub fn year_length(self) -> u16 {
+        let i = (self.year - MIN_YEAR) as usize * 12;
+        ((MONTH_INFO[i + 12] >> 2) - (MONTH_INFO[i] >> 2)) as u16
+    }
+
+    /// A date from the `YYYYMMDD` integer form.
+    ///
+    /// The integer is read as `year * 10000 + month * 100 + day`, with no sign and no other
+    /// separators.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::OutOfRange`] for a negative integer or a year outside 1901 to 2199, then
+    /// [`Error::InvalidMonth`] or [`Error::InvalidDay`] from [`NepaliDate::new`].
+    ///
+    /// ```
+    /// use nepdate::NepaliDate;
+    ///
+    /// assert_eq!(NepaliDate::from_ymd_int(20810415)?, NepaliDate::new(2081, 4, 15)?);
+    /// assert!(NepaliDate::from_ymd_int(20810433).is_err());
+    /// # Ok::<(), nepdate::Error>(())
+    /// ```
+    #[must_use = "the integer may not be a valid date"]
+    pub fn from_ymd_int(ymd: i32) -> Result<Self, Error> {
+        let n = u32::try_from(ymd).map_err(|_| Error::OutOfRange)?;
+        let year = u16::try_from(n / 10_000).map_err(|_| Error::OutOfRange)?;
+        let month = u8::try_from((n / 100) % 100).map_err(|_| Error::OutOfRange)?;
+        let day = u8::try_from(n % 100).map_err(|_| Error::OutOfRange)?;
+        Self::new(year, month, day)
+    }
+
+    /// The `YYYYMMDD` integer form.
+    ///
+    /// ```
+    /// assert_eq!(nepdate::NepaliDate::new(2081, 4, 15)?.to_ymd_int(), 20810415);
+    /// # Ok::<(), nepdate::Error>(())
+    /// ```
+    #[must_use]
+    pub fn to_ymd_int(self) -> i32 {
+        i32::from(self.year) * 10_000 + i32::from(self.month.number()) * 100 + i32::from(self.day)
     }
 
     /// The first day of this date's month.
@@ -371,6 +430,30 @@ impl TryFrom<GregorianDate> for NepaliDate {
 impl From<NepaliDate> for GregorianDate {
     fn from(date: NepaliDate) -> Self {
         date.to_gregorian()
+    }
+}
+
+impl Sub for NepaliDate {
+    type Output = DateDiff;
+
+    /// `self - other`: positive when `self` is later (D-07).
+    ///
+    /// The named method [`NepaliDate::days_until`] answers the other question, `other - self`,
+    /// and is not interchangeable with this operator.
+    ///
+    /// ```
+    /// use nepdate::NepaliDate;
+    ///
+    /// let a = NepaliDate::new(2081, 4, 15)?;
+    /// let b = NepaliDate::new(2081, 4, 10)?;
+    /// assert_eq!((a - b).total_days, 5);
+    /// assert_eq!((b - a).total_days, -5);
+    /// # Ok::<(), nepdate::Error>(())
+    /// ```
+    fn sub(self, other: Self) -> DateDiff {
+        // `other.diff(self)` reports the distance from `other` to `self`, so its sign and total
+        // are `self - other`, the C# operator direction.
+        other.diff(self)
     }
 }
 

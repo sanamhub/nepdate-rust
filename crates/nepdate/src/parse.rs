@@ -386,6 +386,25 @@ fn parse_lenient_tokens(s: &str) -> Result<NepaliDate, Error> {
 }
 
 impl NepaliDate {
+    /// The non-throwing strict parse, the same result as `s.parse::<NepaliDate>()`.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`FromStr`]: a parse error for the text, or the errors of
+    /// [`NepaliDate::new`] for a date that does not exist.
+    ///
+    /// ```
+    /// use nepdate::NepaliDate;
+    ///
+    /// assert_eq!(NepaliDate::try_parse("2080/05/15")?, NepaliDate::new(2080, 5, 15)?);
+    /// assert!(NepaliDate::try_parse("2080/05").is_err());
+    /// # Ok::<(), nepdate::Error>(())
+    /// ```
+    #[must_use = "parsing may fail"]
+    pub fn try_parse(s: &str) -> Result<Self, Error> {
+        s.parse()
+    }
+
     /// Lenient parsing for text typed by people (PARSING §2): everything strict parsing accepts,
     /// plus day-month-year order, month names in English or Nepali, `,` as a separator, and the
     /// era markers `BS`, `VS`, `बि.सं.` and the words `गते`, `मिति`. It never guesses: a 2-digit
@@ -416,6 +435,25 @@ impl NepaliDate {
             Ok(d) => Ok(d),
             Err(_) => parse_lenient_tokens(s),
         }
+    }
+
+    /// The non-throwing lenient parse, the same result as [`NepaliDate::parse_lenient`].
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Parse`] with the kind from [`NepaliDate::parse_lenient`], or the errors of
+    /// [`NepaliDate::new`] for a date that does not exist.
+    ///
+    /// ```
+    /// use nepdate::NepaliDate;
+    ///
+    /// assert_eq!(NepaliDate::try_parse_lenient("15 Shrawan 2081")?, NepaliDate::new(2081, 4, 15)?);
+    /// assert!(NepaliDate::try_parse_lenient("15 Shrawan 81").is_err());
+    /// # Ok::<(), nepdate::Error>(())
+    /// ```
+    #[must_use = "parsing may fail"]
+    pub fn try_parse_lenient(s: &str) -> Result<Self, Error> {
+        Self::parse_lenient(s)
     }
 }
 
