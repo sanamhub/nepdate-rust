@@ -9,8 +9,8 @@ All notable changes to `nepdate` are recorded here. The format follows
 ### Added
 
 - `NepaliDate::year_length`, the length of the BS year from 364 to 367 days (D-12).
-- `NepaliDate::from_ymd_int` and `to_ymd_int`, the `YYYYMMDD` integer form (NC09).
-- `NepaliDate::try_parse` and `try_parse_lenient`, named non-throwing parsers (NP03, NP08).
+- `NepaliDate::from_ymd_int` and `to_ymd_int`, the `YYYYMMDD` integer form.
+- `NepaliDate::try_parse` and `try_parse_lenient`, named non-throwing parsers.
 - `NepaliDate::is_today`, `is_yesterday` and `is_tomorrow`, each with an explicit time zone.
 - `Sub` for `NepaliDate`, returning a `DateDiff` in the C# direction, `this - other`.
 - Ordered batch conversion with `to_nepali_dates`, `to_english_dates` and
@@ -38,8 +38,7 @@ All notable changes to `nepdate` are recorded here. The format follows
   `date.is_today(&zone)`, where `zone` is a `jiff::tz::TimeZone`; for Nepal use
   `TimeZone::get("Asia/Kathmandu")`.
 - A pattern that ends with a single backslash now writes that backslash instead of nothing.
-  Migration: remove the trailing `\` when the old empty output was intended, or write `\\` when a
-  literal backslash was intended.
+  Migration: remove the trailing `\` when the old output without it was intended.
 
 ## [0.1.0-rc.1] - 2026-11-03
 

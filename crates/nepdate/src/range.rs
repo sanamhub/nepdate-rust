@@ -337,14 +337,14 @@ impl NepaliDateRange {
         let mut out = Vec::new();
         let mut year = self.start.year();
         let mut month = self.start.month_number();
-        // Both values are in the supported range because the loop stops at `self.end`.
         while let Ok(first) = NepaliDate::new(year, month, 1) {
             let last = first.last_day_of_month();
             out.push(Self::new_unchecked(
                 max(self.start, first),
                 min(self.end, last),
             ));
-            if last >= self.end || (year == 2199 && month == 12) {
+            // Stop at the range end, so the loop never asks for a month past the data.
+            if last >= self.end {
                 break;
             }
             if month == 12 {
@@ -454,7 +454,7 @@ impl NepaliDateRange {
         })
     }
 
-    /// The two dates with the same short options, separated by `" - "` (NR29).
+    /// The two dates with the same short options, separated by `" - "`.
     ///
     /// ```
     /// use nepdate::{DateOrder, Lang, NepaliDateRange, Separator};
@@ -574,7 +574,7 @@ impl ExactSizeIterator for Days {}
 impl FusedIterator for Days {}
 
 impl fmt::Display for NepaliDateRange {
-    /// `"start - end"` in the default short form (NR28).
+    /// `"start - end"` in the default short form.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         crate::format::write_once(f, |out| {
             self.start

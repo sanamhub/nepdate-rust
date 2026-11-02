@@ -183,7 +183,7 @@ impl NepaliDate {
         ((MONTH_INFO[i + 12] >> 2) - (MONTH_INFO[i] >> 2)) as u16
     }
 
-    /// A date from the `YYYYMMDD` integer form (NC09).
+    /// A date from the `YYYYMMDD` integer form.
     ///
     /// The integer is read as `year * 10000 + month * 100 + day`, with no sign and no other
     /// separators.
@@ -209,7 +209,7 @@ impl NepaliDate {
         Self::new(year, month, day)
     }
 
-    /// The `YYYYMMDD` integer form (NC09).
+    /// The `YYYYMMDD` integer form.
     ///
     /// ```
     /// assert_eq!(nepdate::NepaliDate::new(2081, 4, 15)?.to_ymd_int(), 20810415);
@@ -436,7 +436,7 @@ impl From<NepaliDate> for GregorianDate {
 impl Sub for NepaliDate {
     type Output = DateDiff;
 
-    /// `self - other`: positive when `self` is later (D-07, NA05).
+    /// `self - other`: positive when `self` is later (D-07).
     ///
     /// The named method [`NepaliDate::days_until`] answers the other question, `other - self`,
     /// and is not interchangeable with this operator.

@@ -386,7 +386,7 @@ fn parse_lenient_tokens(s: &str) -> Result<NepaliDate, Error> {
 }
 
 impl NepaliDate {
-    /// The non-throwing strict parse (NP03), the same result as `s.parse::<NepaliDate>()`.
+    /// The non-throwing strict parse, the same result as `s.parse::<NepaliDate>()`.
     ///
     /// # Errors
     ///
@@ -437,7 +437,7 @@ impl NepaliDate {
         }
     }
 
-    /// The non-throwing lenient parse (NP08), the same result as [`NepaliDate::parse_lenient`].
+    /// The non-throwing lenient parse, the same result as [`NepaliDate::parse_lenient`].
     ///
     /// # Errors
     ///

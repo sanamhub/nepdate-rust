@@ -1,4 +1,4 @@
-//! Ordered batch conversion (NC04 to NC08), behind the `alloc` feature.
+//! Ordered batch conversion, behind the `alloc` feature.
 //!
 //! The C# bulk path uses PLINQ above 500 items and does not promise the input order. These
 //! functions always keep the input order. The `useParallel` and `batchSize` arguments of C# do
@@ -9,7 +9,7 @@ use core::borrow::Borrow;
 
 use crate::{Error, GregorianDate, NepaliDate};
 
-/// Converts a sequence of Gregorian dates to BS dates, in input order (NC04 and NC07).
+/// Converts a sequence of Gregorian dates to BS dates, in input order.
 ///
 /// A slice, an array or an iterator is accepted; a reference item is borrowed.
 ///
@@ -41,7 +41,7 @@ where
     Ok(out)
 }
 
-/// Converts a sequence of BS dates to Gregorian dates, in input order (NC06 and NC08).
+/// Converts a sequence of BS dates to Gregorian dates, in input order.
 ///
 /// A slice, an array or an iterator is accepted; a reference item is borrowed.
 ///
@@ -70,8 +70,7 @@ where
     Ok(out)
 }
 
-/// Parses a sequence of BS date strings and returns their Gregorian dates, in input order
-/// (NC05).
+/// Parses a sequence of BS date strings and returns their Gregorian dates, in input order.
 ///
 /// The name is `to_english_dates_from_strings` rather than a second `to_english_dates` because
 /// Rust has no function overloading. The result is the same ordered batch.
