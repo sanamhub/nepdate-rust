@@ -36,6 +36,13 @@ on:
 permissions:
   contents: read
 
+# GitHub runs `run` steps in PowerShell on Windows, where `set -o pipefail` is an error and
+# `>> "$GITHUB_STEP_SUMMARY"` is not how a variable is read. Every step here is written for bash,
+# and the Windows runner has Git Bash, so use it on every OS.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   # One place resolves latest, so every job of a run checks the same version.
   resolve:
