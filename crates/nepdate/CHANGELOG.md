@@ -6,6 +6,41 @@ All notable changes to `nepdate` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `NepaliDate::year_length`, the length of the BS year from 364 to 367 days (D-12).
+- `NepaliDate::from_ymd_int` and `to_ymd_int`, the `YYYYMMDD` integer form (NC09).
+- `NepaliDate::try_parse` and `try_parse_lenient`, named non-throwing parsers (NP03, NP08).
+- `NepaliDate::is_today`, `is_yesterday` and `is_tomorrow`, each with an explicit time zone.
+- `Sub` for `NepaliDate`, returning a `DateDiff` in the C# direction, `this - other`.
+- Ordered batch conversion with `to_nepali_dates`, `to_english_dates` and
+  `to_english_dates_from_strings`, behind the new `alloc` feature.
+- Range factories `single`, `from_day_count`, the `current_*` clock factories, containment of a
+  range, overlap, adjacency, intersection, union, difference, the month and fiscal-quarter
+  splits, the interval, working-day and weekend-day iterators, `Display`, `to_string_with` and
+  `RangeFormat`.
+- `alloc` feature. The default `std` feature turns it on. `except`, `split_by_month` and
+  `split_by_fiscal_quarter` return `Vec` and need it.
+- `Display` for `Month` and `Weekday`, using the English full names.
+- `DatesWithInterval`, the named iterator behind `dates_with_interval`.
+
+### Changed
+
+- `Error` implements `core::error::Error` in every build, so `no_std` callers get the error trait
+  without the `std` feature.
+- A pattern that ends with a single backslash now writes a literal `\` (FORMATTING section 5).
+- The public API page and the README now cover every group, including ranges, fiscal values,
+  errors, batch conversion and the `alloc` feature.
+
+### Breaking
+
+- `is_today` now takes the time zone explicitly. Migration: replace `date.is_today()` with
+  `date.is_today(&zone)`, where `zone` is a `jiff::tz::TimeZone`; for Nepal use
+  `TimeZone::get("Asia/Kathmandu")`.
+- A pattern that ends with a single backslash now writes that backslash instead of nothing.
+  Migration: remove the trailing `\` when the old empty output was intended, or write `\\` when a
+  literal backslash was intended.
+
 ## [0.1.0-rc.1] - 2026-11-03
 
 ### Changed

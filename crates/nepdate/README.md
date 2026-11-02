@@ -12,8 +12,9 @@
 </p>
 
 Bikram Sambat (BS, the Nepali calendar) dates for Rust: conversion to and from the Gregorian
-calendar (AD), arithmetic, fiscal years, formatting in English or Nepali, and parsing. `no_std`,
-no dependencies by default, no heap allocation, no `unsafe`.
+calendar (AD), arithmetic, fiscal years, formatting in English or Nepali, parsing, and inclusive
+date ranges. `no_std`, no dependencies by default, no heap allocation in the core operations, no
+`unsafe`.
 
 Tithi, public holidays and events are in the companion crate
 [`nepdate-patro`](https://crates.io/crates/nepdate-patro), so this crate carries no patro data.
@@ -28,16 +29,19 @@ nepdate = "=0.1.0-rc.1"
 ```
 
 ```rust
-use nepdate::{Lang, LongDate, MonthOverflow, NepaliDate, Weekday};
+use nepdate::{DateOrder, Lang, LongDate, MonthOverflow, NepaliDate, NepaliDateRange, Separator, Weekday};
 
-// BS to AD.
+// BS to AD and back.
 let date = NepaliDate::new(2081, 4, 15)?;
 let ad = date.to_gregorian();
 assert_eq!((ad.year(), ad.month(), ad.day()), (2024, 7, 30));
 assert_eq!(date.weekday(), Weekday::Tuesday);
-
-// AD to BS.
 assert_eq!(NepaliDate::from_gregorian(2024, 7, 30)?, date);
+
+// The year length and the YYYYMMDD form.
+assert_eq!(date.year_length(), 366);
+assert_eq!(date.to_ymd_int(), 20810415);
+assert_eq!(NepaliDate::from_ymd_int(20810415)?, date);
 
 // Arithmetic never panics: out of range gives an error.
 assert_eq!(date.checked_add_days(1000)?.to_string(), "2084/01/13");
@@ -45,6 +49,7 @@ assert_eq!(
     date.checked_add_months(13, MonthOverflow::Clamp)?.to_string(),
     "2082/05/15"
 );
+assert_eq!((date - NepaliDate::MIN).total_days, 65_854);
 
 // Formatting and parsing.
 assert_eq!(date.to_string(), "2081/04/15");
@@ -52,14 +57,24 @@ assert_eq!(
     date.long(LongDate::default(), Lang::En).to_string(),
     "Shrawan 15, 2081"
 );
+assert_eq!(
+    date.short(DateOrder::Dmy, Separator::Dash, true, Lang::En).to_string(),
+    "15-04-2081"
+);
 assert_eq!("2081/04/15".parse::<NepaliDate>()?, date);
 assert_eq!(NepaliDate::parse_lenient("15 Shrawan 2081")?, date);
+
+// Inclusive ranges.
+let month = NepaliDateRange::month(2081, 4)?;
+assert_eq!(month.len(), 32);
+assert!(month.contains(date));
+assert_eq!(month.to_string(), "2081/04/01 - 2081/04/32");
 # Ok::<(), nepdate::Error>(())
 ```
 
 Every formatter (`short`, `long`, `format_pattern`, `Lang::digits`, `FiscalYear::label`) has a
 `write_to` method that writes into any `core::fmt::Write` without allocating; `to_string()` needs
-`std`.
+`std`. `NepaliDateRange` has `to_string_with` for the same short-format options.
 
 Two runnable examples are in the repository:
 [`convert`](https://github.com/sanamhub/nepdate-rust/blob/main/crates/nepdate/examples/convert.rs)
@@ -78,28 +93,35 @@ calendar are projections inherited from NepDate and may change in a later releas
 
 | Feature | Default | What it adds |
 |---|---|---|
-| `std` | yes | `std::error::Error` for `Error`, and `to_string()` through `Display` |
+| `std` | yes | `alloc` and the standard-library build |
+| `alloc` | via `std` | ordered batch conversion and the ranges that return `Vec` |
 | `serde` | no | `Serialize` and `Deserialize` for `NepaliDate` as `"YYYY-MM-DD"` |
 | `chrono` | no | `From<NepaliDate> for chrono::NaiveDate` and `TryFrom<chrono::NaiveDate>` |
-| `jiff` | no | `From<NepaliDate> for jiff::civil::Date`, `TryFrom<jiff::civil::Date>`, `NepaliDate::today()` (the date in `Asia/Kathmandu`), `today_in(&TimeZone)` and `is_today()`. Turns on `std` |
+| `jiff` | no | `From<NepaliDate> for jiff::civil::Date`, `TryFrom<jiff::civil::Date>`, `NepaliDate::today()` (the date in `Asia/Kathmandu`), `today_in(&TimeZone)`, `is_today(&TimeZone)`, `is_yesterday(&TimeZone)`, `is_tomorrow(&TimeZone)` and the range `current_*` factories. Turns on `std` |
 
 Without default features the crate builds for `wasm32-unknown-unknown` and other targets with no
-standard library.
+standard library. `Error` implements `core::error::Error` in both builds.
 
 ## Coming from C# NepDate
 
 | C# | Rust |
 |---|---|
 | `new NepaliDate(y, m, d)` (throws) | `NepaliDate::new(y, m, d)` returns `Result<NepaliDate, Error>` and is a `const fn` |
-| `NepaliDate.Parse(s)` / `TryParse` | `s.parse::<NepaliDate>()` (strict) or `NepaliDate::parse_lenient(s)` |
+| `NepaliDate.Parse(s)` / `TryParse` | `s.parse::<NepaliDate>()` or `NepaliDate::try_parse(s)` (strict), `NepaliDate::parse_lenient(s)` or `try_parse_lenient(s)` |
 | `date.EnglishDate` | `date.to_gregorian()`, or `chrono::NaiveDate::from(date)` with feature `chrono` |
 | `DateTime.ToNepaliDate()` | `NepaliDate::from_gregorian(y, m, d)`, or `NepaliDate::try_from(naive_date)` |
 | `AddDays(n)` | `checked_add_days(n)` |
 | `AddMonths(n, awayFromMonthEnd)` | `checked_add_months(n, MonthOverflow::Clamp)` or `MonthOverflow::Overflow` |
+| `Subtract(date)` | `days_until(other)` is `other - self`; `self - other` is a `DateDiff` |
 | `MonthEndDay` | `month_length()` |
+| `IsLeapYear()` | `year_length()`, the BS year length from 364 to 367 |
 | `DayOfWeek` | `weekday()` |
 | `ToString(format)` | `Display` (`YYYY/MM/DD`), `short(..)`, `long(..)` and `format_pattern(pattern, lang)` |
-| `IsToday` | `is_today()` with feature `jiff` |
+| `BulkConvert` | `to_nepali_dates`, `to_english_dates` and `to_english_dates_from_strings`, with feature `alloc` |
+| `NepaliDateTypeConverter` | `to_ymd_int()` and `from_ymd_int(n)` |
+| `IsToday` | `is_today(&TimeZone)` with feature `jiff` |
+| `ToLongDateUnicodeString` | `long(opts, Lang::Ne)` |
+| `NepaliDateRange` operations | `NepaliDateRange` with containment, overlap, intersection, union, difference, splits and day iterators |
 
 The places where this crate deliberately behaves differently from C# NepDate are listed in
 [PARITY.md](https://github.com/sanamhub/nepdate/blob/main/spec/PARITY.md).

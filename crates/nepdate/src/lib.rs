@@ -7,11 +7,16 @@
 #[cfg(feature = "std")]
 extern crate std;
 
+#[cfg(feature = "alloc")]
+extern crate alloc;
+
 mod generated {
     pub(crate) mod calendar;
 }
 
 mod arith;
+#[cfg(feature = "alloc")]
+mod batch;
 mod calendar;
 #[cfg(feature = "chrono")]
 mod chrono_impl;
@@ -30,6 +35,8 @@ mod range;
 mod serde_impl;
 
 pub use crate::arith::{DateDiff, MonthOverflow};
+#[cfg(feature = "alloc")]
+pub use crate::batch::{to_english_dates, to_english_dates_from_strings, to_nepali_dates};
 pub use crate::date::NepaliDate;
 pub use crate::error::{Error, ParseErrorKind};
 pub use crate::fiscal::{FiscalLabel, FiscalYear, Quarter};
@@ -38,4 +45,4 @@ pub use crate::format::{
 };
 pub use crate::gregorian::GregorianDate;
 pub use crate::names::{Lang, Month, Weekday};
-pub use crate::range::{Days, NepaliDateRange};
+pub use crate::range::{DatesWithInterval, Days, NepaliDateRange, RangeFormat};

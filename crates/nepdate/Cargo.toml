@@ -19,7 +19,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = ["std"]
-std = []
+std = ["alloc"]
+alloc = []
 serde = ["dep:serde"]                          # ADR-0005
 jiff = ["dep:jiff", "std"]                     # ADR-0011: conversions, today(), is_today()
 chrono = ["dep:chrono"]                        # ADR-0005: conversions only

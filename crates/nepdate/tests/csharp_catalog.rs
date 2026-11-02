@@ -34,6 +34,11 @@ fn ad(year: i32, month: u8, day: u8) -> GregorianDate {
     GregorianDate::new(year, month, day).unwrap()
 }
 
+#[cfg(feature = "jiff")]
+fn nepal_zone() -> jiff::tz::TimeZone {
+    jiff::tz::TimeZone::get("Asia/Kathmandu").unwrap()
+}
+
 fn ymd(date: NepaliDate) -> (u16, u8, u8) {
     (date.year(), date.month_number(), date.day())
 }
@@ -1509,7 +1514,7 @@ fn cs_nepali_date_manipulation_tests__subtract_same_date_returns_zero() {
 // ---------- Core/NepaliDateRangeExtendedTests.cs ----------
 
 // C# can build an empty range (end before start); `NepaliDateRange::new` returns `None` instead
-// (D-09), so "empty range" rows use `Option<NepaliDateRange>`, as C# null maps to `None`.
+// (D-01), so "empty range" rows use `Option<NepaliDateRange>`, as C# null maps to `None`.
 
 fn empty() -> Option<NepaliDateRange> {
     NepaliDateRange::new(bs(2080, 5, 10), bs(2080, 5, 1))
@@ -1597,25 +1602,6 @@ fn cs_nepali_date_range_extended_tests__current_calendar_year_start_is_baishakh1
     assert_eq!((start.month_number(), start.day()), (1, 1));
 }
 
-// cs:NepaliDateRangeExtendedTests.SplitByFiscalQuarter_EmptyRange_ReturnsEmptyArray D-09 no splitting; FiscalYear::quarter_range gives each quarter
-// cs:NepaliDateRangeExtendedTests.SplitByFiscalQuarter_RangeWithinOneQuarter_ReturnsSingleRange D-09 no splitting
-// cs:NepaliDateRangeExtendedTests.SplitByFiscalQuarter_RangeSpanningTwoQuarters_ReturnsTwoRanges D-09 no splitting
-// cs:NepaliDateRangeExtendedTests.SplitByFiscalQuarter_FullFiscalYear_ReturnsFourRanges D-09 no splitting
-// cs:NepaliDateRangeExtendedTests.SplitByFiscalQuarter_RangeInQ4Months_SingleRange D-09 no splitting
-// cs:NepaliDateRangeExtendedTests.DatesWithInterval_Zero_ThrowsArgumentOutOfRangeException D-09 day iterator only; days().step_by(n) does this
-// cs:NepaliDateRangeExtendedTests.DatesWithInterval_NegativeInterval_ThrowsArgumentOutOfRangeException D-09 day iterator only
-// cs:NepaliDateRangeExtendedTests.DatesWithInterval_IntervalOfOne_YieldsEveryDay D-09 day iterator only
-// cs:NepaliDateRangeExtendedTests.DatesWithInterval_IntervalOfTwo_YieldsOddDays D-09 day iterator only
-// cs:NepaliDateRangeExtendedTests.DatesWithInterval_IntervalLargerThanRange_YieldsOnlyStartDate D-09 day iterator only
-// cs:NepaliDateRangeExtendedTests.DatesWithInterval_EmptyRange_YieldsNothing D-09 day iterator only
-// cs:NepaliDateRangeExtendedTests.WeekendDays_IncludeSundayTrue_ReturnsBothSaturdayAndSunday D-09 no working or weekend days; filter days() by weekday
-// cs:NepaliDateRangeExtendedTests.WeekendDays_IncludeSundayFalse_ReturnsOnlySaturday D-09 no working or weekend days
-// cs:NepaliDateRangeExtendedTests.WeekendDays_RangeWithNoWeekend_ReturnsEmpty D-09 no working or weekend days
-// cs:NepaliDateRangeExtendedTests.WeekendDays_EmptyRange_ReturnsEmpty D-09 no working or weekend days
-// cs:NepaliDateRangeExtendedTests.WorkingDays_ExcludeSundayFalse_ExcludesOnlySaturday D-09 no working or weekend days
-// cs:NepaliDateRangeExtendedTests.WorkingDays_ExcludeSundayTrue_ExcludesBothSatAndSun D-09 no working or weekend days
-// cs:NepaliDateRangeExtendedTests.WorkingDays_EmptyRange_ReturnsEmpty D-09 no working or weekend days
-
 // `FromDayCount(start, n)` maps to `new(start, start + (n - 1) days)`. Zero or fewer days give an
 // end before the start, so `None` where C# throws.
 
@@ -1634,13 +1620,6 @@ fn cs_nepali_date_range_extended_tests__from_day_count_negative_days_throws_argu
     let end = start.checked_add_days(-6).unwrap();
     assert_eq!(NepaliDateRange::new(start, end), None);
 }
-
-// cs:NepaliDateRangeExtendedTests.Intersect_NonOverlappingRanges_ReturnsEmptyRange D-09 no set operations
-// cs:NepaliDateRangeExtendedTests.Intersect_AdjacentRanges_ReturnsEmptyRange D-09 no set operations
-// cs:NepaliDateRangeExtendedTests.Intersect_OneRangeFullyInsideOther_ReturnsInnerRange D-09 no set operations
-// cs:NepaliDateRangeExtendedTests.Union_LeftRangeIsEmpty_ReturnsRightRange D-09 no set operations
-// cs:NepaliDateRangeExtendedTests.Union_RightRangeIsEmpty_ReturnsLeftRange D-09 no set operations
-// cs:NepaliDateRangeExtendedTests.Union_NonOverlappingRanges_SpansEntireGap D-09 no set operations
 
 #[test]
 fn cs_nepali_date_range_extended_tests__contains_exact_start_date_returns_true() {
@@ -1667,14 +1646,6 @@ fn cs_nepali_date_range_extended_tests__contains_empty_range_contains_nothing() 
     assert!(!empty().is_some_and(|r| r.contains(bs(2080, 5, 5))));
 }
 
-// cs:NepaliDateRangeExtendedTests.IsAdjacentTo_GapBetweenRanges_ReturnsFalse D-09 no set operations
-// cs:NepaliDateRangeExtendedTests.IsAdjacentTo_OverlappingRanges_ReturnsFalse D-09 no set operations
-// cs:NepaliDateRangeExtendedTests.IsAdjacentTo_EmptyRange_ReturnsFalse D-09 no set operations
-// cs:NepaliDateRangeExtendedTests.Except_NonOverlappingExcludeRange_ReturnsOriginalRange D-09 no set operations
-// cs:NepaliDateRangeExtendedTests.Except_ExcludeRangeFullyContainsThis_ReturnsEmptyArray D-09 no set operations
-// cs:NepaliDateRangeExtendedTests.Except_ExcludeOverlapsStart_ReturnsRightPart D-09 no set operations
-// cs:NepaliDateRangeExtendedTests.Except_ExcludeOverlapsEnd_ReturnsLeftPart D-09 no set operations
-
 #[test]
 fn cs_nepali_date_range_extended_tests__get_enumerator_three_day_range_yields_exactly_three_dates()
 {
@@ -1697,11 +1668,6 @@ fn cs_nepali_date_range_extended_tests__get_enumerator_single_day_range_yields_o
     let dates: Vec<NepaliDate> = range(date, date).days().collect();
     assert_eq!(dates, [date]);
 }
-
-// cs:NepaliDateRangeExtendedTests.ToString_DefaultFormat_IsStartDashEnd D-09 the range has no text form (Debug only); format start() and end()
-// cs:NepaliDateRangeExtendedTests.ToString_EmptyRange_ReturnsEmptyRangeString D-09 no empty range and no text form
-// cs:NepaliDateRangeExtendedTests.ToString_WithDateFormat_UsesSpecifiedFormat D-09 the range has no text form
-// cs:NepaliDateRangeExtendedTests.ToString_WithDateFormat_EmptyRange_ReturnsEmptyRangeString D-09 no empty range and no text form
 
 #[test]
 fn cs_nepali_date_range_extended_tests__equals_identical_ranges_returns_true() {
@@ -1779,7 +1745,7 @@ fn cs_nepali_date_range_tests__constructor_valid_dates_creates_range() {
 
 #[test]
 fn cs_nepali_date_range_tests__constructor_end_before_start_creates_empty_range() {
-    // C# gives an empty range of length 0; the port gives no range (D-09).
+    // C# gives an empty range of length 0; the port gives no range (D-01).
     assert_eq!(NepaliDateRange::new(bs(2080, 1, 15), bs(2080, 1, 1)), None);
 }
 
@@ -1824,24 +1790,12 @@ fn cs_nepali_date_range_tests__contains_date_outside_range_returns_false() {
     assert!(!range(bs(2080, 1, 1), bs(2080, 1, 15)).contains(bs(2080, 1, 20)));
 }
 
-// cs:NepaliDateRangeTests.Contains_RangeFullyContained_ReturnsTrue D-09 contains takes a date only; no range set operations
-// cs:NepaliDateRangeTests.Overlaps_RangesOverlap_ReturnsTrue D-09 no set operations
-// cs:NepaliDateRangeTests.Overlaps_RangesDontOverlap_ReturnsFalse D-09 no set operations
-// cs:NepaliDateRangeTests.IsAdjacentTo_AdjacentRanges_ReturnsTrue D-09 no set operations
-// cs:NepaliDateRangeTests.Intersect_OverlappingRanges_ReturnsIntersection D-09 no set operations
-// cs:NepaliDateRangeTests.Union_OverlappingRanges_ReturnsUnion D-09 no set operations
-// cs:NepaliDateRangeTests.Except_RemovingRangeFromMiddle_ReturnsTwoRanges D-09 no set operations
-// cs:NepaliDateRangeTests.SplitByMonth_RangeAcrossMonths_SplitsCorrectly D-09 no splitting
-// cs:NepaliDateRangeTests.WorkingDays_ReturnsCorrectDays D-09 no working days; filter days() by weekday
-
 #[test]
 fn cs_nepali_date_range_tests__enumeration_enumerates_all_days_in_range() {
     let days: Vec<NepaliDate> = range(bs(2080, 1, 1), bs(2080, 1, 10)).days().collect();
     let expected: Vec<NepaliDate> = (1..=10).map(|d| bs(2080, 1, d)).collect();
     assert_eq!(days, expected);
 }
-
-// cs:NepaliDateRangeTests.Demo_RangeOperations D-09 demo of SplitByFiscalQuarter, WeekendDays, WorkingDays, Overlaps and Except, none of which is ported
 
 // ---------- Core/OptimizationVerificationTests.cs (Subtraction_*) ----------
 
@@ -1872,53 +1826,150 @@ fn cs_optimization_verification_tests__subtraction_cross_year_correct_days() {
 
 // ---------- Core/NepaliDateIsRelativeTests.cs ----------
 
-// `is_today()` comes with the `jiff` feature; D-14 allows the helper. `today()` is the date in
-// Nepal. Midnight may pass between two clock reads, so each test accepts the next day too.
+// The relative predicates come with the `jiff` feature and take the zone explicitly (D-14 was
+// removed). `today()` is the date in Nepal. Midnight may pass between two clock reads, so the
+// true cases accept the next day too.
 
 #[test]
 #[cfg(feature = "jiff")]
 fn cs_nepali_date_is_relative_tests__is_today_todays_date_returns_true() {
+    let tz = nepal_zone();
     let today = NepaliDate::today().unwrap();
-    assert!(today.is_today() || today.succ().unwrap().is_today());
+    assert!(today.is_today(&tz) || today.succ().unwrap().is_today(&tz));
 }
 
 #[test]
 #[cfg(feature = "jiff")]
 fn cs_nepali_date_is_relative_tests__is_today_yesterdays_date_returns_false() {
+    let tz = nepal_zone();
     let yesterday = NepaliDate::today().unwrap().checked_add_days(-1).unwrap();
-    assert!(!yesterday.is_today());
+    assert!(!yesterday.is_today(&tz));
 }
 
 #[test]
 #[cfg(feature = "jiff")]
 fn cs_nepali_date_is_relative_tests__is_today_tomorrows_date_returns_false() {
-    // Tomorrow becomes today if midnight passes between the two calls; read the clock again.
+    let tz = nepal_zone();
     let today = NepaliDate::today().unwrap();
     let tomorrow = today.checked_add_days(1).unwrap();
-    assert!(!tomorrow.is_today() || NepaliDate::today().unwrap() != today);
+    assert!(!tomorrow.is_today(&tz) || NepaliDate::today().unwrap() != today);
 }
 
 #[test]
 #[cfg(feature = "jiff")]
 fn cs_nepali_date_is_relative_tests__is_today_arbitrary_past_date_returns_false() {
-    assert!(!bs(2070, 1, 1).is_today());
+    assert!(!bs(2070, 1, 1).is_today(&nepal_zone()));
 }
 
-// Not ported (D-14): no `is_yesterday` or `is_tomorrow`; compare with `today()` and
-// `checked_add_days(±1)`.
-// cs:NepaliDateIsRelativeTests.IsYesterday_YesterdaysDate_ReturnsTrue D-14 no IsYesterday
-// cs:NepaliDateIsRelativeTests.IsYesterday_TodaysDate_ReturnsFalse D-14 no IsYesterday
-// cs:NepaliDateIsRelativeTests.IsYesterday_TomorrowsDate_ReturnsFalse D-14 no IsYesterday
-// cs:NepaliDateIsRelativeTests.IsYesterday_ArbitraryPastDate_ReturnsFalse D-14 no IsYesterday
-// cs:NepaliDateIsRelativeTests.IsTomorrow_TomorrowsDate_ReturnsTrue D-14 no IsTomorrow
-// cs:NepaliDateIsRelativeTests.IsTomorrow_TodaysDate_ReturnsFalse D-14 no IsTomorrow
-// cs:NepaliDateIsRelativeTests.IsTomorrow_YesterdaysDate_ReturnsFalse D-14 no IsTomorrow
-// cs:NepaliDateIsRelativeTests.IsTomorrow_ArbitraryPastDate_ReturnsFalse D-14 no IsTomorrow
-// cs:NepaliDateIsRelativeTests.Today_OnlyIsToday_IsTrue D-14 no IsYesterday or IsTomorrow
-// cs:NepaliDateIsRelativeTests.Yesterday_OnlyIsYesterday_IsTrue D-14 no IsYesterday or IsTomorrow
-// cs:NepaliDateIsRelativeTests.Tomorrow_OnlyIsTomorrow_IsTrue D-14 no IsYesterday or IsTomorrow
-// cs:NepaliDateIsRelativeTests.TwoDaysAhead_NoneAreTrue D-14 no IsYesterday or IsTomorrow
-// cs:NepaliDateIsRelativeTests.TwoDaysBehind_NoneAreTrue D-14 no IsYesterday or IsTomorrow
+#[test]
+#[cfg(feature = "jiff")]
+fn cs_nepali_date_is_relative_tests__is_yesterday_yesterdays_date_returns_true() {
+    let tz = nepal_zone();
+    let today = NepaliDate::today().unwrap();
+    let yesterday = today.checked_add_days(-1).unwrap();
+    assert!(yesterday.is_yesterday(&tz) || NepaliDate::today().unwrap() != today);
+}
+
+#[test]
+#[cfg(feature = "jiff")]
+fn cs_nepali_date_is_relative_tests__is_yesterday_todays_date_returns_false() {
+    assert!(!NepaliDate::today().unwrap().is_yesterday(&nepal_zone()));
+}
+
+#[test]
+#[cfg(feature = "jiff")]
+fn cs_nepali_date_is_relative_tests__is_yesterday_tomorrows_date_returns_false() {
+    let today = NepaliDate::today().unwrap();
+    assert!(
+        !today
+            .checked_add_days(1)
+            .unwrap()
+            .is_yesterday(&nepal_zone())
+    );
+}
+
+#[test]
+#[cfg(feature = "jiff")]
+fn cs_nepali_date_is_relative_tests__is_yesterday_arbitrary_past_date_returns_false() {
+    assert!(!bs(2070, 1, 1).is_yesterday(&nepal_zone()));
+}
+
+#[test]
+#[cfg(feature = "jiff")]
+fn cs_nepali_date_is_relative_tests__is_tomorrow_tomorrows_date_returns_true() {
+    let tz = nepal_zone();
+    let today = NepaliDate::today().unwrap();
+    let tomorrow = today.checked_add_days(1).unwrap();
+    assert!(tomorrow.is_tomorrow(&tz) || NepaliDate::today().unwrap() != today);
+}
+
+#[test]
+#[cfg(feature = "jiff")]
+fn cs_nepali_date_is_relative_tests__is_tomorrow_todays_date_returns_false() {
+    assert!(!NepaliDate::today().unwrap().is_tomorrow(&nepal_zone()));
+}
+
+#[test]
+#[cfg(feature = "jiff")]
+fn cs_nepali_date_is_relative_tests__is_tomorrow_yesterdays_date_returns_false() {
+    let today = NepaliDate::today().unwrap();
+    assert!(
+        !today
+            .checked_add_days(-1)
+            .unwrap()
+            .is_tomorrow(&nepal_zone())
+    );
+}
+
+#[test]
+#[cfg(feature = "jiff")]
+fn cs_nepali_date_is_relative_tests__is_tomorrow_arbitrary_past_date_returns_false() {
+    assert!(!bs(2070, 1, 1).is_tomorrow(&nepal_zone()));
+}
+
+#[test]
+#[cfg(feature = "jiff")]
+fn cs_nepali_date_is_relative_tests__today_only_is_today_is_true() {
+    let tz = nepal_zone();
+    let today = NepaliDate::today().unwrap();
+    assert!(today.is_today(&tz) && !today.is_yesterday(&tz) && !today.is_tomorrow(&tz));
+}
+
+#[test]
+#[cfg(feature = "jiff")]
+fn cs_nepali_date_is_relative_tests__yesterday_only_is_yesterday_is_true() {
+    let tz = nepal_zone();
+    let today = NepaliDate::today().unwrap();
+    let yesterday = today.checked_add_days(-1).unwrap();
+    assert!(yesterday.is_yesterday(&tz) || NepaliDate::today().unwrap() != today);
+    assert!(!yesterday.is_today(&tz) && !yesterday.is_tomorrow(&tz));
+}
+
+#[test]
+#[cfg(feature = "jiff")]
+fn cs_nepali_date_is_relative_tests__tomorrow_only_is_tomorrow_is_true() {
+    let tz = nepal_zone();
+    let today = NepaliDate::today().unwrap();
+    let tomorrow = today.checked_add_days(1).unwrap();
+    assert!(tomorrow.is_tomorrow(&tz) || NepaliDate::today().unwrap() != today);
+    assert!(!tomorrow.is_today(&tz) && !tomorrow.is_yesterday(&tz));
+}
+
+#[test]
+#[cfg(feature = "jiff")]
+fn cs_nepali_date_is_relative_tests__two_days_ahead_none_are_true() {
+    let tz = nepal_zone();
+    let date = NepaliDate::today().unwrap().checked_add_days(2).unwrap();
+    assert!(!date.is_today(&tz) && !date.is_yesterday(&tz) && !date.is_tomorrow(&tz));
+}
+
+#[test]
+#[cfg(feature = "jiff")]
+fn cs_nepali_date_is_relative_tests__two_days_behind_none_are_true() {
+    let tz = nepal_zone();
+    let date = NepaliDate::today().unwrap().checked_add_days(-2).unwrap();
+    assert!(!date.is_today(&tz) && !date.is_yesterday(&tz) && !date.is_tomorrow(&tz));
+}
 
 // ======================================================================================
 // Formatting and parsing.
@@ -2905,4 +2956,281 @@ fn cs_string_extensions_tests__try_to_nepali_date_valid_date_string_returns_true
 #[test]
 fn cs_string_extensions_tests__try_to_nepali_date_invalid_date_string_returns_false() {
     assert!(NepaliDate::parse_lenient("not a date").is_err());
+}
+
+// ---------- Range operations (API v1) ----------
+
+// A port has no empty range, so the C# rows that construct or expect one are covered by D-01.
+// cs:NepaliDateRangeExtendedTests.SplitByFiscalQuarter_EmptyRange_ReturnsEmptyArray D-01 no empty range
+// cs:NepaliDateRangeExtendedTests.DatesWithInterval_NegativeInterval_ThrowsArgumentOutOfRangeException D-01 an interval is an unsigned integer
+// cs:NepaliDateRangeExtendedTests.DatesWithInterval_EmptyRange_YieldsNothing D-01 no empty range
+// cs:NepaliDateRangeExtendedTests.WeekendDays_EmptyRange_ReturnsEmpty D-01 no empty range
+// cs:NepaliDateRangeExtendedTests.WorkingDays_EmptyRange_ReturnsEmpty D-01 no empty range
+// cs:NepaliDateRangeExtendedTests.Intersect_NonOverlappingRanges_ReturnsEmptyRange D-01 intersect returns None
+// cs:NepaliDateRangeExtendedTests.Intersect_AdjacentRanges_ReturnsEmptyRange D-01 intersect returns None
+// cs:NepaliDateRangeExtendedTests.Union_LeftRangeIsEmpty_ReturnsRightRange D-01 no empty range
+// cs:NepaliDateRangeExtendedTests.Union_RightRangeIsEmpty_ReturnsLeftRange D-01 no empty range
+// cs:NepaliDateRangeExtendedTests.IsAdjacentTo_EmptyRange_ReturnsFalse D-01 no empty range
+// cs:NepaliDateRangeExtendedTests.ToString_EmptyRange_ReturnsEmptyRangeString D-01 no empty range
+// cs:NepaliDateRangeExtendedTests.ToString_WithDateFormat_EmptyRange_ReturnsEmptyRangeString D-01 no empty range
+
+#[test]
+fn cs_nepali_date_range_extended_tests__split_by_fiscal_quarter_range_within_one_quarter_returns_single_range()
+ {
+    let r = range(bs(2081, 4, 10), bs(2081, 4, 20));
+    assert_eq!(r.split_by_fiscal_quarter(), vec![r]);
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__split_by_fiscal_quarter_range_spanning_two_quarters_returns_two_ranges()
+ {
+    let r = range(bs(2081, 3, 30), bs(2081, 4, 2));
+    let pieces = r.split_by_fiscal_quarter();
+    assert_eq!(pieces.len(), 2);
+    assert_eq!(pieces[0].end(), bs(2081, 3, 31));
+    assert_eq!(pieces[1].start(), bs(2081, 4, 1));
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__split_by_fiscal_quarter_full_fiscal_year_returns_four_ranges()
+ {
+    let r = FiscalYear::new(2080).range().unwrap();
+    assert_eq!(r.split_by_fiscal_quarter().len(), 4);
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__split_by_fiscal_quarter_range_in_q4_months_single_range() {
+    let r = range(bs(2081, 1, 10), bs(2081, 2, 10));
+    assert_eq!(r.split_by_fiscal_quarter(), vec![r]);
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__dates_with_interval_zero_throws_argument_out_of_range_exception()
+ {
+    assert!(
+        range(bs(2081, 4, 10), bs(2081, 4, 20))
+            .dates_with_interval(0)
+            .is_err()
+    );
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__dates_with_interval_interval_of_one_yields_every_day() {
+    let r = range(bs(2081, 4, 10), bs(2081, 4, 12));
+    assert_eq!(r.dates_with_interval(1).unwrap().count(), 3);
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__dates_with_interval_interval_of_two_yields_odd_days() {
+    let r = range(bs(2081, 4, 10), bs(2081, 4, 20));
+    let days: Vec<NepaliDate> = r.dates_with_interval(2).unwrap().collect();
+    assert_eq!(days.len(), 6);
+    assert_eq!(days[1], bs(2081, 4, 12));
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__dates_with_interval_interval_larger_than_range_yields_only_start_date()
+ {
+    let r = range(bs(2081, 4, 10), bs(2081, 4, 20));
+    assert_eq!(r.dates_with_interval(100).unwrap().count(), 1);
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__weekend_days_include_sunday_true_returns_both_saturday_and_sunday()
+ {
+    let r = range(bs(2081, 4, 13), bs(2081, 4, 21));
+    assert_eq!(r.weekend_days(true).count(), 3);
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__weekend_days_include_sunday_false_returns_only_saturday() {
+    let r = range(bs(2081, 4, 13), bs(2081, 4, 21));
+    let days: Vec<NepaliDate> = r.weekend_days(false).collect();
+    assert_eq!(days, [bs(2081, 4, 19)]);
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__weekend_days_range_with_no_weekend_returns_empty() {
+    let r = range(bs(2081, 4, 14), bs(2081, 4, 18));
+    assert_eq!(r.weekend_days(true).count(), 0);
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__working_days_exclude_sunday_false_excludes_only_saturday() {
+    let r = range(bs(2081, 4, 13), bs(2081, 4, 21));
+    assert_eq!(r.working_days(false).count(), 8);
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__working_days_exclude_sunday_true_excludes_both_sat_and_sun()
+{
+    let r = range(bs(2081, 4, 13), bs(2081, 4, 21));
+    assert_eq!(r.working_days(true).count(), 6);
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__intersect_one_range_fully_inside_other_returns_inner_range()
+{
+    let outer = range(bs(2081, 4, 10), bs(2081, 4, 20));
+    let inner = range(bs(2081, 4, 12), bs(2081, 4, 18));
+    assert_eq!(outer.intersect(inner), Some(inner));
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__union_non_overlapping_ranges_spans_entire_gap() {
+    let a = range(bs(2081, 4, 10), bs(2081, 4, 20));
+    let b = range(bs(2081, 5, 1), bs(2081, 5, 5));
+    assert_eq!(a.union(b), range(bs(2081, 4, 10), bs(2081, 5, 5)));
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__is_adjacent_to_gap_between_ranges_returns_false() {
+    let a = range(bs(2081, 4, 10), bs(2081, 4, 20));
+    let b = range(bs(2081, 4, 22), bs(2081, 4, 25));
+    assert!(!a.is_adjacent_to(b));
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__is_adjacent_to_overlapping_ranges_returns_false() {
+    let a = range(bs(2081, 4, 10), bs(2081, 4, 20));
+    let b = range(bs(2081, 4, 15), bs(2081, 4, 25));
+    assert!(!a.is_adjacent_to(b));
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__except_non_overlapping_exclude_range_returns_original_range()
+ {
+    let r = range(bs(2081, 4, 10), bs(2081, 4, 20));
+    let other = range(bs(2081, 5, 1), bs(2081, 5, 5));
+    assert_eq!(r.except(other), vec![r]);
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__except_exclude_range_fully_contains_this_returns_empty_array()
+ {
+    let r = range(bs(2081, 4, 10), bs(2081, 4, 20));
+    let other = range(bs(2081, 4, 1), bs(2081, 4, 30));
+    assert!(r.except(other).is_empty());
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__except_exclude_overlaps_start_returns_right_part() {
+    let r = range(bs(2081, 4, 10), bs(2081, 4, 20));
+    let other = range(bs(2081, 4, 5), bs(2081, 4, 12));
+    assert_eq!(
+        r.except(other),
+        vec![range(bs(2081, 4, 13), bs(2081, 4, 20))]
+    );
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__except_exclude_overlaps_end_returns_left_part() {
+    let r = range(bs(2081, 4, 10), bs(2081, 4, 20));
+    let other = range(bs(2081, 4, 18), bs(2081, 4, 25));
+    assert_eq!(
+        r.except(other),
+        vec![range(bs(2081, 4, 10), bs(2081, 4, 17))]
+    );
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__to_string_default_format_is_start_dash_end() {
+    assert_eq!(
+        range(bs(2081, 4, 10), bs(2081, 4, 20)).to_string(),
+        "2081/04/10 - 2081/04/20"
+    );
+}
+
+#[test]
+fn cs_nepali_date_range_extended_tests__to_string_with_date_format_uses_specified_format() {
+    let text = range(bs(2081, 4, 10), bs(2081, 4, 20))
+        .to_string_with(DateOrder::Dmy, Separator::Dash, Lang::En)
+        .to_string();
+    assert_eq!(text, "10-04-2081 - 20-04-2081");
+}
+
+#[test]
+fn cs_nepali_date_range_tests__contains_range_fully_contained_returns_true() {
+    let outer = range(bs(2081, 4, 10), bs(2081, 4, 20));
+    assert!(outer.contains_range(range(bs(2081, 4, 12), bs(2081, 4, 18))));
+}
+
+#[test]
+fn cs_nepali_date_range_tests__overlaps_ranges_overlap_returns_true() {
+    let a = range(bs(2081, 4, 10), bs(2081, 4, 20));
+    let b = range(bs(2081, 4, 15), bs(2081, 4, 25));
+    assert!(a.overlaps(b));
+}
+
+#[test]
+fn cs_nepali_date_range_tests__overlaps_ranges_dont_overlap_returns_false() {
+    let a = range(bs(2081, 4, 10), bs(2081, 4, 20));
+    let b = range(bs(2081, 4, 21), bs(2081, 4, 25));
+    assert!(!a.overlaps(b));
+}
+
+#[test]
+fn cs_nepali_date_range_tests__is_adjacent_to_adjacent_ranges_returns_true() {
+    let a = range(bs(2081, 4, 10), bs(2081, 4, 20));
+    let b = range(bs(2081, 4, 21), bs(2081, 4, 25));
+    assert!(a.is_adjacent_to(b));
+}
+
+#[test]
+fn cs_nepali_date_range_tests__intersect_overlapping_ranges_returns_intersection() {
+    let a = range(bs(2081, 4, 10), bs(2081, 4, 20));
+    let b = range(bs(2081, 4, 15), bs(2081, 4, 25));
+    assert_eq!(
+        a.intersect(b),
+        Some(range(bs(2081, 4, 15), bs(2081, 4, 20)))
+    );
+}
+
+#[test]
+fn cs_nepali_date_range_tests__union_overlapping_ranges_returns_union() {
+    let a = range(bs(2081, 4, 10), bs(2081, 4, 20));
+    let b = range(bs(2081, 4, 15), bs(2081, 4, 25));
+    assert_eq!(a.union(b), range(bs(2081, 4, 10), bs(2081, 4, 25)));
+}
+
+#[test]
+fn cs_nepali_date_range_tests__except_removing_range_from_middle_returns_two_ranges() {
+    let a = range(bs(2081, 4, 10), bs(2081, 4, 20));
+    let b = range(bs(2081, 4, 13), bs(2081, 4, 17));
+    assert_eq!(
+        a.except(b),
+        vec![
+            range(bs(2081, 4, 10), bs(2081, 4, 12)),
+            range(bs(2081, 4, 18), bs(2081, 4, 20))
+        ]
+    );
+}
+
+#[test]
+fn cs_nepali_date_range_tests__split_by_month_range_across_months_splits_correctly() {
+    let r = range(bs(2081, 4, 30), bs(2081, 6, 2));
+    let pieces = r.split_by_month();
+    assert_eq!(pieces.len(), 3);
+    assert_eq!(pieces[0].end(), bs(2081, 4, 32));
+    assert_eq!(pieces[2].end(), bs(2081, 6, 2));
+}
+
+#[test]
+fn cs_nepali_date_range_tests__working_days_returns_correct_days() {
+    let r = range(bs(2081, 4, 13), bs(2081, 4, 21));
+    assert_eq!(r.working_days(false).count(), 8);
+}
+
+#[test]
+fn cs_nepali_date_range_tests__demo_range_operations() {
+    let r = range(bs(2081, 4, 10), bs(2081, 4, 20));
+    let part = range(bs(2081, 4, 15), bs(2081, 4, 25));
+    assert!(r.contains(bs(2081, 4, 15)));
+    assert!(r.overlaps(part));
+    assert_eq!(
+        r.intersect(part),
+        Some(range(bs(2081, 4, 15), bs(2081, 4, 20)))
+    );
+    assert_eq!(r.union(part), range(bs(2081, 4, 10), bs(2081, 4, 25)));
+    assert_eq!(r.split_by_month().len(), 1);
 }

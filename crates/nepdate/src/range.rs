@@ -1,8 +1,13 @@
-//! `NepaliDateRange`, an inclusive span of days, and its `Days` iterator (D-09).
+//! `NepaliDateRange`, an inclusive span of days, and its iterators (D-01, D-16).
 
+use core::cmp::{max, min};
+use core::fmt;
 use core::iter::FusedIterator;
 
-use crate::{Error, NepaliDate};
+use crate::{DateOrder, Error, Lang, NepaliDate, Separator};
+
+#[cfg(feature = "alloc")]
+use alloc::vec::Vec;
 
 /// The days from `start` to `end`, both included. Never empty: `start <= end`.
 ///
@@ -146,6 +151,331 @@ impl NepaliDateRange {
         self.start <= date && date <= self.end
     }
 
+    /// A range of one date.
+    ///
+    /// ```
+    /// use nepdate::{NepaliDate, NepaliDateRange};
+    ///
+    /// let d = NepaliDate::new(2081, 4, 15)?;
+    /// assert_eq!(NepaliDateRange::single(d), NepaliDateRange::new(d, d).unwrap());
+    /// # Ok::<(), nepdate::Error>(())
+    /// ```
+    #[must_use]
+    pub const fn single(date: NepaliDate) -> Self {
+        Self {
+            start: date,
+            end: date,
+        }
+    }
+
+    /// A range of `days` days starting at `start`; `days` must be at least 1.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::OutOfRange`] when `days` is 0 or the last day is outside the supported range.
+    ///
+    /// ```
+    /// use nepdate::{NepaliDate, NepaliDateRange};
+    ///
+    /// let start = NepaliDate::new(2081, 4, 15)?;
+    /// assert_eq!(NepaliDateRange::from_day_count(start, 5)?.end().to_string(), "2081/04/19");
+    /// assert!(NepaliDateRange::from_day_count(start, 0).is_err());
+    /// # Ok::<(), nepdate::Error>(())
+    /// ```
+    #[must_use = "the range may be out of range"]
+    pub fn from_day_count(start: NepaliDate, days: u32) -> Result<Self, Error> {
+        if days == 0 {
+            return Err(Error::OutOfRange);
+        }
+        let offset = i32::try_from(days - 1).map_err(|_| Error::OutOfRange)?;
+        Ok(Self::new_unchecked(start, start.checked_add_days(offset)?))
+    }
+
+    /// Whether this range fully contains `other`.
+    ///
+    /// ```
+    /// use nepdate::{NepaliDateRange};
+    ///
+    /// let outer = NepaliDateRange::month(2081, 4)?;
+    /// let inner = NepaliDateRange::new(
+    ///     nepdate::NepaliDate::new(2081, 4, 10)?,
+    ///     nepdate::NepaliDate::new(2081, 4, 20)?,
+    /// ).unwrap();
+    /// assert!(outer.contains_range(inner));
+    /// # Ok::<(), nepdate::Error>(())
+    /// ```
+    #[must_use]
+    pub fn contains_range(self, other: Self) -> bool {
+        self.start <= other.start && other.end <= self.end
+    }
+
+    /// Whether the two ranges share at least one date.
+    ///
+    /// ```
+    /// use nepdate::{NepaliDate, NepaliDateRange};
+    ///
+    /// let a = NepaliDateRange::month(2081, 4)?;
+    /// let b = NepaliDateRange::single(NepaliDate::new(2081, 4, 32)?);
+    /// assert!(a.overlaps(b));
+    /// # Ok::<(), nepdate::Error>(())
+    /// ```
+    #[must_use]
+    pub fn overlaps(self, other: Self) -> bool {
+        self.start <= other.end && other.start <= self.end
+    }
+
+    /// Whether one range starts the day after the other ends.
+    ///
+    /// `false` at the edges of the supported range, where the next day does not exist (D-16).
+    ///
+    /// ```
+    /// use nepdate::{NepaliDate, NepaliDateRange};
+    ///
+    /// let a = NepaliDateRange::new(
+    ///     NepaliDate::new(2081, 4, 10)?,
+    ///     NepaliDate::new(2081, 4, 20)?,
+    /// ).unwrap();
+    /// let b = NepaliDateRange::single(NepaliDate::new(2081, 4, 21)?);
+    /// assert!(a.is_adjacent_to(b));
+    /// # Ok::<(), nepdate::Error>(())
+    /// ```
+    #[must_use]
+    pub fn is_adjacent_to(self, other: Self) -> bool {
+        if let Some(next) = self.end.succ() {
+            if other.start == next {
+                return true;
+            }
+        }
+        if let Some(next) = other.end.succ() {
+            return self.start == next;
+        }
+        false
+    }
+
+    /// The dates in both ranges, or `None` when they do not overlap.
+    ///
+    /// ```
+    /// use nepdate::{NepaliDate, NepaliDateRange};
+    ///
+    /// let a = NepaliDateRange::month(2081, 4)?;
+    /// let b = NepaliDateRange::single(NepaliDate::new(2081, 4, 10)?);
+    /// assert_eq!(a.intersect(b), Some(b));
+    /// # Ok::<(), nepdate::Error>(())
+    /// ```
+    #[must_use]
+    pub fn intersect(self, other: Self) -> Option<Self> {
+        let start = max(self.start, other.start);
+        let end = min(self.end, other.end);
+        (start <= end).then_some(Self::new_unchecked(start, end))
+    }
+
+    /// The smallest range that covers both.
+    ///
+    /// ```
+    /// use nepdate::{NepaliDate, NepaliDateRange};
+    ///
+    /// let a = NepaliDateRange::month(2081, 4)?;
+    /// let b = NepaliDateRange::single(NepaliDate::new(2081, 5, 1)?);
+    /// assert_eq!(a.union(b).end(), b.end());
+    /// # Ok::<(), nepdate::Error>(())
+    /// ```
+    #[must_use]
+    pub fn union(self, other: Self) -> Self {
+        Self::new_unchecked(min(self.start, other.start), max(self.end, other.end))
+    }
+
+    #[cfg(feature = "alloc")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    /// This range with `other` removed: zero, one or two ranges.
+    ///
+    /// ```
+    /// use nepdate::{NepaliDate, NepaliDateRange};
+    ///
+    /// let r = NepaliDateRange::month(2081, 4)?;
+    /// let hole = NepaliDateRange::new(
+    ///     NepaliDate::new(2081, 4, 10)?,
+    ///     NepaliDate::new(2081, 4, 12)?,
+    /// ).unwrap();
+    /// assert_eq!(r.except(hole).len(), 2);
+    /// # Ok::<(), nepdate::Error>(())
+    /// ```
+    #[must_use]
+    pub fn except(self, other: Self) -> Vec<Self> {
+        if !self.overlaps(other) {
+            return alloc::vec![self];
+        }
+        let mut out = Vec::with_capacity(2);
+        if self.start < other.start {
+            if let Some(end) = other.start.pred() {
+                out.push(Self::new_unchecked(self.start, end));
+            }
+        }
+        if other.end < self.end {
+            if let Some(start) = other.end.succ() {
+                out.push(Self::new_unchecked(start, self.end));
+            }
+        }
+        out
+    }
+
+    #[cfg(feature = "alloc")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    /// One range per BS month touched, clipped at the range ends.
+    ///
+    /// ```
+    /// use nepdate::NepaliDateRange;
+    ///
+    /// let r = NepaliDateRange::new(
+    ///     nepdate::NepaliDate::new(2081, 4, 30)?,
+    ///     nepdate::NepaliDate::new(2081, 6, 2)?,
+    /// ).unwrap();
+    /// assert_eq!(r.split_by_month().len(), 3);
+    /// # Ok::<(), nepdate::Error>(())
+    /// ```
+    #[must_use]
+    pub fn split_by_month(self) -> Vec<Self> {
+        let mut out = Vec::new();
+        let mut year = self.start.year();
+        let mut month = self.start.month_number();
+        // Both values are in the supported range because the loop stops at `self.end`.
+        while let Ok(first) = NepaliDate::new(year, month, 1) {
+            let last = first.last_day_of_month();
+            out.push(Self::new_unchecked(
+                max(self.start, first),
+                min(self.end, last),
+            ));
+            if last >= self.end || (year == 2199 && month == 12) {
+                break;
+            }
+            if month == 12 {
+                year += 1;
+                month = 1;
+            } else {
+                month += 1;
+            }
+        }
+        out
+    }
+
+    #[cfg(feature = "alloc")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    /// One range per fiscal quarter touched, clipped at the range ends.
+    ///
+    /// ```
+    /// use nepdate::NepaliDateRange;
+    ///
+    /// let r = NepaliDateRange::new(
+    ///     nepdate::NepaliDate::new(2081, 3, 30)?,
+    ///     nepdate::NepaliDate::new(2081, 7, 2)?,
+    /// ).unwrap();
+    /// assert_eq!(r.split_by_fiscal_quarter().len(), 3);
+    /// # Ok::<(), nepdate::Error>(())
+    /// ```
+    #[must_use]
+    pub fn split_by_fiscal_quarter(self) -> Vec<Self> {
+        let mut out = Vec::new();
+        let mut cursor = self.start;
+        loop {
+            let quarter = cursor.quarter();
+            let Ok(q) = cursor.fiscal_year().quarter_range(quarter) else {
+                out.push(Self::new_unchecked(cursor, self.end));
+                break;
+            };
+            out.push(Self::new_unchecked(
+                max(self.start, q.start),
+                min(self.end, q.end),
+            ));
+            if q.end >= self.end {
+                break;
+            }
+            match q.end.succ() {
+                Some(next) => cursor = next,
+                None => break,
+            }
+        }
+        out
+    }
+
+    /// Every `interval` days from the start, including the start.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::OutOfRange`] when `interval` is 0.
+    ///
+    /// ```
+    /// use nepdate::NepaliDateRange;
+    ///
+    /// let r = NepaliDateRange::month(2081, 4)?;
+    /// assert_eq!(r.dates_with_interval(3)?.count(), 11);
+    /// assert!(r.dates_with_interval(0).is_err());
+    /// # Ok::<(), nepdate::Error>(())
+    /// ```
+    #[must_use = "the interval may be 0"]
+    pub fn dates_with_interval(self, interval: u32) -> Result<DatesWithInterval, Error> {
+        if interval == 0 {
+            return Err(Error::OutOfRange);
+        }
+        Ok(DatesWithInterval {
+            next: Some(self.start.to_serial()),
+            end: self.end.to_serial(),
+            interval,
+        })
+    }
+
+    /// Every day except Saturday, and except Sunday when `exclude_sunday` is true.
+    ///
+    /// ```
+    /// use nepdate::NepaliDateRange;
+    ///
+    /// let r = NepaliDateRange::month(2081, 4)?;
+    /// assert!(r.working_days(false).count() < r.len() as usize);
+    /// # Ok::<(), nepdate::Error>(())
+    /// ```
+    pub fn working_days(self, exclude_sunday: bool) -> impl Iterator<Item = NepaliDate> + Clone {
+        self.days().filter(move |d| {
+            let i = d.weekday().index_from_sunday();
+            i != 6 && !(exclude_sunday && i == 0)
+        })
+    }
+
+    /// Every Saturday, and every Sunday when `include_sunday` is true.
+    ///
+    /// ```
+    /// use nepdate::NepaliDateRange;
+    ///
+    /// let r = NepaliDateRange::month(2081, 4)?;
+    /// assert!(r.weekend_days(true).count() >= r.weekend_days(false).count());
+    /// # Ok::<(), nepdate::Error>(())
+    /// ```
+    pub fn weekend_days(self, include_sunday: bool) -> impl Iterator<Item = NepaliDate> + Clone {
+        self.days().filter(move |d| {
+            let i = d.weekday().index_from_sunday();
+            i == 6 || (include_sunday && i == 0)
+        })
+    }
+
+    /// The two dates with the same short options, separated by `" - "` (NR29).
+    ///
+    /// ```
+    /// use nepdate::{DateOrder, Lang, NepaliDateRange, Separator};
+    ///
+    /// let r = NepaliDateRange::month(2081, 4)?;
+    /// assert_eq!(
+    ///     r.to_string_with(DateOrder::Dmy, Separator::Dash, Lang::En).to_string(),
+    ///     "01-04-2081 - 32-04-2081"
+    /// );
+    /// # Ok::<(), nepdate::Error>(())
+    /// ```
+    #[must_use]
+    pub const fn to_string_with(self, order: DateOrder, sep: Separator, lang: Lang) -> RangeFormat {
+        RangeFormat {
+            range: self,
+            order,
+            sep,
+            lang,
+        }
+    }
+
     /// An iterator over every day, in order. It also runs backwards (`rev`) and knows its length.
     ///
     /// ```
@@ -242,6 +572,111 @@ impl DoubleEndedIterator for Days {
 impl ExactSizeIterator for Days {}
 
 impl FusedIterator for Days {}
+
+impl fmt::Display for NepaliDateRange {
+    /// `"start - end"` in the default short form (NR28).
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        crate::format::write_once(f, |out| {
+            self.start
+                .short(DateOrder::Ymd, Separator::Slash, true, Lang::En)
+                .write_to(out)?;
+            out.write_str(" - ")?;
+            self.end
+                .short(DateOrder::Ymd, Separator::Slash, true, Lang::En)
+                .write_to(out)
+        })
+    }
+}
+
+/// A range written with the short-date options, from [`NepaliDateRange::to_string_with`].
+///
+/// ```
+/// use nepdate::{DateOrder, Lang, NepaliDateRange, Separator};
+///
+/// let r = NepaliDateRange::month(2081, 4)?;
+/// assert_eq!(
+///     r.to_string_with(DateOrder::Ymd, Separator::Dash, Lang::En).to_string(),
+///     "2081-04-01 - 2081-04-32"
+/// );
+/// # Ok::<(), nepdate::Error>(())
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub struct RangeFormat {
+    range: NepaliDateRange,
+    order: DateOrder,
+    sep: Separator,
+    lang: Lang,
+}
+
+impl RangeFormat {
+    /// Writes the two formatted dates to `out` without allocating.
+    ///
+    /// # Errors
+    ///
+    /// Whatever `out.write_str` returns.
+    pub fn write_to<W: fmt::Write + ?Sized>(&self, out: &mut W) -> fmt::Result {
+        self.range
+            .start
+            .short(self.order, self.sep, true, self.lang)
+            .write_to(out)?;
+        out.write_str(" - ")?;
+        self.range
+            .end
+            .short(self.order, self.sep, true, self.lang)
+            .write_to(out)
+    }
+}
+
+impl fmt::Display for RangeFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        crate::format::write_once(f, |out| self.write_to(out))
+    }
+}
+
+/// The dates of a range at a fixed interval, from
+/// [`NepaliDateRange::dates_with_interval`].
+///
+/// ```
+/// use nepdate::NepaliDateRange;
+///
+/// let r = NepaliDateRange::month(2081, 4)?;
+/// let days: Vec<String> = r.dates_with_interval(10)?.map(|d| d.to_string()).collect();
+/// assert_eq!(days, ["2081/04/01", "2081/04/11", "2081/04/21", "2081/04/31"]);
+/// # Ok::<(), nepdate::Error>(())
+/// ```
+#[derive(Clone, Debug)]
+pub struct DatesWithInterval {
+    next: Option<u32>,
+    end: u32,
+    interval: u32,
+}
+
+impl Iterator for DatesWithInterval {
+    type Item = NepaliDate;
+
+    fn next(&mut self) -> Option<NepaliDate> {
+        let serial = self.next?;
+        let date = NepaliDate::from_serial(serial).ok()?;
+        self.next = serial
+            .checked_add(self.interval)
+            .filter(|&next| next <= self.end);
+        Some(date)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let n = match self.next {
+            Some(serial) => {
+                usize::try_from((self.end - serial) / self.interval + 1).unwrap_or(usize::MAX)
+            }
+            None => 0,
+        };
+        (n, Some(n))
+    }
+}
+
+impl ExactSizeIterator for DatesWithInterval {}
+
+impl FusedIterator for DatesWithInterval {}
 
 #[cfg(test)]
 mod tests {
