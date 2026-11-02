@@ -35,18 +35,19 @@ fn main() -> Result<(), nepdate::Error> {
 
 It prints `Shrawan 15, 2081`.
 
-> **Status:** 0.1.0-beta.1, the first public pre-release of both crates. The API may still change
+> **Status:** 0.1.0-rc.1, a release candidate of both crates. The API may still change
 > before 0.1.0. Patro data (tithi, holidays, events) is informational, not an official calendar.
 
 ## Install
 
 ```toml
 [dependencies]
-nepdate = "=0.1.0-beta.1"
-nepdate-patro = "=0.1.0-beta.1"   # only if you need tithi, holidays or events
+nepdate = "=0.1.0-rc.1"
+nepdate-patro = "=0.1.0-rc.1"   # only if you need tithi, holidays or events
 ```
 
-Cargo never picks a pre-release for a plain `"0.1"` requirement, so the beta is pinned exactly.
+Cargo never picks a pre-release for a plain `"0.1"` requirement, so the release candidate is
+pinned exactly.
 
 The MSRV is Rust 1.85. The `std` feature is on by default; `serde`, `chrono` and `jiff` are
 optional.
