@@ -5,13 +5,13 @@ load before: 5, , 1
    Compiling anyhow v1.0.104
    Compiling memchr v2.8.3
    Compiling itoa v1.0.18
-   Compiling xtask v0.0.0 (E:\github\sanamhub\worktrees\bench-top-libs\nepdate-rust\xtask)
+   Compiling xtask v0.0.0 (xtask)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.76s
      Running `D:\devcache\cargo-target\debug\xtask.exe bench`
 $ start /b /affinity 4 /wait cargo run -p nepdate-bench --release --bin alloc
-   Compiling nepdate v0.1.0-rc.1 (E:\github\sanamhub\worktrees\bench-top-libs\nepdate-rust\crates\nepdate)
-   Compiling nepdate-patro v0.1.0-rc.1 (E:\github\sanamhub\worktrees\bench-top-libs\nepdate-rust\crates\nepdate-patro)
-   Compiling nepdate-bench v0.0.0 (E:\github\sanamhub\worktrees\bench-top-libs\nepdate-rust\benches\nepdate-bench)
+   Compiling nepdate v0.1.0-rc.1 (crates\nepdate)
+   Compiling nepdate-patro v0.1.0-rc.1 (crates\nepdate-patro)
+   Compiling nepdate-bench v0.0.0 (benches\nepdate-bench)
     Finished `release` profile [optimized] target(s) in 2.79s
      Running `D:\devcache\cargo-target\release\alloc.exe`
 B1 bs->ad: 0 calls, 0 bytes
@@ -79,7 +79,7 @@ $ start /b /affinity 4 /wait cargo bench -p nepdate-bench
    Compiling ciborium-ll v0.2.2
    Compiling ciborium v0.2.2
    Compiling criterion v0.8.2
-   Compiling nepdate-bench v0.0.0 (E:\github\sanamhub\worktrees\bench-top-libs\nepdate-rust\benches\nepdate-bench)
+   Compiling nepdate-bench v0.0.0 (benches\nepdate-bench)
     Finished `bench` profile [optimized] target(s) in 1m 43s
      Running unittests src\lib.rs (D:\devcache\cargo-target\release\deps\nepdate_bench-ebef953e5204fd77.exe)
 
