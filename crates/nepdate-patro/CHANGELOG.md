@@ -6,6 +6,8 @@ All notable changes to `nepdate-patro` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-rc.1] - 2026-11-03
+
 ### Changed
 
 - `verify-published.yml` also runs on a schedule: weekly against the newest crates.io version and
