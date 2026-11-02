@@ -1,5 +1,5 @@
 //! The 64 inputs of `shared/spec/BENCHMARK.md` §2, built once and shared by the criterion
-//! benches (`benches/compare.rs`) and the `alloc` and `agree` binaries.
+//! benches (`benches/compare.rs`) and the `alloc` binary.
 //!
 //! The 64 dates are serial `s0 + i * ((s1 - s0) / 63)` for `i` in `0..64`, where `s0` is the
 //! serial of BS 2000-01-01 and `s1` of 2090-12-30; the inputs for B7 and B8 are the same formula
@@ -72,17 +72,5 @@ impl Inputs {
             text,
             patro,
         }
-    }
-
-    /// `YYYY-MM-DD` hyphen strings, for `nepali-date-converter` (its only API).
-    #[must_use]
-    pub fn bs_hyphen(&self) -> [String; 64] {
-        self.parts.map(|(y, m, d)| format!("{y:04}-{m:02}-{d:02}"))
-    }
-
-    /// `YYYY-MM-DD` hyphen strings of the AD equivalents, for `nepali-date-converter`.
-    #[must_use]
-    pub fn ad_hyphen(&self) -> [String; 64] {
-        self.ad.map(|(y, m, d)| format!("{y:04}-{m:02}-{d:02}"))
     }
 }

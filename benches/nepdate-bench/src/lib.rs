@@ -1,9 +1,8 @@
 //! Shared pieces for the `nepdate-bench` crate: the 64 benchmark inputs of
 //! `shared/spec/BENCHMARK.md` §2 and a stack buffer for the allocation-free formatters.
 //!
-//! This crate is `publish = false`, so it and its competitor dependencies never reach a
-//! published crate (ADR-0014). `cargo xtask bench` runs its `alloc` and `agree` binaries and
-//! the `compare` criterion bench.
+//! This crate is `publish = false` and has no competitor dependencies. `cargo xtask bench` runs
+//! its `alloc` binary and the `compare` criterion bench.
 
 // The inputs are known-valid, so the harness may unwrap/expect; the libraries never do.
 #![allow(clippy::unwrap_used, clippy::expect_used)]

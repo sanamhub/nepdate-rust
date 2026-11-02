@@ -1,15 +1,14 @@
-//! `cargo xtask bench`: runs the `alloc` and `agree` binaries and the criterion bench,
-//! one at a time, each pinned to logical CPU 2 (affinity mask `0x4`, BENCHMARK §1).
+//! `cargo xtask bench`: runs the `alloc` binary and the criterion bench, one at a time, each
+//! pinned to logical CPU 2 (affinity mask `0x4`, BENCHMARK §1).
 
 use std::process::Command;
 
 use anyhow::{Result, bail};
 
-/// The three commands, in order. `cargo bench` runs criterion with the bench crate's release
+/// The two commands, in order. `cargo bench` runs criterion with the bench crate's release
 /// profile (`lto = "fat"`, `codegen-units = 1`, what ADR-0004 measured with).
-const COMMANDS: [&[&str]; 3] = [
+const COMMANDS: [&[&str]; 2] = [
     &["run", "-p", "nepdate-bench", "--release", "--bin", "alloc"],
-    &["run", "-p", "nepdate-bench", "--release", "--bin", "agree"],
     &["bench", "-p", "nepdate-bench"],
 ];
 

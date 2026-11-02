@@ -1,0 +1,194 @@
+load before: 5, , 1
+   Compiling zmij v1.0.23
+   Compiling serde_core v1.0.229
+   Compiling serde_json v1.0.154
+   Compiling anyhow v1.0.104
+   Compiling memchr v2.8.3
+   Compiling itoa v1.0.18
+   Compiling xtask v0.0.0 (E:\github\sanamhub\worktrees\bench-top-libs\nepdate-rust\xtask)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.76s
+     Running `D:\devcache\cargo-target\debug\xtask.exe bench`
+$ start /b /affinity 4 /wait cargo run -p nepdate-bench --release --bin alloc
+   Compiling nepdate v0.1.0-rc.1 (E:\github\sanamhub\worktrees\bench-top-libs\nepdate-rust\crates\nepdate)
+   Compiling nepdate-patro v0.1.0-rc.1 (E:\github\sanamhub\worktrees\bench-top-libs\nepdate-rust\crates\nepdate-patro)
+   Compiling nepdate-bench v0.0.0 (E:\github\sanamhub\worktrees\bench-top-libs\nepdate-rust\benches\nepdate-bench)
+    Finished `release` profile [optimized] target(s) in 2.79s
+     Running `D:\devcache\cargo-target\release\alloc.exe`
+B1 bs->ad: 0 calls, 0 bytes
+B2 ad->bs: 0 calls, 0 bytes
+B3 add 1000 days: 0 calls, 0 bytes
+B4 add 13 months Clamp: 0 calls, 0 bytes
+B5 long write_to: 0 calls, 0 bytes
+B5 long to_string (allocates, for comparison): 640000 calls, 35480000 bytes
+B6 strict parse: 0 calls, 0 bytes
+B7 patro info: 0 calls, 0 bytes
+B8 month grid: 0 calls, 0 bytes
+$ start /b /affinity 4 /wait cargo bench -p nepdate-bench
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.26
+   Compiling crossbeam-utils v0.8.23
+   Compiling serde_core v1.0.229
+   Compiling crossbeam-epoch v0.9.21
+   Compiling zerocopy v0.8.62
+   Compiling shlex v2.0.1
+   Compiling serde v1.0.229
+   Compiling find-msvc-tools v0.1.14
+   Compiling autocfg v1.5.1
+   Compiling zmij v1.0.23
+   Compiling crossbeam-deque v0.8.8
+   Compiling windows-link v0.2.1
+   Compiling rayon-core v1.13.0
+   Compiling winapi v0.3.9
+   Compiling windows-sys v0.61.2
+   Compiling cc v1.7.0
+   Compiling either v1.19.0
+   Compiling serde_json v1.0.154
+   Compiling num-traits v0.2.19
+   Compiling cfg-if v1.0.5
+   Compiling winapi-util v0.1.11
+   Compiling regex-syntax v0.8.11
+   Compiling clap_lex v1.1.1
+   Compiling ciborium-io v0.2.2
+   Compiling anstyle v1.0.14
+   Compiling itoa v1.0.18
+   Compiling plotters-backend v0.3.7
+   Compiling memchr v2.8.3
+   Compiling regex-automata v0.4.18
+   Compiling plotters-svg v0.3.7
+   Compiling clap_builder v4.6.7
+   Compiling same-file v1.0.6
+   Compiling itertools v0.13.0
+   Compiling cast v0.3.0
+   Compiling criterion-plot v0.8.2
+   Compiling alloca v0.4.0
+   Compiling regex v1.13.1
+   Compiling walkdir v2.5.0
+   Compiling anes v0.1.6
+   Compiling oorandom v11.1.5
+   Compiling syn v2.0.119
+   Compiling syn v3.0.6
+   Compiling page_size v0.6.0
+   Compiling plotters v0.3.7
+   Compiling rayon v1.12.0
+   Compiling serde_derive v1.0.229
+   Compiling clap v4.6.7
+   Compiling zerocopy-derive v0.8.62
+   Compiling tinytemplate v1.2.1
+   Compiling half v2.7.1
+   Compiling ciborium-ll v0.2.2
+   Compiling ciborium v0.2.2
+   Compiling criterion v0.8.2
+   Compiling nepdate-bench v0.0.0 (E:\github\sanamhub\worktrees\bench-top-libs\nepdate-rust\benches\nepdate-bench)
+    Finished `bench` profile [optimized] target(s) in 1m 43s
+     Running unittests src\lib.rs (D:\devcache\cargo-target\release\deps\nepdate_bench-ebef953e5204fd77.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\alloc.rs (D:\devcache\cargo-target\release\deps\alloc-d1da1809d2b94bbc.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running benches\compare.rs (D:\devcache\cargo-target\release\deps\compare-e07580238d4a1d5c.exe)
+Gnuplot not found, using plotters backend
+Benchmarking b1_bs_to_ad/nepdate
+Benchmarking b1_bs_to_ad/nepdate: Warming up for 3.0000 s
+Benchmarking b1_bs_to_ad/nepdate: Collecting 100 samples in estimated 5.0003 s (26M iterations)
+Benchmarking b1_bs_to_ad/nepdate: Analyzing
+b1_bs_to_ad/nepdate     time:   [188.42 ns 188.64 ns 188.87 ns]
+                        thrpt:  [338.86 Melem/s 339.28 Melem/s 339.66 Melem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+
+Benchmarking b2_ad_to_bs/nepdate
+Benchmarking b2_ad_to_bs/nepdate: Warming up for 3.0000 s
+Benchmarking b2_ad_to_bs/nepdate: Collecting 100 samples in estimated 5.0006 s (24M iterations)
+Benchmarking b2_ad_to_bs/nepdate: Analyzing
+b2_ad_to_bs/nepdate     time:   [210.70 ns 211.26 ns 211.87 ns]
+                        thrpt:  [302.08 Melem/s 302.95 Melem/s 303.75 Melem/s]
+Found 5 outliers among 100 measurements (5.00%)
+  4 (4.00%) high mild
+  1 (1.00%) high severe
+
+Benchmarking b3_add_1000_days/nepdate
+Benchmarking b3_add_1000_days/nepdate: Warming up for 3.0000 s
+Benchmarking b3_add_1000_days/nepdate: Collecting 100 samples in estimated 5.0005 s (24M iterations)
+Benchmarking b3_add_1000_days/nepdate: Analyzing
+b3_add_1000_days/nepdate
+                        time:   [206.80 ns 207.07 ns 207.36 ns]
+                        thrpt:  [308.64 Melem/s 309.08 Melem/s 309.48 Melem/s]
+Found 4 outliers among 100 measurements (4.00%)
+  1 (1.00%) low mild
+  3 (3.00%) high mild
+
+Benchmarking b4_add_13_months_clamp/nepdate
+Benchmarking b4_add_13_months_clamp/nepdate: Warming up for 3.0000 s
+Benchmarking b4_add_13_months_clamp/nepdate: Collecting 100 samples in estimated 5.0006 s (37M iterations)
+Benchmarking b4_add_13_months_clamp/nepdate: Analyzing
+b4_add_13_months_clamp/nepdate
+                        time:   [134.55 ns 134.85 ns 135.22 ns]
+                        thrpt:  [473.32 Melem/s 474.60 Melem/s 475.66 Melem/s]
+Found 8 outliers among 100 measurements (8.00%)
+  1 (1.00%) low mild
+  4 (4.00%) high mild
+  3 (3.00%) high severe
+
+Benchmarking b5_long_nepali_with_weekday/nepdate write_to
+Benchmarking b5_long_nepali_with_weekday/nepdate write_to: Warming up for 3.0000 s
+Benchmarking b5_long_nepali_with_weekday/nepdate write_to: Collecting 100 samples in estimated 5.0014 s (5.4M iterations)
+Benchmarking b5_long_nepali_with_weekday/nepdate write_to: Analyzing
+b5_long_nepali_with_weekday/nepdate write_to
+                        time:   [928.52 ns 932.34 ns 937.26 ns]
+                        thrpt:  [68.284 Melem/s 68.644 Melem/s 68.927 Melem/s]
+Found 4 outliers among 100 measurements (4.00%)
+  1 (1.00%) high mild
+  3 (3.00%) high severe
+Benchmarking b5_long_nepali_with_weekday/nepdate to_string (allocates, for comparison)
+Benchmarking b5_long_nepali_with_weekday/nepdate to_string (allocates, for comparison): Warming up for 3.0000 s
+Benchmarking b5_long_nepali_with_weekday/nepdate to_string (allocates, for comparison): Collecting 100 samples in estimated 5.0146 s (697k iterations)
+Benchmarking b5_long_nepali_with_weekday/nepdate to_string (allocates, for comparison): Analyzing
+b5_long_nepali_with_weekday/nepdate to_string (allocates, for comparison)
+                        time:   [7.1504 µs 7.1653 µs 7.1808 µs]
+                        thrpt:  [8.9127 Melem/s 8.9320 Melem/s 8.9506 Melem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+
+Benchmarking b6_strict_parse/nepdate
+Benchmarking b6_strict_parse/nepdate: Warming up for 3.0000 s
+Benchmarking b6_strict_parse/nepdate: Collecting 100 samples in estimated 5.0009 s (6.3M iterations)
+Benchmarking b6_strict_parse/nepdate: Analyzing
+b6_strict_parse/nepdate time:   [797.39 ns 801.96 ns 807.93 ns]
+                        thrpt:  [79.215 Melem/s 79.805 Melem/s 80.262 Melem/s]
+Found 11 outliers among 100 measurements (11.00%)
+  1 (1.00%) low mild
+  6 (6.00%) high mild
+  4 (4.00%) high severe
+
+Benchmarking b7_patro_info/nepdate-patro
+Benchmarking b7_patro_info/nepdate-patro: Warming up for 3.0000 s
+Benchmarking b7_patro_info/nepdate-patro: Collecting 100 samples in estimated 5.0010 s (23M iterations)
+Benchmarking b7_patro_info/nepdate-patro: Analyzing
+b7_patro_info/nepdate-patro
+                        time:   [215.28 ns 215.91 ns 216.65 ns]
+                        thrpt:  [295.41 Melem/s 296.42 Melem/s 297.29 Melem/s]
+Found 5 outliers among 100 measurements (5.00%)
+  5 (5.00%) high mild
+
+Benchmarking b8_month_grid/nepdate-patro
+Benchmarking b8_month_grid/nepdate-patro: Warming up for 3.0000 s
+Benchmarking b8_month_grid/nepdate-patro: Collecting 100 samples in estimated 5.0534 s (394k iterations)
+Benchmarking b8_month_grid/nepdate-patro: Analyzing
+b8_month_grid/nepdate-patro
+                        time:   [12.742 µs 12.760 µs 12.780 µs]
+                        thrpt:  [5.0078 Melem/s 5.0158 Melem/s 5.0228 Melem/s]
+Found 7 outliers among 100 measurements (7.00%)
+  1 (1.00%) low mild
+  4 (4.00%) high mild
+  2 (2.00%) high severe
+
+load after: , 0, 5
+exit: 0
