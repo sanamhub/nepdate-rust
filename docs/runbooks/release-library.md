@@ -31,7 +31,7 @@ That runs `release-lib.yml`:
 |---|---|
 | `preflight` | tag, `Cargo.toml` version and changelog section agree. Seconds |
 | `ci` | `cargo xtask ci` on the 3 OSes, then `cargo package -p nepdate -p nepdate-patro` |
-| `publish` | waits for the `production` approval, gets a token (trusted publishing, or `CARGO_REGISTRY_TOKEN` on the first release), `cargo publish -p nepdate`, which waits until the index serves it, then `cargo publish -p nepdate-patro`, and creates the GitHub Release with notes from both changelogs. A version with `-` becomes a GitHub pre-release |
+| `publish` | waits for the `production` approval, exchanges the OIDC token from crates.io trusted publishing, runs `cargo publish -p nepdate`, which waits until the index serves it, then `cargo publish -p nepdate-patro`, and creates the GitHub Release with notes from both changelogs. A version with `-` becomes a GitHub pre-release |
 | `verify-published` | calls `verify-published.yml`: on Linux, macOS and Windows, `scripts/verify-published.sh` builds a new project against `=X.Y.Z` of both crates from crates.io, runs the binary and compares its output and the resolved versions |
 
 `verify-published.yml` can also be started by hand with a version, to re-check a release with the
