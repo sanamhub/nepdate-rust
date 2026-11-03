@@ -16,15 +16,15 @@ crate: tithi, the Nepal public holiday flag and events for each Bikram Sambat da
 heap allocation, no `unsafe`. Every lookup is O(1) over per-day tables compiled into the crate,
 and every name is a `&'static str`.
 
-> **Status:** 0.1.0-rc.1, the first release candidate. The API may still change before 0.1.0.
+> **Status:** 0.2.0-rc.1, the release candidate. The API may still change before 0.2.0.
 > Holiday data is informational, not an official calendar.
 
 ## Quick start
 
 ```toml
 [dependencies]
-nepdate = "=0.1.0-rc.1"
-nepdate-patro = "=0.1.0-rc.1"
+nepdate = "=0.2.0-rc.1"
+nepdate-patro = "=0.2.0-rc.1"
 ```
 
 ```rust

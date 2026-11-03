@@ -6,6 +6,8 @@ All notable changes to `nepdate` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0-rc.1] - 2026-11-03
+
 ### Added
 
 - `NepaliDate::year_length`, the length of the BS year from 364 to 367 days (D-12).
