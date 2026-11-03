@@ -1,5 +1,7 @@
 # Scheduled fuzzing of the three `fuzz/` targets (ADR-0014). Not a `cargo xtask ci`
 # step: cargo-fuzz needs nightly Rust and libFuzzer, which the per-PR gate does not install.
+# The nightly is dated and forced through RUSTUP_TOOLCHAIN, because `rust-toolchain.toml` pins the
+# stable development toolchain and would otherwise be the compiler cargo-fuzz builds with.
 
 name: fuzz
 
@@ -16,6 +18,9 @@ jobs:
   fuzz:
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    env:
+      # Overrides rust-toolchain.toml; the dated pin keeps the weekly run reproducible.
+      RUSTUP_TOOLCHAIN: nightly-2026-10-19
     strategy:
       fail-fast: false
       matrix:
@@ -26,7 +31,7 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
-          toolchain: nightly
+          toolchain: nightly-2026-10-19
       # Pinned, so a new cargo-fuzz release cannot change the weekly run on its own.
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz --locked --version 0.13.2
