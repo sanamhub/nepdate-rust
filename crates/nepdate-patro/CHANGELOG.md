@@ -6,6 +6,10 @@ All notable changes to `nepdate-patro` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0-rc.1] - 2026-11-03
+
+No changes in this crate; released with `nepdate` 0.2.0-rc.1 to keep both crates on one version.
+
 ## [0.1.0-rc.1] - 2026-11-03
 
 ### Changed
