@@ -1,14 +1,14 @@
 version: 2
 updates:
-  # Minor and patch updates arrive as one PR per ecosystem; the cooldown gives a bad release a
-  # week to be pulled.
+  # Minor and patch updates arrive as one PR per ecosystem; the cooldown gives a bad release two
+  # weeks to be pulled.
   - package-ecosystem: cargo
     directory: /
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
     cooldown:
-      default-days: 7
+      default-days: 14
     groups:
       minor-and-patch:
         update-types: [minor, patch]
@@ -18,7 +18,7 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     cooldown:
-      default-days: 7
+      default-days: 14
     groups:
       minor-and-patch:
         update-types: [minor, patch]
