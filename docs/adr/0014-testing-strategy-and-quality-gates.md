@@ -4,7 +4,8 @@
 
 - **Status:** accepted
 - **Date:** 2026-09-24 (revised 2026-10-07: gates for `nepdate-patro`, hub ADR-0004; revised
-  2026-10-08: C# test catalogue, allocation, fuzz and thread-safety tests, benchmark protocol)
+  2026-10-08: C# test catalogue, allocation, fuzz and thread-safety tests, benchmark protocol;
+  revised 2026-11-03: the fuzz workflow pins a dated nightly)
 - **Approved by:** Sanam
 
 ## Context
@@ -57,7 +58,9 @@ same gates.
   to check that the normal tests don't (Miri finds undefined behaviour, which needs `unsafe`).
   If `unsafe` is ever proposed, the ADR proposing it adds a Miri job.
 - Fuzzing runs in the scheduled fuzz workflow, not per PR: it needs nightly Rust and
-  libFuzzer (Linux).
+  libFuzzer (Linux). The workflow pins `nightly-2026-10-19` and sets `RUSTUP_TOOLCHAIN` for the
+  job, because `rust-toolchain.toml` pins the stable development toolchain, which overrides the
+  action's default, and cargo-fuzz passes `-Z` flags that stable rejects.
 
 ### CI matrix
 `ubuntu-latest`, `windows-latest`, `macos-latest` × `stable`; plus MSRV on ubuntu.
