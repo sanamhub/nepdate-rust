@@ -1,8 +1,7 @@
 # One tag `vX.Y.Z` releases `nepdate` then `nepdate-patro` (ADR-0012, ADR-0002, ADR-0021).
-# preflight -> ci -> publish -> verify-published. Published by crates.io trusted publishing; the
-# first release uses a short-lived CARGO_REGISTRY_TOKEN instead, because crates.io attaches a
-# trusted publisher only to a crate that exists. The `production` environment gates `publish`
-# behind a maintainer approval. See docs/runbooks/release-library.md.
+# preflight -> ci -> publish -> verify-published. Published by crates.io trusted publishing, with
+# no registry token in the workflow. The `production` environment gates `publish` behind a
+# maintainer approval. See docs/runbooks/release-library.md.
 
 name: release-lib
 
@@ -133,28 +132,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: "1.98"
-      # First release only: crates.io cannot attach a trusted publisher to a crate that does not
-      # exist yet, so a short-lived publish-new token in the production environment is used while it
-      # is set. The runbook deletes it once trusted publishing is configured, and this fallback goes.
-      - name: Token for the first release
-        id: token
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: |
-          if [ -n "$CARGO_REGISTRY_TOKEN" ]; then
-            echo "Using CARGO_REGISTRY_TOKEN from the production environment (first release)."
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-          fi
       - id: auth
-        if: steps.token.outputs.present != 'true'
         uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
       # cargo publish waits until the index serves the version, so patro resolves its new core.
       - name: Publish nepdate
         env:
           VERSION: ${{ needs.preflight.outputs.version }}
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token || secrets.CARGO_REGISTRY_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
         run: |
           set -euo pipefail
           status="$(curl -s -o /dev/null -w '%{http_code}' -A 'nepdate-rust release-lib' "https://crates.io/api/v1/crates/nepdate/${VERSION}")"
@@ -166,7 +150,7 @@ jobs:
       - name: Publish nepdate-patro
         env:
           VERSION: ${{ needs.preflight.outputs.version }}
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token || secrets.CARGO_REGISTRY_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
         run: |
           set -euo pipefail
           status="$(curl -s -o /dev/null -w '%{http_code}' -A 'nepdate-rust release-lib' "https://crates.io/api/v1/crates/nepdate-patro/${VERSION}")"
