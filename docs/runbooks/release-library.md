@@ -51,20 +51,18 @@ If `cargo publish -p nepdate-patro` fails after `nepdate` went out, fix the caus
 
 Approve at the run's page: `publish` → *Review deployments*.
 
-### First release only (0.1.0-beta.1)
+### Trusted publishing on crates.io
 
-crates.io attaches a trusted publisher only to a crate that exists, so the first upload uses a
-token.
+crates.io attaches a trusted publisher only to a crate that exists. The 0.1.0 releases used a
+short-lived `publish-new` token for that reason. Both crates now exist, the trusted publisher is
+registered for each (owner `sanamhub`, repository `nepdate-rust`, workflow `release-lib.yml`,
+environment `production`), and the `CARGO_REGISTRY_TOKEN` secret is deleted. The workflow has no
+token fallback.
 
-1. Before tagging: on crates.io create an API token with scope `publish-new` for the crates
-   `nepdate` and `nepdate-patro`, expiry 7 days, and store it as the `CARGO_REGISTRY_TOKEN` secret
-   of the `production` environment (`gh secret set CARGO_REGISTRY_TOKEN --env production`, which
-   prompts for it). Never paste it anywhere else.
-2. Tag and approve as above. The `publish` job uses the secret while it is set.
-3. On crates.io, for **each** crate: Settings, Trusted Publishing, add owner `sanamhub`,
-   repository `nepdate-rust`, workflow `release-lib.yml`, environment `production`.
-4. Delete the `CARGO_REGISTRY_TOKEN` secret and revoke the token on crates.io. The next pull
-   request removes the token fallback from `release-lib.yml`.
+If a new crate is ever added to this repository, create a `publish-new` token for it, store it as
+`CARGO_REGISTRY_TOKEN` in the `production` environment, publish once, then register the trusted
+publisher and delete the secret again.
+
 ## After releasing
 
 1. Read the release page. Notes match the changelog.
