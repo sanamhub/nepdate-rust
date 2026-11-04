@@ -19,13 +19,14 @@ date ranges. `no_std`, no dependencies by default, no heap allocation in the cor
 Tithi, public holidays and events are in the companion crate
 [`nepdate-patro`](https://crates.io/crates/nepdate-patro), so this crate carries no patro data.
 
-> **Status:** 0.2.0-rc.1, the release candidate. The API may still change before 0.2.0.
+> **Status:** 1.0.0-rc.1, the release candidate on the 1.0 line. The API is stable from 1.0
+> (hub ADR-0009).
 
 ## Quick start
 
 ```toml
 [dependencies]
-nepdate = "=0.2.0-rc.1"
+nepdate = "=1.0.0-rc.1"
 ```
 
 ```rust

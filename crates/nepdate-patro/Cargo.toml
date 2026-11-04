@@ -1,6 +1,6 @@
 [package]
 name = "nepdate-patro"
-version = "0.2.0-rc.1"
+version = "1.0.0-rc.1"
 description = "Tithi, Nepal public holidays and events per Bikram Sambat day, for the nepdate crate"
 edition.workspace = true
 license.workspace = true
@@ -21,7 +21,7 @@ all-features = true
 
 [dependencies]
 # Same minor as this crate (hub ADR-0004 §3).
-nepdate = { path = "../nepdate", version = "=0.2.0-rc.1", default-features = false }
+nepdate = { path = "../nepdate", version = "=1.0.0-rc.1", default-features = false }
 
 [[test]]
 name = "no_alloc"
