@@ -36,15 +36,16 @@ fn main() -> Result<(), nepdate::Error> {
 
 It prints `Shrawan 15, 2081`.
 
-> **Status:** 0.2.0-rc.1, a release candidate of both crates. The API may still change
-> before 0.2.0. Patro data (tithi, holidays, events) is informational, not an official calendar.
+> **Status:** 1.0.0-rc.1, the release candidate for both crates on the 1.0 line. The API is stable
+> from 1.0 (hub ADR-0009). Patro data (tithi, holidays, events) is informational, not an official
+> calendar.
 
 ## Install
 
 ```toml
 [dependencies]
-nepdate = "=0.2.0-rc.1"
-nepdate-patro = "=0.2.0-rc.1"   # only if you need tithi, holidays or events
+nepdate = "=1.0.0-rc.1"
+nepdate-patro = "=1.0.0-rc.1"   # only if you need tithi, holidays or events
 ```
 
 Cargo never picks a pre-release for a plain `"0.2"` requirement, so the release candidate is
