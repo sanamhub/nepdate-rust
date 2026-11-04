@@ -36,9 +36,7 @@ fn main() -> Result<(), nepdate::Error> {
 
 It prints `Shrawan 15, 2081`.
 
-> **Status:** 1.0.0-rc.1, the release candidate for both crates on the 1.0 line. The API is stable
-> from 1.0 (hub ADR-0009). Patro data (tithi, holidays, events) is informational, not an official
-> calendar.
+The API is listed in [docs/API.md](https://github.com/sanamhub/nepdate-rust/blob/main/docs/API.md) and is stable from 1.0 ([ADR-0009](https://github.com/sanamhub/nepdate/blob/main/docs/adr/0009-what-1.0-promises.md)). Tithi, public holidays and events are informational, not an official calendar.
 
 ## Install
 
@@ -314,10 +312,17 @@ docs/                  API, ADRs, design notes, benchmarks and runbooks
 | The algorithm, data and conformance vectors | [shared/spec](https://github.com/sanamhub/nepdate-rust/blob/main/shared/spec/README.md) |
 | The other languages | [sanamhub/nepdate](https://github.com/sanamhub/nepdate#packages) |
 
+<!-- family:start -->
+## NepDate in other languages
+
+The same calendar, with the same answers, for [C#](https://github.com/RajuPrasai/NepDate), [TypeScript](https://github.com/sanamhub/nepdate-typescript), [Python](https://github.com/sanamhub/nepdate-python), [PHP](https://github.com/sanamhub/nepdate-php), [Java](https://github.com/sanamhub/nepdate-java), [Dart](https://github.com/sanamhub/nepdate-dart), [Kotlin](https://github.com/sanamhub/nepdate-kotlin), [Go](https://github.com/sanamhub/nepdate-go), [Swift](https://github.com/sanamhub/nepdate-swift), [C++](https://github.com/sanamhub/nepdate-cpp), [C](https://github.com/sanamhub/nepdate-c), [Ruby](https://github.com/sanamhub/nepdate-ruby), [Zig](https://github.com/sanamhub/nepdate-zig). Every library is listed at [nepdate.com](https://nepdate.com/).
+
+For people rather than code: [MitiBar](https://nepdate.com/mitibar/) puts today's date on the Windows, macOS and Linux desktop, [patro.nepdate.com](https://patro.nepdate.com/) is the calendar on the web, and NepDate for Android and iOS is coming soon.
+<!-- family:end -->
+
 ## Credits and license
 
-Calendar data and algorithm come from [NepDate](https://github.com/RajuPrasai/NepDate) by Raju
-Prasai and contributors, MIT. See [`shared/data/NOTICE`](https://github.com/sanamhub/nepdate-rust/blob/main/shared/data/NOTICE).
+Calendar data and algorithm come from [NepDate](https://github.com/RajuPrasai/NepDate), MIT. See [`shared/data/NOTICE`](https://github.com/sanamhub/nepdate-rust/blob/main/shared/data/NOTICE).
 
 This repository is MIT ([`LICENSE`](https://github.com/sanamhub/nepdate-rust/blob/main/LICENSE)). Not
 affiliated with the Government of Nepal. Holiday data is informational.
