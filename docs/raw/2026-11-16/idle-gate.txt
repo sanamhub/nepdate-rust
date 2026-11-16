@@ -1,0 +1,2 @@
+avg=8.9 max=28.7
+GATE-OK

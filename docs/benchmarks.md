@@ -5,7 +5,7 @@ B1 to B8 of [`shared/spec/BENCHMARK.md`](../shared/spec/BENCHMARK.md), measured 
 that passes [`docs/competitors.md`](competitors.md), so this run reports this port only. The C#
 column is the .NET 10 column of the hub's
 [`docs/benchmarks/dotnet.md`](https://github.com/sanamhub/nepdate/blob/main/docs/benchmarks/dotnet.md),
-measured on the same machine on 2026-11-02.
+measured on the same machine on 2026-11-16.
 
 ## Machine and versions
 
@@ -16,16 +16,17 @@ measured on the same machine on 2026-11-02.
 | OS | Windows 11 Home 10.0.26300 |
 | Power plan | Ultimate Performance |
 | Affinity | logical CPU 2 (mask `0x4`), set with `start /b /affinity 4 /wait` |
-| rustc | 1.99.0 (b940084d7 2026-09-28), windows-gnu |
-| cargo | 1.99.0 (5f94df478 2026-08-27) |
+| rustc | 1.98.1 (48a229cea 2026-09-01), windows-msvc (the `1.98` channel of `rust-toolchain.toml`) |
+| cargo | 1.98.1 (797e8a9bc 2026-08-05) |
 | criterion | 0.8.2 |
 | Competitors | none; no Rust crate passes the bar |
-| Date of run | 2026-11-02 |
+| Date of run | 2026-11-16 |
 
-The machine had the owner's normal desktop applications open. No other build, test suite or
-benchmark ran during the run. The load logger read 5 and 1 percent before the run and 0 and 5
-percent after it; one sample on each side returned no value. The process was pinned to logical CPU 2
-for the whole run.
+The machine was idle: no other build, test suite or benchmark ran. The idle gate (30 one-second
+samples before the run) read 8.9 percent on average with a peak of 28.7. During the run, 111
+one-second samples averaged 13.6 percent with a peak of 22.2. The process was pinned to logical CPU 2
+for the whole run. The samples are in [`raw/2026-11-16/cpu-samples.txt`](raw/2026-11-16/cpu-samples.txt)
+and [`raw/2026-11-16/idle-gate.txt`](raw/2026-11-16/idle-gate.txt).
 
 ## Command
 
@@ -41,8 +42,9 @@ criterion bench. The bench crate uses the workspace release profile (`lto = "fat
 measurement 5 s, 100 samples and `Throughput::Elements(64)`, so the report is time per single
 operation (iteration time / 64).
 
-The console log is [`raw/2026-11-02/bench.log`](raw/2026-11-02/bench.log). The criterion estimates
-are under `raw/2026-11-02/criterion/`.
+The console log is [`raw/2026-11-16/bench.log`](raw/2026-11-16/bench.log). The criterion estimates
+are under `raw/2026-11-16/criterion/`. The workspace was built before the run, so compiling did not
+overlap the measurement.
 
 ## Results
 
@@ -53,18 +55,18 @@ which allocates.
 
 | ID | Operation | nepdate ns/op | std ns | bytes/op | C# .NET 10 ns/op | C# bytes/op | ADR-0004 target ns/op |
 |---|---|---:|---:|---:|---:|---:|---:|
-| B1 | BS to AD | 2.95 | 0.02 | 0 | 13.50 | 0 | ≤ 8 |
-| B2 | AD to BS | 3.31 | 0.03 | 0 | 20.10 | 0 | ≤ 8 |
-| B3 | add 1000 days | 3.24 | 0.02 | 0 | 19.05 | 0 | ≤ 8 |
-| B4 | add 13 months, Clamp | 2.11 | 0.03 | 0 | 20.19 | 0 | ≤ 8 |
-| B5 | long Nepali date with weekday, `write_to` | 14.67 | 0.98 | 0 | 150.41 | 435 | ≤ 40 |
-| B5 | long Nepali date with weekday, `to_string` (allocates, for comparison) | 112.06 | 1.07 | 56 | 150.41 | 435 | - |
-| B6 | strict parse `YYYY/MM/DD` | 12.60 | 0.62 | 0 | 22.42 | 0 | ≤ 20 |
-| B7 | patro info of a day | 3.38 | 0.05 | 0 | 48.21 | 51 | ≤ 10 |
-| B8 | patro month grid | 199.49 | 1.50 | 0 | 3,112.76 | 1,429 | ≤ 250 |
+| B1 | BS to AD | 2.98 | 0.02 | 0 | 13.27 | 0 | ≤ 8 |
+| B2 | AD to BS | 3.31 | 0.03 | 0 | 18.70 | 0 | ≤ 8 |
+| B3 | add 1000 days | 3.25 | 0.03 | 0 | 20.06 | 0 | ≤ 8 |
+| B4 | add 13 months, Clamp | 2.11 | 0.01 | 0 | 19.30 | 0 | ≤ 8 |
+| B5 | long Nepali date with weekday, `write_to` | 14.92 | 0.08 | 0 | 139.04 | 435 | ≤ 40 |
+| B5 | long Nepali date with weekday, `to_string` (allocates, for comparison) | 108.46 | 1.34 | 56 | 139.04 | 435 | - |
+| B6 | strict parse `YYYY/MM/DD` | 12.84 | 0.20 | 0 | 21.13 | 0 | ≤ 20 |
+| B7 | patro info of a day | 3.46 | 0.03 | 0 | 48.63 | 51 | ≤ 10 |
+| B8 | patro month grid | 204.65 | 1.71 | 0 | 3,274.50 | 1,429 | ≤ 250 |
 
 Every B-row beats the C# column and allocates 0 bytes. All ADR-0004 targets are met, including B8
-at 199.49 ns against 250 ns and B6 at 12.60 ns against 20 ns.
+at 204.65 ns against 250 ns and B6 at 12.84 ns against 20 ns.
 
 ## Notes
 
