@@ -305,7 +305,10 @@ mod tests {
 
     #[test]
     fn ready_pair_passes() {
-        assert!(check(&pair("0.1.0", "0.1.0", "~0.1.0", CHANGELOG), "0.1.0").is_empty());
+        assert_eq!(
+            check(&pair("0.1.0", "0.1.0", "~0.1.0", CHANGELOG), "0.1.0"),
+            Vec::<String>::new()
+        );
     }
 
     #[test]
@@ -384,7 +387,7 @@ mod tests {
             "=0.1.0-beta.1",
             BETA_CHANGELOG,
         );
-        assert!(check(&pair, "0.1.0-beta.1").is_empty());
+        assert_eq!(check(&pair, "0.1.0-beta.1"), Vec::<String>::new());
     }
 
     #[test]
