@@ -107,7 +107,7 @@ pub fn coverage() -> NepaliDateRange {
 /// assert_eq!(holidays.next().map(|d| d.to_string()).as_deref(), Some("2077/01/01"));
 /// assert_eq!(holidays.next_back().map(|d| d.to_string()).as_deref(), Some("2084/08/18"));
 /// ```
-#[must_use]
+#[must_use = "the iterator does nothing until consumed"]
 pub fn public_holidays() -> impl DoubleEndedIterator<Item = NepaliDate> + ExactSizeIterator {
     PublicHolidays {
         offsets: HOLIDAY_OFFSETS.iter(),

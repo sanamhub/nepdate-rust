@@ -334,8 +334,7 @@ fn cs_calendar_data_tests__all_days_in_scraped_range_no_exception_on_property_ac
         let info = info(date);
         let _ = info.tithi().map(|t| (t.name(Lang::Ne), t.name(Lang::En)));
         let _ = info.is_public_holiday();
-        info.events()
-            .for_each(|e| assert!(!e.name(Lang::En).is_empty()));
+        info.events().for_each(|e| assert_ne!(e.name(Lang::En), ""));
     }
 }
 

@@ -18,7 +18,7 @@ The libraries keep to the API in [`docs/API.md`](docs/API.md) and the decisions 
 
 ## Setup
 
-Rust 1.98 is pinned in [`rust-toolchain.toml`](rust-toolchain.toml); rustup installs it and the
+Rust 1.100 is pinned in [`rust-toolchain.toml`](rust-toolchain.toml); rustup installs it and the
 needed components and targets on first use. Install nextest, which `cargo xtask ci` runs:
 
 ```bash

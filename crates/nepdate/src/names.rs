@@ -358,7 +358,7 @@ mod tests {
     use super::*;
 
     fn nepali_ok(s: &str) {
-        assert!(!s.is_empty());
+        assert_ne!(s, "");
         assert!(!s.bytes().any(|b| b.is_ascii()), "{s} contains ASCII");
     }
 

@@ -3110,7 +3110,7 @@ fn cs_nepali_date_range_extended_tests__except_exclude_range_fully_contains_this
  {
     let r = range(bs(2081, 4, 10), bs(2081, 4, 20));
     let other = range(bs(2081, 4, 1), bs(2081, 4, 30));
-    assert!(r.except(other).is_empty());
+    assert_eq!(r.except(other), vec![]);
 }
 
 #[test]
