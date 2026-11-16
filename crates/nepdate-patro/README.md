@@ -59,9 +59,9 @@ announces late are missing until the next data update.
 ## Versions
 
 This crate's version always equals `nepdate`'s. Both are released together from one tag, and
-`nepdate-patro` X.Y.Z depends on `nepdate` `~X.Y.0`. A pre-release such as 0.1.0-beta.1 depends
-on exactly that `nepdate` pre-release (`=0.1.0-beta.1`), so one beta of this crate never runs
-with another beta of the core. Use the same version for both.
+`nepdate-patro` X.Y.Z depends on `nepdate` `~X.Y.0`. A pre-release such as 1.0.0-rc.1 depends
+on exactly that `nepdate` pre-release (`=1.0.0-rc.1`), so one pre-release of this crate never
+runs with another pre-release of the core. Use the same version for both.
 
 ## Data, provenance and license
 
