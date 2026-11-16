@@ -1,0 +1,125 @@
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running `<cache>\cargo-target\debug\xtask.exe bench`
+$ start /b /affinity 4 /wait cargo run -p nepdate-bench --release --bin alloc
+    Finished `release` profile [optimized] target(s) in 0.03s
+     Running `<cache>\cargo-target\release\alloc.exe`
+B1 bs->ad: 0 calls, 0 bytes
+B2 ad->bs: 0 calls, 0 bytes
+B3 add 1000 days: 0 calls, 0 bytes
+B4 add 13 months Clamp: 0 calls, 0 bytes
+B5 long write_to: 0 calls, 0 bytes
+B5 long to_string (allocates, for comparison): 640000 calls, 35480000 bytes
+B6 strict parse: 0 calls, 0 bytes
+B7 patro info: 0 calls, 0 bytes
+B8 month grid: 0 calls, 0 bytes
+$ start /b /affinity 4 /wait cargo bench -p nepdate-bench
+    Finished `bench` profile [optimized] target(s) in 0.08s
+     Running unittests src\lib.rs (<cache>\cargo-target\release\deps\nepdate_bench-754f952bc747118a.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\alloc.rs (<cache>\cargo-target\release\deps\alloc-92c11e818c29237a.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running benches\compare.rs (<cache>\cargo-target\release\deps\compare-df8f0d655f640657.exe)
+Gnuplot not found, using plotters backend
+Benchmarking b1_bs_to_ad/nepdate
+Benchmarking b1_bs_to_ad/nepdate: Warming up for 3.0000 s
+Benchmarking b1_bs_to_ad/nepdate: Collecting 100 samples in estimated 5.0007 s (26M iterations)
+Benchmarking b1_bs_to_ad/nepdate: Analyzing
+b1_bs_to_ad/nepdate     time:   [190.03 ns 190.25 ns 190.50 ns]
+                        thrpt:  [335.97 Melem/s 336.39 Melem/s 336.79 Melem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  1 (1.00%) high mild
+  1 (1.00%) high severe
+
+Benchmarking b2_ad_to_bs/nepdate
+Benchmarking b2_ad_to_bs/nepdate: Warming up for 3.0000 s
+Benchmarking b2_ad_to_bs/nepdate: Collecting 100 samples in estimated 5.0005 s (24M iterations)
+Benchmarking b2_ad_to_bs/nepdate: Analyzing
+b2_ad_to_bs/nepdate     time:   [210.84 ns 211.30 ns 211.87 ns]
+                        thrpt:  [302.08 Melem/s 302.88 Melem/s 303.54 Melem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+
+Benchmarking b3_add_1000_days/nepdate
+Benchmarking b3_add_1000_days/nepdate: Warming up for 3.0000 s
+Benchmarking b3_add_1000_days/nepdate: Collecting 100 samples in estimated 5.0010 s (23M iterations)
+Benchmarking b3_add_1000_days/nepdate: Analyzing
+b3_add_1000_days/nepdate
+                        time:   [207.35 ns 207.76 ns 208.23 ns]
+                        thrpt:  [307.36 Melem/s 308.05 Melem/s 308.66 Melem/s]
+Found 15 outliers among 100 measurements (15.00%)
+  1 (1.00%) low mild
+  11 (11.00%) high mild
+  3 (3.00%) high severe
+
+Benchmarking b4_add_13_months_clamp/nepdate
+Benchmarking b4_add_13_months_clamp/nepdate: Warming up for 3.0000 s
+Benchmarking b4_add_13_months_clamp/nepdate: Collecting 100 samples in estimated 5.0002 s (37M iterations)
+Benchmarking b4_add_13_months_clamp/nepdate: Analyzing
+b4_add_13_months_clamp/nepdate
+                        time:   [134.75 ns 134.90 ns 135.07 ns]
+                        thrpt:  [473.84 Melem/s 474.43 Melem/s 474.95 Melem/s]
+Found 4 outliers among 100 measurements (4.00%)
+  4 (4.00%) high mild
+
+Benchmarking b5_long_nepali_with_weekday/nepdate write_to
+Benchmarking b5_long_nepali_with_weekday/nepdate write_to: Warming up for 3.0000 s
+Benchmarking b5_long_nepali_with_weekday/nepdate write_to: Collecting 100 samples in estimated 5.0013 s (5.2M iterations)
+Benchmarking b5_long_nepali_with_weekday/nepdate write_to: Analyzing
+b5_long_nepali_with_weekday/nepdate write_to
+                        time:   [953.41 ns 954.30 ns 955.29 ns]
+                        thrpt:  [66.995 Melem/s 67.065 Melem/s 67.128 Melem/s]
+Found 5 outliers among 100 measurements (5.00%)
+  1 (1.00%) low mild
+  3 (3.00%) high mild
+  1 (1.00%) high severe
+Benchmarking b5_long_nepali_with_weekday/nepdate to_string (allocates, for comparison)
+Benchmarking b5_long_nepali_with_weekday/nepdate to_string (allocates, for comparison): Warming up for 3.0000 s
+Benchmarking b5_long_nepali_with_weekday/nepdate to_string (allocates, for comparison): Collecting 100 samples in estimated 5.0095 s (722k iterations)
+Benchmarking b5_long_nepali_with_weekday/nepdate to_string (allocates, for comparison): Analyzing
+b5_long_nepali_with_weekday/nepdate to_string (allocates, for comparison)
+                        time:   [6.9115 µs 6.9345 µs 6.9622 µs]
+                        thrpt:  [9.1925 Melem/s 9.2292 Melem/s 9.2599 Melem/s]
+Found 5 outliers among 100 measurements (5.00%)
+  2 (2.00%) high mild
+  3 (3.00%) high severe
+
+Benchmarking b6_strict_parse/nepdate
+Benchmarking b6_strict_parse/nepdate: Warming up for 3.0000 s
+Benchmarking b6_strict_parse/nepdate: Collecting 100 samples in estimated 5.0033 s (6.1M iterations)
+Benchmarking b6_strict_parse/nepdate: Analyzing
+b6_strict_parse/nepdate time:   [820.25 ns 821.87 ns 823.35 ns]
+                        thrpt:  [77.731 Melem/s 77.871 Melem/s 78.025 Melem/s]
+Found 6 outliers among 100 measurements (6.00%)
+  1 (1.00%) low severe
+  1 (1.00%) low mild
+  3 (3.00%) high mild
+  1 (1.00%) high severe
+
+Benchmarking b7_patro_info/nepdate-patro
+Benchmarking b7_patro_info/nepdate-patro: Warming up for 3.0000 s
+Benchmarking b7_patro_info/nepdate-patro: Collecting 100 samples in estimated 5.0000 s (23M iterations)
+Benchmarking b7_patro_info/nepdate-patro: Analyzing
+b7_patro_info/nepdate-patro
+                        time:   [220.64 ns 220.98 ns 221.34 ns]
+                        thrpt:  [289.15 Melem/s 289.62 Melem/s 290.06 Melem/s]
+
+Benchmarking b8_month_grid/nepdate-patro
+Benchmarking b8_month_grid/nepdate-patro: Warming up for 3.0000 s
+Benchmarking b8_month_grid/nepdate-patro: Collecting 100 samples in estimated 5.0287 s (384k iterations)
+Benchmarking b8_month_grid/nepdate-patro: Analyzing
+b8_month_grid/nepdate-patro
+                        time:   [13.097 µs 13.113 µs 13.132 µs]
+                        thrpt:  [4.8737 Melem/s 4.8805 Melem/s 4.8868 Melem/s]
+Found 4 outliers among 100 measurements (4.00%)
+  1 (1.00%) low mild
+  3 (3.00%) high mild
+
+finished
