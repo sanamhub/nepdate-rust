@@ -22,14 +22,14 @@ default = ["std"]
 std = ["alloc"]
 alloc = []
 serde = ["dep:serde"]                          # ADR-0005
-jiff = ["dep:jiff", "std"]                     # ADR-0011: conversions, today(), is_today()
+jiff = ["dep:jiff", "std"]                     # ADR-0011, ADR-0023 (jiff 1.x): conversions, today(), is_today()
 chrono = ["dep:chrono"]                        # ADR-0005: conversions only
 
 [dependencies]
 serde = { version = "1", default-features = false, optional = true }
 # Not `tz-system`: today asks for Asia/Kathmandu by name, never the system zone, and that
 # feature's Windows import library needs an assembler the windows-gnu dev host doesn't have.
-jiff = { version = "0.2", default-features = false, features = ["std", "tzdb-bundle-platform", "tzdb-zoneinfo", "tzdb-concatenated"], optional = true }
+jiff = { version = "1", default-features = false, features = ["std", "tzdb-bundle-platform", "tzdb-zoneinfo", "tzdb-concatenated"], optional = true }
 chrono = { version = "0.4", default-features = false, optional = true }
 
 [[example]]

@@ -80,9 +80,9 @@ mod jiff_feature {
     fn clock_test_through_the_conversion() {
         // 2024-07-30 18:30 UTC is BS 2081-04-15 in UTC, 2081-04-16 in Nepal.
         let now: Timestamp = "2024-07-30T18:30:00Z".parse().unwrap();
-        let utc = now.to_zoned(TimeZone::UTC).date();
+        let utc = now.to_zoned_datetime(TimeZone::UTC).date();
         let nepal = now
-            .to_zoned(TimeZone::get("Asia/Kathmandu").unwrap())
+            .to_zoned_datetime(TimeZone::get("Asia/Kathmandu").unwrap())
             .date();
         assert_eq!(NepaliDate::try_from(utc), NepaliDate::new(2081, 4, 15));
         assert_eq!(NepaliDate::try_from(nepal), NepaliDate::new(2081, 4, 16));
@@ -92,9 +92,11 @@ mod jiff_feature {
     fn today_is_the_date_in_nepal() {
         // Read the clock on both sides of `today()`, so a midnight in between can't fail it.
         let kathmandu = TimeZone::get("Asia/Kathmandu").unwrap();
-        let before = NepaliDate::try_from(Timestamp::now().to_zoned(kathmandu.clone()).date());
+        let before =
+            NepaliDate::try_from(Timestamp::now().to_zoned_datetime(kathmandu.clone()).date());
         let today = NepaliDate::today();
-        let after = NepaliDate::try_from(Timestamp::now().to_zoned(kathmandu.clone()).date());
+        let after =
+            NepaliDate::try_from(Timestamp::now().to_zoned_datetime(kathmandu.clone()).date());
         assert!(today == before || today == after, "{today:?}");
         assert!(
             NepaliDate::today_in(&kathmandu) == today || NepaliDate::today_in(&kathmandu) == after

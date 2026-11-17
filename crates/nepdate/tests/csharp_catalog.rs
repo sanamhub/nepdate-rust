@@ -456,7 +456,7 @@ fn cs_nepali_date_properties_tests__today_returns_current_nepali_date() {
     // C#'s local date. Clock read on both sides so a midnight in between can't fail it.
     let nepal = || {
         let tz = jiff::tz::TimeZone::get("Asia/Kathmandu").unwrap();
-        NepaliDate::try_from(jiff::Timestamp::now().to_zoned(tz).date())
+        NepaliDate::try_from(jiff::Timestamp::now().to_zoned_datetime(tz).date())
     };
     let before = nepal();
     let today = NepaliDate::today();

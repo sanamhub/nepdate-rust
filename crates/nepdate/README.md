@@ -98,7 +98,7 @@ calendar are projections inherited from NepDate and may change in a later releas
 | `alloc` | via `std` | ordered batch conversion and the ranges that return `Vec` |
 | `serde` | no | `Serialize` and `Deserialize` for `NepaliDate` as `"YYYY-MM-DD"` |
 | `chrono` | no | `From<NepaliDate> for chrono::NaiveDate` and `TryFrom<chrono::NaiveDate>` |
-| `jiff` | no | `From<NepaliDate> for jiff::civil::Date`, `TryFrom<jiff::civil::Date>`, `NepaliDate::today()` (the date in `Asia/Kathmandu`), `today_in(&TimeZone)`, `is_today(&TimeZone)`, `is_yesterday(&TimeZone)`, `is_tomorrow(&TimeZone)` and the range `current_*` factories. Turns on `std` |
+| `jiff` | no | `From<NepaliDate> for jiff::civil::Date`, `TryFrom<jiff::civil::Date>`, `NepaliDate::today()` (the date in `Asia/Kathmandu`), `today_in(&TimeZone)`, `is_today(&TimeZone)`, `is_yesterday(&TimeZone)`, `is_tomorrow(&TimeZone)` and the range `current_*` factories, for jiff 1.x. Turns on `std` |
 
 Without default features the crate builds for `wasm32-unknown-unknown` and other targets with no
 standard library. `Error` implements `core::error::Error` in both builds.

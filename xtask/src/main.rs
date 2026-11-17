@@ -147,6 +147,17 @@ const STEPS: &[Step] = &[
     ),
     step(
         "cargo",
+        &[
+            "build",
+            "-p",
+            "nepdate",
+            "--no-default-features",
+            "--features",
+            "jiff",
+        ],
+    ),
+    step(
+        "cargo",
         &["test", "-p", "nepdate", "--features", "jiff,chrono,serde"],
     ),
     step("cargo", &["test", "-p", "nepdate"]),
