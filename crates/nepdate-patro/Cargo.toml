@@ -31,7 +31,7 @@ harness = false
 # Same jiff features as the core, so no system time zone code is built.
 [dev-dependencies]
 nepdate = { path = "../nepdate", features = ["jiff", "chrono"] }
-jiff = { version = "0.2", default-features = false, features = ["std", "tzdb-bundle-platform", "tzdb-zoneinfo", "tzdb-concatenated"] }
+jiff = { version = "1", default-features = false, features = ["std", "tzdb-bundle-platform", "tzdb-zoneinfo", "tzdb-concatenated"] }
 chrono = { version = "0.4", default-features = false }
 
 [lints]

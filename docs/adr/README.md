@@ -14,7 +14,7 @@ Immutable once accepted (ADR-0001). Supersede with a new ADR.
 | [0008](0008-widget-scope.md) | Widget scope (minimal) and use of NepDateWidget | Moved to [sanamhub/mitibar](https://github.com/sanamhub/mitibar) as ADR-0001 |
 | [0009](0009-csharp-parity-and-deliberate-deviations.md) | Parity with C# NepDate: Rust names for the shared deviations | Accepted |
 | [0010](0010-gui-framework-slint.md) | GUI framework for the widget: Slint | Moved to [sanamhub/mitibar](https://github.com/sanamhub/mitibar) as ADR-0002 |
-| [0011](0011-time-and-time-zones-jiff.md) | Time and time zones: `jiff` in the widget, nothing in the core | Accepted |
+| [0011](0011-time-and-time-zones-jiff.md) | Time and time zones: `jiff` in the widget, nothing in the core | Accepted, amended by 0023 |
 | [0012](0012-packaging-signing-and-releases.md) | Packaging, signing and releases | Moved to [sanamhub/mitibar](https://github.com/sanamhub/mitibar) as ADR-0003 |
 | [0013](0013-licensing.md) | Licensing of this repository (MIT) | Accepted, amended by 0020 |
 | [0014](0014-testing-strategy-and-quality-gates.md) | Testing strategy and quality gates | Accepted (amended: MitiBar moved) |
@@ -26,3 +26,4 @@ Immutable once accepted (ADR-0001). Supersede with a new ADR.
 | [0020](0020-slint-attribution-on-the-web.md) | Slint attribution on the download pages, not inside the app (amends 0013) | Moved to [sanamhub/mitibar](https://github.com/sanamhub/mitibar) as ADR-0009 |
 | [0021](0021-plain-version-tags.md) | Release tags are `vX.Y.Z`, without a package prefix (supersedes the tag rule in 0002) | Accepted |
 | [0022](0022-patro-counts-from-the-hub-summary.md) | Read the patro counts from the hub's summary, not from literals (amends 0006) | Accepted |
+| [0023](0023-jiff-1.md) | The `jiff` feature moves to jiff 1.x (amends 0011) | Accepted |

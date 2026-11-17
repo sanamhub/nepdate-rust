@@ -107,11 +107,11 @@ impl From<NepaliDate> for GregorianDate {}
 impl Sub for NepaliDate { type Output = DateDiff; }   // this - other
 ```
 
-The clock methods are gated by `jiff` because the crate carries no time zone database. `today()`
-uses `Asia/Kathmandu` or a fixed UTC+05:45 when the database lacks it. `today_in` takes an
-explicit zone; the three relative predicates take the same explicit zone and return `false` when
-the clock is outside the supported range. `Now` is not a separate member: it is the same date as
-`today(zone)`.
+The clock methods are gated by `jiff` (jiff 1.x, ADR-0023) because the crate carries no time
+zone database. `today()` uses `Asia/Kathmandu` or a fixed UTC+05:45 when the database lacks it.
+`today_in` takes an explicit zone; the three relative predicates take the same explicit zone and
+return `false` when the clock is outside the supported range. `Now` is not a separate member: it
+is the same date as `today(zone)`.
 
 ```rust
 use jiff::tz::TimeZone;

@@ -4,6 +4,16 @@ All notable changes to `nepdate` are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the crate follows
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Breaking
+
+- The `jiff` feature now uses jiff 1.x instead of jiff 0.2. The conversions, `today()`,
+  `today_in`, `is_today`, `is_yesterday`, `is_tomorrow` and the range `current_*` factories keep
+  their names and take or return the jiff 1 types. Migration: move your own `jiff` dependency to
+  `"1"` so both crates share the same `Date` and `TimeZone` types, and follow the jiff 1.0
+  changelog for your own code (for example `Zoned` is now `ZonedDateTime`). See ADR-0023.
+
 ## [1.0.0-rc.1] - 2026-11-04
 
 ### Changed
