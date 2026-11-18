@@ -16,15 +16,15 @@ crate: tithi, the Nepal public holiday flag and events for each Bikram Sambat da
 heap allocation, no `unsafe`. Every lookup is O(1) over per-day tables compiled into the crate,
 and every name is a `&'static str`.
 
-> **Status:** 1.0.0-rc.1, the release candidate on the 1.0 line. The API is stable from 1.0
-> (hub ADR-0009). Holiday data is informational, not an official calendar.
+> **Status:** 1.0.0. The API is stable from 1.0 (hub ADR-0009). Holiday data is informational,
+> not an official calendar.
 
 ## Quick start
 
 ```toml
 [dependencies]
-nepdate = "=1.0.0-rc.1"
-nepdate-patro = "=1.0.0-rc.1"
+nepdate = "1.0"
+nepdate-patro = "1.0"
 ```
 
 ```rust
@@ -59,9 +59,9 @@ announces late are missing until the next data update.
 ## Versions
 
 This crate's version always equals `nepdate`'s. Both are released together from one tag, and
-`nepdate-patro` X.Y.Z depends on `nepdate` `~X.Y.0`. A pre-release such as 1.0.0-rc.1 depends
-on exactly that `nepdate` pre-release (`=1.0.0-rc.1`), so one pre-release of this crate never
-runs with another pre-release of the core. Use the same version for both.
+`nepdate-patro` X.Y.Z depends on `nepdate` `~X.Y.0`. A pre-release depends on exactly that
+`nepdate` pre-release, so one pre-release of this crate never runs with another pre-release of
+the core. Use the same version for both.
 
 ## Data, provenance and license
 
