@@ -2,10 +2,7 @@
 
 B1 to B8 of [`shared/spec/BENCHMARK.md`](../shared/spec/BENCHMARK.md), measured with the
 `benches/nepdate-bench` criterion harness on the reference machine. Rust has no mature competitor
-that passes [`docs/competitors.md`](competitors.md), so this run reports this port only. The C#
-column is the .NET 10 column of the hub's
-[`docs/benchmarks/dotnet.md`](https://github.com/sanamhub/nepdate/blob/main/docs/benchmarks/dotnet.md),
-measured on the same machine on 2026-11-16.
+that passes [`docs/competitors.md`](competitors.md), so this run reports this port only.
 
 ## Machine and versions
 
@@ -53,20 +50,22 @@ by 64. Bytes/op come from the `alloc` binary (a counting `#[global_allocator]`, 
 the 64 inputs). B5 has two rows: the allocation-free `write_to` and, for comparison, `to_string`,
 which allocates.
 
-| ID | Operation | nepdate ns/op | std ns | bytes/op | C# .NET 10 ns/op | C# bytes/op | ADR-0004 target ns/op |
-|---|---|---:|---:|---:|---:|---:|---:|
-| B1 | BS to AD | 2.95 | 0.08 | 0 | 13.27 | 0 | ≤ 8 |
-| B2 | AD to BS | 3.89 | 0.26 | 0 | 18.70 | 0 | ≤ 8 |
-| B3 | add 1000 days | 3.34 | 0.02 | 0 | 20.06 | 0 | ≤ 8 |
-| B4 | add 13 months, Clamp | 2.17 | 0.13 | 0 | 19.30 | 0 | ≤ 8 |
-| B5 | long Nepali date with weekday, `write_to` | 15.97 | 0.48 | 0 | 139.04 | 435 | ≤ 40 |
-| B5 | long Nepali date with weekday, `to_string` (allocates, for comparison) | 105.01 | 3.66 | 56 | 139.04 | 435 | - |
-| B6 | strict parse `YYYY/MM/DD` | 13.07 | 0.53 | 0 | 21.13 | 0 | ≤ 20 |
-| B7 | patro info of a day | 3.42 | 0.13 | 0 | 48.63 | 51 | ≤ 10 |
-| B8 | patro month grid | 219.14 | 15.18 | 0 | 3,274.50 | 1,429 | ≤ 250 |
+| ID | Operation | nepdate ns/op | std ns | bytes/op | ADR-0004 target ns/op |
+|---|---|---:|---:|---:|---:|
+| B1 | BS to AD | 2.95 | 0.08 | 0 | ≤ 8 |
+| B2 | AD to BS | 3.89 | 0.26 | 0 | ≤ 8 |
+| B3 | add 1000 days | 3.34 | 0.02 | 0 | ≤ 8 |
+| B4 | add 13 months, Clamp | 2.17 | 0.13 | 0 | ≤ 8 |
+| B5 | long Nepali date with weekday, `write_to` | 15.97 | 0.48 | 0 | ≤ 40 |
+| B5 | long Nepali date with weekday, `to_string` (allocates, for comparison) | 105.01 | 3.66 | 56 | - |
+| B6 | strict parse `YYYY/MM/DD` | 13.07 | 0.53 | 0 | ≤ 20 |
+| B7 | patro info of a day | 3.42 | 0.13 | 0 | ≤ 10 |
+| B8 | patro month grid | 219.14 | 15.18 | 0 | ≤ 250 |
 
-Every B-row beats the C# column and allocates 0 bytes. All ADR-0004 targets are met, including B8
-at 219.14 ns against 250 ns and B6 at 13.07 ns against 20 ns.
+All ADR-0004 targets are met, including B8 at 219.14 ns against 250 ns and B6 at 13.07 ns against
+20 ns.
+
+The comparison with C# NepDate, the original library, and the target check from `spec/BENCHMARK.md` section 6 are in the hub: [performance page](https://nepdate.com/docs/project/performance/).
 
 ## Notes
 

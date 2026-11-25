@@ -300,7 +300,7 @@ docs/                  API, ADRs, design notes, benchmarks and runbooks
 |---|---|
 | Public API of both crates | [docs/API.md](https://github.com/sanamhub/nepdate-rust/blob/main/docs/API.md), [docs.rs/nepdate](https://docs.rs/nepdate), [docs.rs/nepdate-patro](https://docs.rs/nepdate-patro) |
 | Why the libraries are built this way | [docs/adr](https://github.com/sanamhub/nepdate-rust/blob/main/docs/adr/README.md) |
-| Library speed against C# NepDate and other crates | [docs/benchmarks.md](https://github.com/sanamhub/nepdate-rust/blob/main/docs/benchmarks.md) |
+| Library speed | [docs/benchmarks.md](https://github.com/sanamhub/nepdate-rust/blob/main/docs/benchmarks.md) |
 | What changed in each version | [nepdate](https://github.com/sanamhub/nepdate-rust/blob/main/crates/nepdate/CHANGELOG.md), [nepdate-patro](https://github.com/sanamhub/nepdate-rust/blob/main/crates/nepdate-patro/CHANGELOG.md) |
 | Building, testing and pull requests | [CONTRIBUTING.md](https://github.com/sanamhub/nepdate-rust/blob/main/CONTRIBUTING.md) |
 | Reporting a vulnerability | [SECURITY.md](https://github.com/sanamhub/nepdate-rust/blob/main/SECURITY.md) |
