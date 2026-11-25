@@ -14,6 +14,11 @@ All notable changes to `nepdate` are recorded here. The format follows
   `"1"` so both crates share the same `Date` and `TimeZone` types, and follow the jiff 1.0
   changelog for your own code (for example `Zoned` is now `ZonedDateTime`). See ADR-0023.
 
+### Changed
+
+- The `chrono` feature's docs now say chrono is no longer maintained (RUSTSEC-2026-0543). The
+  feature stays for the 1.x API; prefer the `jiff` feature in new code.
+
 ## [1.0.0-rc.1] - 2026-11-04
 
 ### Changed
