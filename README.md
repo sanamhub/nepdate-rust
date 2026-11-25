@@ -42,12 +42,9 @@ The API is listed in [docs/API.md](https://github.com/sanamhub/nepdate-rust/blob
 
 ```toml
 [dependencies]
-nepdate = "=1.0.0-rc.1"
-nepdate-patro = "=1.0.0-rc.1"   # only if you need tithi, holidays or events
+nepdate = "1.0"
+nepdate-patro = "1.0"   # only if you need tithi, holidays or events
 ```
-
-Cargo never picks a pre-release for a plain `"1"` requirement, so the release candidate is
-pinned exactly.
 
 The MSRV is Rust 1.85. The `std` feature is on by default; `serde`, `chrono` and `jiff` are
 optional. `std` turns on `alloc`, which adds ordered batch conversion and the ranges that return
