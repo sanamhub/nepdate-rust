@@ -19,14 +19,13 @@ date ranges. `no_std`, no dependencies by default, no heap allocation in the cor
 Tithi, public holidays and events are in the companion crate
 [`nepdate-patro`](https://crates.io/crates/nepdate-patro), so this crate carries no patro data.
 
-> **Status:** 1.0.0-rc.1, the release candidate on the 1.0 line. The API is stable from 1.0
-> (hub ADR-0009).
+> **Status:** 1.0.0. The API is stable from 1.0 (hub ADR-0009).
 
 ## Quick start
 
 ```toml
 [dependencies]
-nepdate = "=1.0.0-rc.1"
+nepdate = "1.0"
 ```
 
 ```rust
@@ -97,7 +96,7 @@ calendar are projections inherited from NepDate and may change in a later releas
 | `std` | yes | `alloc` and the standard-library build |
 | `alloc` | via `std` | ordered batch conversion and the ranges that return `Vec` |
 | `serde` | no | `Serialize` and `Deserialize` for `NepaliDate` as `"YYYY-MM-DD"` |
-| `chrono` | no | `From<NepaliDate> for chrono::NaiveDate` and `TryFrom<chrono::NaiveDate>` |
+| `chrono` | no | `From<NepaliDate> for chrono::NaiveDate` and `TryFrom<chrono::NaiveDate>`. chrono is no longer maintained (RUSTSEC-2026-0543), so prefer `jiff` in new code |
 | `jiff` | no | `From<NepaliDate> for jiff::civil::Date`, `TryFrom<jiff::civil::Date>`, `NepaliDate::today()` (the date in `Asia/Kathmandu`), `today_in(&TimeZone)`, `is_today(&TimeZone)`, `is_yesterday(&TimeZone)`, `is_tomorrow(&TimeZone)` and the range `current_*` factories, for jiff 1.x. Turns on `std` |
 
 Without default features the crate builds for `wasm32-unknown-unknown` and other targets with no

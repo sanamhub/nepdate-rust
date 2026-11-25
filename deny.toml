@@ -9,6 +9,11 @@ exclude = ["nepdate-bench"]
 [advisories]
 version = 2
 yanked = "deny"
+ignore = [
+    # chrono is unmaintained (no vulnerability). It backs only the optional, off-by-default
+    # `chrono` feature (ADR-0005), which the 1.x API keeps; `jiff` is the recommended feature.
+    { id = "RUSTSEC-2026-0543", reason = "unmaintained only; optional chrono feature kept for the 1.x API, jiff recommended" },
+]
 
 [licenses]
 version = 2
